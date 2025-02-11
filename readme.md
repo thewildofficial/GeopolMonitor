@@ -1,74 +1,184 @@
-# Telegram Bot Setup Guide
+# GeopolMonitor 🌍
 
-This guide will help you set up and run the `telegram_bot.py` script.
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
+[![Telegram Bot API](https://img.shields.io/badge/Telegram-Bot_API-blue.svg)](https://core.telegram.org/bots/api)
+[![Gemini AI](https://img.shields.io/badge/Gemini-AI_Powered-orange.svg)](https://deepmind.google/technologies/gemini/)
 
-## Prerequisites
+A real-time geopolitical news monitoring system that processes RSS feeds and sends formatted updates to Telegram channels with smart context inference and emoji tagging.
 
-Make sure you have the following installed:
-- Python 3.x
-- pip (Python package installer)
+## Table of Contents 📑
+- [Features](#features-)
+- [Prerequisites](#prerequisites-)
+- [Setup Guide](#setup-guide-)
+- [Usage](#usage-)
+- [Rate Limits](#rate-limits-)
+- [Testing](#testing-)
+- [Emoji Classification](#emoji-classification-)
+- [Database Management](#database-management-)
+- [Troubleshooting](#troubleshooting-)
+- [Contributing](#contributing-)
+- [License](#license-)
 
-## Installation Steps
+## Features ✨
+
+- Real-time RSS feed monitoring
+- Smart context inference with Gemini AI
+- Automatic emoji tagging based on location and topic
+- Telegram channel integration
+- Rate-limited API handling
+- Feed validation and cleaning
+- Image extraction and sharing
+- Markdown formatting support
+- SQLite database for caching and deduplication
+
+## Prerequisites 📋
+
+- Python 3.9+
+- A Telegram Bot Token
+- A Telegram Channel
+- Google Gemini API Key
+- SQLite3 (usually comes with Python)
+
+## Setup Guide 🚀
 
 1. **Clone the Repository**
+   ```bash
+   git clone <repository-url>
+   cd GeopolMonitor
+   ```
 
-    ```bash
-    git clone https://github.com/yourusername/yourrepository.git
-    cd yourrepository
-    ```
+2. **Create Virtual Environment**
+   ```bash
+   python -m venv geopolenv
+   ```
 
-2. **Install Required Packages**
+3. **Activate Virtual Environment**
+   - On Windows:
+     ```bash
+     .\geopolenv\Scripts\activate
+     ```
+   - On macOS/Linux:
+     ```bash
+     source geopolenv/bin/activate
+     ```
 
-    Install the necessary Python packages using pip:
+4. **Install Dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-    ```bash
-    pip install -r requirements.txt
-    ```
+5. **Configure Environment Variables**
+   - Copy `.env.example` to `.env`
+   ```bash
+   cp .env.example .env
+   ```
+   - Edit `.env` and add your credentials:
+     ```
+     TELEGRAM_TOKEN=your_telegram_bot_token
+     TELEGRAM_CHANNEL_ID=your_channel_id
+     GEMINI_API_KEY=your_gemini_api_key
+     ```
 
-3. **Rename Configuration File**
+6. **Initialize Database**
+   The database will be automatically initialized when you first run the bot, but you can also initialize it manually:
+   ```python
+   python -c "import helper; helper.init_db()"
+   ```
 
-    Rename the `.env.example` file to `.env`:
+7. **Configure RSS Feeds**
+   - Add your RSS feed URLs to `feeds.txt`, one per line
+   - Run the feed cleaner to validate feeds:
+     ```bash
+     python clean_feed.py
+     ```
 
-    ```bash
-    mv .env.example .env
-    ```
+## Usage 💡
 
-4. **Configure Environment Variables**
-
-    Open the `.env` file and enter your Telegram Bot API key and Channel ID:
-
-    ```env
-    TELEGRAM_BOT_API_KEY=your_telegram_bot_api_key
-    TELEGRAM_CHANNEL_ID=your_telegram_channel_id
-    ```
-
-5. **populate feeds.txt with the RSS feeds of your choice**
-
-    it's as simple as pasting in the links one after the other on in the file, and once you've done, you can run `clean_feed.py` to verify if they can be read and detected, as well as deleting all invalid links
-
-    sample:
-    ```
-    https://www.middleeastmonitor.com/rss/
-    https://www.alaraby.co.uk/rss
-    https://www.al-monitor.com/rss
-    ...
-    ```
-
-## Running the Bot
-
-To run the `telegram_bot.py` script, use the following command:
-
+### Running the Bot
 ```bash
 python telegram_bot.py
 ```
 
-Your Telegram bot should now be up and running!
+### Test Mode
+To test without sending to Telegram:
+```bash
+python dry_run.py
+```
 
-## Troubleshooting
+### Headless Mode
+For server deployment:
+```bash
+python headless_geomonitor.py
+```
 
-If you encounter any issues, please check the following:
-- Ensure all required packages are installed.
-- Verify that the `.env` file contains the correct API key and Channel ID.
-- Check for any error messages in the terminal and resolve them accordingly.
+## Database Management 🗄️
 
-For further assistance, refer to the documentation or open an issue on the repository.
+The system uses SQLite for:
+- Feed cache management
+- Message deduplication
+- Entry history tracking
+
+The database (`news_monitor.db`) is automatically created in the project root. To reset the database:
+```bash
+rm news_monitor.db
+python -c "import helper; helper.init_db()"
+```
+
+## Rate Limits ⚠️
+
+The system respects Gemini API's free tier limits:
+- 15 requests per minute (RPM)
+- 1.5K requests per day (RPD)
+- Automatic rate limiting and backoff
+
+## Testing 🧪
+
+Run the test suite:
+```bash
+pytest test_helper.py
+```
+
+## Emoji Classification 🎯
+
+The system automatically classifies news using:
+1. **Location Emojis** (First Position)
+   - Country flags (e.g., 🇺🇸, 🇬🇧, 🇨🇳)
+   - Regional indicators (e.g., 🌎 for global news)
+
+2. **Topic Emojis** (Second Position)
+   - Economy & Finance (🏦, 💵, 📈, 💰)
+   - Politics & Law (🗳️, ⚖️, 🏛️)
+   - Current Affairs (⚔️, ✊, 🚨)
+   - Social Issues (🏥, 🎓, 🏘️)
+   - Industry & Tech (🏭, 💻, 🌾)
+   - Environment (🌡️, 🌳, ⛈️)
+
+## Troubleshooting 🔧
+
+### Common Issues
+1. **Rate Limit Errors**
+   - The bot will automatically handle rate limits
+   - Check `GEMINI_API_KEY` if you see persistent errors
+
+2. **Feed Errors**
+   - Run `clean_feed.py` to validate feeds
+   - Check feed URLs are accessible
+   - Verify RSS format is valid
+
+3. **Database Issues**
+   - Delete `news_monitor.db` and restart to reset
+   - Check write permissions in project directory
+
+4. **Telegram Errors**
+   - Verify bot has admin rights in channel
+   - Check `TELEGRAM_TOKEN` and `TELEGRAM_CHANNEL_ID`
+   - Ensure bot can post messages and media
+
+## Contributing 🤝
+
+Feel free to submit issues, fork the repository, and create pull requests for any improvements.
+
+## License 📄
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

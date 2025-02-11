@@ -1,0 +1,17 @@
+aiohttp>=3.9.1
+feedparser>=6.0.10
+google-generativeai>=0.3.1
+python-dotenv>=1.0.0
+requests>=2.31.0
+asyncio>=3.4.3
+beautifulsoup4>=4.12.2
+pytest>=8.0.0
+python-telegram-bot>=20.7
+
+# Python version
+python_requires>=3.9.0
+
+# Optional dependencies for development
+black>=23.0.0  # Code formatting
+flake8>=6.0.0  # Code linting
+mypy>=1.0.0   # Type checking

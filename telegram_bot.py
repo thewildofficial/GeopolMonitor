@@ -3,45 +3,137 @@ import argparse
 import asyncio
 import random
 import datetime
-import json
 import os
 import aiohttp
-
+import time
+import json
+from urllib.parse import urlparse
 import helper as h
 
-
-# Global variables for Telegram (get from dotenv)
+# Global variables for Telegram
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 TELEGRAM_CHANNEL_ID = os.getenv('TELEGRAM_CHANNEL_ID')
 
-# Cache management
-def load_cache():
-    """Load cache with timezone-aware datetimes."""
-    try:
-        with open('feed_cache.json', 'r') as f:
-            cache_data = json.load(f)
-            cache = {}
-            for url, ts_str in cache_data.items():
-                ts = datetime.datetime.fromisoformat(ts_str)
-                if ts.tzinfo is None:
-                    ts = ts.replace(tzinfo=datetime.timezone.utc)
-                cache[url] = ts
-            return cache
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {}
-
-def save_cache(cache):
-    """Save cache with timezone-aware datetimes."""
-    cache_data = {}
-    for url, ts in cache.items():
-        if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=datetime.timezone.utc)
-        cache_data[url] = ts.isoformat()
-    with open('feed_cache.json', 'w') as f:
-        json.dump(cache_data, f, indent=2)
-
 # Async processing
-semaphore = asyncio.Semaphore(10)  # Adjust the number as needed
+semaphore = asyncio.Semaphore(10)
+
+class FeedWatcher:
+    def __init__(self):
+        self.feeds = {}  # Store feed info and last modified/etag
+        self.session = None
+        self.logged_entries = set()
+        
+    async def init(self):
+        """Initialize aiohttp session and logged entries"""
+        self.session = aiohttp.ClientSession()
+        self.logged_entries = h.load_logged_entries()
+        
+    async def close(self):
+        """Cleanup resources"""
+        if self.session:
+            await self.session.close()
+            
+    async def check_feed_headers(self, feed_url):
+        """Check feed headers for changes using conditional GET"""
+        headers = {}
+        feed_info = self.feeds.get(feed_url, {})
+        
+        # Add conditional GET headers if we have them
+        if 'etag' in feed_info:
+            headers['If-None-Match'] = feed_info['etag']
+        if 'last_modified' in feed_info:
+            headers['If-Modified-Since'] = feed_info['last_modified']
+            
+        try:
+            async with self.session.get(feed_url, headers=headers) as response:
+                if response.status == 304:  # Not modified
+                    return False
+                    
+                # Update feed info with new headers
+                self.feeds[feed_url] = {
+                    'etag': response.headers.get('ETag'),
+                    'last_modified': response.headers.get('Last-Modified'),
+                    'content_type': response.headers.get('Content-Type', '')
+                }
+                
+                content = await response.text()
+                return content
+        except Exception as e:
+            print(f"Error checking feed {feed_url}: {e}")
+            return False
+            
+    async def process_feed_content(self, feed_url, content):
+        """Process feed content if it has changed"""
+        if not content:
+            return
+            
+        feed = feedparser.parse(content)
+        if not feed.entries:
+            return
+            
+        # Get last check time from cache
+        cache = h.load_feed_cache()
+        last_check = cache.get(feed_url, datetime.datetime.min.replace(tzinfo=datetime.timezone.utc))
+        
+        # Process new entries
+        new_entries = []
+        entry_times = []
+        
+        for entry in feed.entries:
+            try:
+                year, month, day, hour, minute, second = entry.published_parsed[:6]
+                entry_time = datetime.datetime(
+                    year, month, day, hour, minute, second,
+                    tzinfo=datetime.timezone.utc
+                )
+                if entry_time > last_check:
+                    new_entries.append(entry)
+                    entry_times.append(entry_time)
+            except (AttributeError, TypeError):
+                continue
+                
+        if not new_entries:
+            return
+            
+        # Process new entries in parallel
+        tasks = [self.process_entry(e, t, feed_url) for e, t in zip(new_entries, entry_times)]
+        results = await asyncio.gather(*tasks)
+        
+        # Update cache with latest entry time
+        new_entry_times = [t for t in results if t is not None]
+        if new_entry_times:
+            h.update_feed_cache(feed_url, max(new_entry_times))
+            
+    async def process_entry(self, entry, entry_time, feed_url):
+        """Process a single feed entry"""
+        async with semaphore:
+            try:
+                result = await asyncio.wait_for(h.process_article(entry), timeout=100)
+                if result:
+                    message = result['combined']
+                    if message not in self.logged_entries:
+                        await send_telegram_message(message, result['images'])
+                        h.append_to_log(message, self.logged_entries, feed_url,
+                                    result['title'], result['description'], result['link'])
+                    else:
+                        print("Skipping duplicate message.")
+                return entry_time
+            except Exception as e:
+                print(f"Error processing entry: {e}")
+                return entry_time
+                
+    async def watch_feed(self, feed_url):
+        """Watch a single feed for updates"""
+        while True:
+            try:
+                content = await self.check_feed_headers(feed_url)
+                if content:
+                    print(f"🔄 Updates found in {feed_url}")
+                    await self.process_feed_content(feed_url, content)
+                await asyncio.sleep(random.randint(30, 60))  # Adaptive polling interval
+            except Exception as e:
+                print(f"Error watching feed {feed_url}: {e}")
+                await asyncio.sleep(60)  # Back off on error
 
 async def send_telegram_message(text, image_urls=None):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHANNEL_ID:
@@ -94,7 +186,7 @@ async def send_telegram_message(text, image_urls=None):
                     async with session.post(
                         f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
                         data=data_text
-                                                                ) as response:
+                    ) as response:
                         if response.status != 200:
                             print(f"Failed to send text: {await response.text()}")
             except Exception as e:
@@ -117,119 +209,32 @@ async def send_telegram_message(text, image_urls=None):
                 print(f"Error sending message: {e}")
 
         await asyncio.sleep(1)
-        
-async def process_entry(entry, entry_time, logged_entries):
-    """Process an article entry and return its timestamp regardless of success."""
-    async with semaphore:
-        try:
-            result = await asyncio.wait_for(h.process_article(entry), timeout=100)
-            if result:
-                # Use the combined message from helper which is already formatted
-                message = result['combined']
 
-                if message not in logged_entries:
-                    await send_telegram_message(message, result['images'])
-                    h.append_to_log(message, logged_entries)
-                else:
-                    print("Skipping duplicate message.")
-            return entry_time
-        except Exception as e:
-            print(f"Error processing entry: {e}")
-            return entry_time
-
-async def process_entries(feed, cache, feed_url, logged_entries):
-    """Process new entries from a feed and update cache."""
-    try:
-        last_check_time = cache.get(feed_url, datetime.datetime.min.replace(tzinfo=datetime.timezone.utc))
-    except AttributeError:
-        last_check_time = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
-
-    new_entries = []
-    entry_times = []
-
-    for entry in feed.entries[:1]:  # Only take the first article
-        try:
-            year, month, day, hour, minute, second = entry.published_parsed[:6]
-            entry_time = datetime.datetime(
-                year, month, day, hour, minute, second,
-                tzinfo=datetime.timezone.utc
-            )
-        except AttributeError:
-            continue
-
-        if entry_time > last_check_time:
-            new_entries.append(entry)
-            entry_times.append(entry_time)
-
-    if not new_entries:
-        return
-
-    tasks = [process_entry(e, t, logged_entries) for e, t in zip(new_entries, entry_times)]
-    results = await asyncio.gather(*tasks)
-    new_entry_times = [t for t in results if t is not None]
-
-    if new_entry_times:
-        latest_entry_time = max(new_entry_times)
-        cache[feed_url] = latest_entry_time
-
-async def cache_saver(cache, interval):
-    """Periodically save the cache to disk."""
-    while True:
-        save_cache(cache)
-        await asyncio.sleep(interval)
-
-async def monitor_feed(feed_url, cache, check_interval, process_entries, logged_entries):
-    """Continuously monitor a single feed for updates."""
-    while True:
-        try:
-            feed = feedparser.parse(feed_url)
-            feed_title = feed.feed.get('title', 'Unknown Feed')
-            print(f"\n🔍 Scanning {feed_title} ({feed_url})...")
-
-            if feed.entries:
-                await process_entries(feed, cache, feed_url, logged_entries)
-            else:
-                print("⚠ No new entries found")
-
-            await asyncio.sleep(random.randint(0, 5))
-        except Exception as e:
-            print(f"⚠ Error processing feed {feed_url}: {e}")
-        finally:
-            await asyncio.sleep(check_interval)
-
-def main(feed_file, interval):
+async def main(feed_file):
+    """Main function to start feed watching"""
     with open(feed_file) as f:
         feeds = f.read().splitlines()
+        
+    watcher = FeedWatcher()
+    await watcher.init()
     
-    cache = load_cache()
-    logged_entries = h.load_logged_entries()
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
-    tasks = []
-    for feed_url in feeds:
-        tasks.append(loop.create_task(
-            monitor_feed(feed_url, cache, interval, process_entries, logged_entries)
-        ))
-
-    tasks.append(loop.create_task(cache_saver(cache, 300)))
-
     try:
-        print("▶ Starting parallel feed monitoring...")
-        loop.run_forever()
+        tasks = []
+        for feed_url in feeds:
+            tasks.append(asyncio.create_task(watcher.watch_feed(feed_url)))
+            
+        print("▶ Starting real-time feed monitoring...")
+        await asyncio.gather(*tasks)
     except KeyboardInterrupt:
         print("\n🛑 Monitoring stopped")
     finally:
         for task in tasks:
             task.cancel()
-        loop.run_until_complete(asyncio.gather(*tasks, return_exceptions=True))
-        save_cache(cache)
-        loop.close()
+        await watcher.close()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--feeds", default="feeds.txt", help="Path to RSS feeds file")
-    parser.add_argument("--interval", type=int, default=30, help="Check interval in seconds")
     args = parser.parse_args()
-
-    main(args.feeds, args.interval)
+    
+    asyncio.run(main(args.feeds))
