@@ -1,0 +1,7 @@
+.env
+__pycache__
+cache
+geopolenv
+feed_cache.json
+news_monitor.log
+feeds.txt
