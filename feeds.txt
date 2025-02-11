@@ -1,0 +1,44 @@
+# Major News Sources
+https://www.reuters.com/rss/world
+https://feeds.bbci.co.uk/news/world/rss.xml
+https://www.aljazeera.com/xml/rss/all.xml
+
+# Regional News
+https://asia.nikkei.com/rss/feed/nar
+https://www.scmp.com/rss/91/feed
+https://www.straitstimes.com/news/world/rss.xml
+
+# Economic News
+https://www.ft.com/world?format=rss
+https://www.bloomberg.com/feeds/politics.rss
+
+# Remove these comments and add your own RSS feed URLs, one per line
+# Run python clean_feed.py after editing to validate the feeds
+```
+https://www.irna.ir/en/rss
+https://www.aljazeera.com/xml/rss/all.xml
+https://thediplomat.com/feed
+https://motherjones.com/politics/feed
+https://theintercept.com/feed/?rss
+https://www.handelsblatt.com/contentexport/feed/politik
+https://taz.de/!p4608;rss
+https://newsfeed.zeit.de/politik/index
+https://www.spiegel.de/politik/index.rss
+https://thediplomat.com/feed
+https://eng.globalaffairs.ru/feed
+https://www.aljazeera.com/xml/rss/all.xml
+https://thediplomat.com/feed
+https://financeasia.com/rss/latest
+https://asia.nikkei.com/rss/feed/nar
+https://meduza.io/rss2/all
+https://tass.com/rss/v2.xml
+http://www.themoscowtimes.com/rss/news
+https://www.theguardian.com/world/rss
+https://www.tagesschau.de/xml/rss2/
+https://www.rt.com/rss/
+https://www.aljazeera.com/xml/rss/all.xml
+http://feeds.bbci.co.uk/news/world/rss.xml
+https://www.hurriyetdailynews.com/rss
+https://www.middleeasteye.net/rss
+https://www.al-monitor.com/rss
+https://www.alaraby.co.uk/rss
