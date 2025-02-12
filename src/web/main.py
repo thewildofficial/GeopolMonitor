@@ -5,8 +5,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import json
+import atexit
 
-from ..database.models import init_db, get_db
+from ..database.models import init_db, get_db, cleanup_db
 from ..core.processor import ImageExtractor
 from ..utils.text import clean_text
 from .websocket_manager import manager
@@ -32,6 +33,16 @@ def create_app():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
+    @app.on_event("startup")
+    async def startup_event():
+        """Initialize database on startup."""
+        init_db()
+
+    @app.on_event("shutdown")
+    async def shutdown_event():
+        """Clean up database on shutdown."""
+        cleanup_db()
+
     def format_news_item(item):
         """Format news item for API response"""
         image_url = item.get('image_url') or ImageExtractor.extract_first_image_from_content(item.get('content', ''))
@@ -41,7 +52,7 @@ def create_app():
             'description': clean_text(item.get('description', '')),
             'content': item.get('content', ''),
             'link': item.get('link', ''),
-            'timestamp': item.get('timestamp', ''),
+            'timestamp': item.get('pub_date', ''),  # Changed from timestamp to pub_date
             'image_url': image_url,
             'feed_url': item.get('feed_url', ''),
             'emoji1': item.get('emoji1', ''),
@@ -62,17 +73,24 @@ def create_app():
             {"request": request}
         )
 
+    @app.get("/about", response_class=HTMLResponse)
+    async def about(request: Request):
+        return templates.TemplateResponse(
+            "about.html",
+            {"request": request}
+        )
+
     @app.get("/api/news")
     async def get_news():
         try:
             with get_db() as conn:
                 cursor = conn.execute('''
                     SELECT 
-                        title, description, content, link, timestamp,
+                        title, description, content, link, pub_date,
                         feed_url, image_url, message, emoji1, emoji2
                     FROM news_entries
-                    ORDER BY timestamp DESC
-                    LIMIT 50  -- Load the most recent 50 entries
+                    ORDER BY pub_date DESC
+                    LIMIT 100
                 ''')
                 columns = [column[0] for column in cursor.description]
                 news_items = [dict(zip(columns, row)) for row in cursor]

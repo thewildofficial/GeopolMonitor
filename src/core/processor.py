@@ -39,30 +39,49 @@ class ImageExtractor:
         """Extract images from feed entry using multiple methods."""
         image_urls = []
         
-        # Extract from description
-        if hasattr(entry, 'description') and entry.description:
-            image_urls.extend(
-                re.findall(r'(https?://[^\s]+(?:jpg|jpeg|png|gif|bmp|svg|webp))', 
-                          entry.description)
-            )
+        # Check for og:image meta tag first (highest quality usually)
+        if hasattr(entry, 'content'):
+            for content in entry.content:
+                if isinstance(content, dict) and 'value' in content:
+                    og_images = re.findall(r'<meta property="og:image" content="([^"]+)"', content['value'])
+                    image_urls.extend(og_images)
+
+        # Extract from media_thumbnail
+        if hasattr(entry, 'media_thumbnail'):
+            image_urls.extend([t['url'] for t in entry.media_thumbnail if 'url' in t])
 
         # Extract from media content
         if hasattr(entry, 'media_content'):
-            image_urls.extend(
-                [m['url'] for m in entry.media_content 
-                 if 'url' in m and m['url'].lower().endswith(
-                     ('.jpg', '.png', '.jpeg', '.gif', '.bmp', '.svg', '.webp'))]
-            )
+            image_urls.extend([m['url'] for m in entry.media_content if 'url' in m])
+
+        # Extract from description with improved pattern matching
+        if hasattr(entry, 'description') and entry.description:
+            # Look for both standard img tags and direct URLs
+            img_tags = re.findall(r'<img[^>]+src=[\'"]([^\'"]+)[\'"]', entry.description)
+            direct_urls = re.findall(r'(https?://[^\s]+(?:jpg|jpeg|png|gif|bmp|svg|webp))', entry.description)
+            image_urls.extend(img_tags + direct_urls)
 
         # Extract from enclosures
         if hasattr(entry, 'enclosures'):
-            image_urls.extend(
-                [e['href'] for e in entry.enclosures 
-                 if e.get('href', '').lower().endswith(
-                     ('.jpg', '.png', '.jpeg', '.gif', '.bmp', '.svg', '.webp'))]
-            )
+            image_urls.extend([e['href'] for e in entry.enclosures 
+                             if e.get('href', '').lower().endswith(
+                                 ('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.webp'))])
 
-        return list(set(image_urls))
+        # Remove duplicates and validate URLs
+        valid_urls = []
+        seen = set()
+        for url in image_urls:
+            url = url.strip()
+            if url and url not in seen:
+                try:
+                    # Basic URL validation
+                    urllib.parse.urlparse(url)
+                    valid_urls.append(url)
+                    seen.add(url)
+                except ValueError:
+                    continue
+
+        return valid_urls
 
     @staticmethod
     def extract_first_image_from_content(content: Optional[str]) -> Optional[str]:
@@ -82,27 +101,47 @@ class ArticleProcessor:
     async def process_article(self, entry: Any) -> Optional[ProcessedContent]:
         """Process an article by extracting and formatting information."""
         try:
-            # Extract images
+            # Extract images with improved method
             images = self.image_extractor.extract_images(entry)
             
             # Initial cleaning
             title_cleaned = self._clean_html(getattr(entry, 'title', 'Untitled'))
             description_cleaned = self._clean_html(getattr(entry, 'description', ''))
+            
+            # Process description - ensure it's a proper summary
+            if len(description_cleaned) > 300:
+                # Process with AI to get a concise 3-paragraph summary
+                _, description_processed = await process_with_gemini(
+                    description_cleaned, 
+                    is_title=False,
+                    instruction="Summarize this in exactly three short paragraphs in clear English. Focus on the key points."
+                )
+            else:
+                # For shorter content, just ensure it's in English
+                _, description_processed = await process_with_gemini(
+                    description_cleaned,
+                    is_title=False,
+                    instruction="If not in English, translate to natural English. Otherwise, improve clarity if needed."
+                )
+
+            # Process title - ensure it's clear and in English
+            emojis, title_processed = await process_with_gemini(
+                title_cleaned,
+                is_title=True,
+                instruction="If not in English, translate to a clear English title. Otherwise, improve clarity if needed."
+            )
+
+            # Rest of the processing
             link = clean_url(getattr(entry, 'link', ''))
             content = getattr(entry, 'description', '')
             
-            # Process with AI and pattern matching
-            emojis, title_processed = await process_with_gemini(title_cleaned, is_title=True)
-            _, description_processed = await process_with_gemini(description_cleaned, is_title=False)
-
-            # Fallback checks and emoji splitting
             emoji1, emoji2 = self._split_emojis(emojis)
             if not emoji1 or len(emoji1) > 4:
                 emoji1 = self._detect_location(title_cleaned) or '🌎'
             if not emoji2 or len(emoji2) > 4:
                 emoji2 = self._detect_topic(title_cleaned) or '📰'
-            
-            # Format for output - raw text without escaping
+
+            # Format for output
             message = f"{emoji1}{emoji2}: {title_processed}"
             combined = (
                 f"{emoji1}{emoji2}: **{title_processed}**\n\n"
@@ -124,7 +163,7 @@ class ArticleProcessor:
             )
             
         except Exception as e:
-            logger.error(f"Error processing article: {e}\nTraceback:\n{traceback.format_exc()}")
+            logger.error(f"Error processing article: {e}")
             return None
 
     def _clean_html(self, text: str) -> str:
