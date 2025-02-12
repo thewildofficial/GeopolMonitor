@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About - GeopolMonitor 🌍</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌍</text></svg>">
+</head>
+<body>
+    <header>
+        <div class="header-left">
+            <a href="/" class="nav-brand">GeopolMonitor 🌍</a>
+        </div>
+        <div class="header-controls">
+            <nav class="main-nav">
+                <a href="/about" class="nav-link active">About</a>
+            </nav>
+            <button id="themeToggle" class="theme-toggle" title="Toggle theme">
+                <i class="fas fa-sun"></i>
+            </button>
+        </div>
+    </header>
+    <main class="about-content">
+        <section>
+            <h2>What is GeopolMonitor?</h2>
+            <p>GeopolMonitor is an advanced news monitoring system that aggregates and analyzes geopolitical news from various trusted sources in real-time. Our platform uses AI to process and deliver the most relevant geopolitical updates to our users.</p>
+        </section>
+
+        <section>
+            <h2>How It Works</h2>
+            <div class="feature-list">
+                <div class="feature">
+                    <i class="fas fa-rss"></i>
+                    <h3>RSS Feed Monitoring</h3>
+                    <p>Continuously monitors selected news sources through RSS feeds for real-time updates.</p>
+                </div>
+                <div class="feature">
+                    <i class="fas fa-robot"></i>
+                    <h3>AI Processing</h3>
+                    <p>Uses advanced AI to analyze news content, extract key information, and provide relevant context.</p>
+                </div>
+                <div class="feature">
+                    <i class="fas fa-bell"></i>
+                    <h3>Real-time Updates</h3>
+                    <p>Delivers instant notifications through our website and Telegram channel.</p>
+                </div>
+            </div>
+        </section>
+
+        <section>
+            <h2>Connect With Us</h2>
+            <div class="connect-links">
+                <a href="https://t.me/+Obg4QMF1IlgxMTlh" target="_blank" class="platform-link">
+                    <i class="fab fa-telegram"></i>
+                    Join our Telegram Channel
+                </a>
+                <a href="https://github.com/thewildofficial/GeopolMonitor" target="_blank" class="platform-link">
+                    <i class="fab fa-github"></i>
+                    View on GitHub
+                </a>
+            </div>
+        </section>
+
+        <section>
+            <h2>Future Plans</h2>
+            <ul class="future-plans">
+                <li>Enhanced AI analysis for better context understanding</li>
+                <li>Geographic visualization of news events</li>
+                <li>Customizable news alerts and preferences</li>
+                <li>Historical data analysis and trend detection</li>
+                <li>Integration with more news sources</li>
+            </ul>
+        </section>
+    </main>
+
+    <script src="{{ url_for('static', path='app.js') }}"></script>
+</body>
+</html>

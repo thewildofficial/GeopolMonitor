@@ -3,20 +3,25 @@ import feedparser
 import asyncio
 import random
 import datetime
+from datetime import timezone
 import aiohttp
 import logging
 import traceback
 from typing import Set, Dict, Any, Optional, List
+from email.utils import parsedate_to_datetime
 from .processor import process_article
 from ..telegram.bot import send_message
-from ..database.models import get_db, load_feed_cache, update_feed_cache
+from ..database.models import (
+    get_db, load_feed_cache, update_feed_cache, 
+    get_feed_metrics, exists_in_db, get_source_priority
+)
 from ..utils.text import clean_url
 from ..web.websocket_manager import broadcast_news_update
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime.s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
@@ -29,14 +34,18 @@ class FeedConfiguration:
     def __init__(self, 
                  max_concurrent_feeds: int = 10,
                  min_poll_interval: int = 30,
-                 max_poll_interval: int = 60,
+                 max_poll_interval: int = 3600,
                  error_backoff_delay: int = 60,
-                 process_timeout: int = 100):
+                 process_timeout: int = 100,
+                 connect_timeout: float = 30.0,
+                 total_timeout: float = 60.0):
         self.max_concurrent_feeds = max_concurrent_feeds
         self.min_poll_interval = min_poll_interval
         self.max_poll_interval = max_poll_interval
         self.error_backoff_delay = error_backoff_delay
         self.process_timeout = process_timeout
+        self.connect_timeout = connect_timeout
+        self.total_timeout = total_timeout
 
 class FeedEntry:
     """Represents a processed feed entry."""
@@ -51,9 +60,10 @@ class FeedWatcher:
     
     def __init__(self, config: Optional[FeedConfiguration] = None):
         self.config = config or FeedConfiguration()
-        self.feeds: Dict[str, Dict[str, str]] = {}
+        self.feeds: Dict[str, Dict[str, Any]] = {}
         self.session: Optional[aiohttp.ClientSession] = None
         self.logged_entries: Set[str] = set()
+        self.logged_urls: Set[str] = set()
         self.semaphore = asyncio.Semaphore(self.config.max_concurrent_feeds)
         
     async def init(self):
@@ -65,15 +75,50 @@ class FeedWatcher:
     async def _load_logged_entries(self):
         """Load previously processed entries from database."""
         with get_db() as conn:
-            cursor = conn.execute('SELECT message FROM news_entries')
-            self.logged_entries = {row[0] for row in cursor if row[0] is not None}
-        
+            # Load both messages and URLs
+            cursor = conn.execute('SELECT message, link FROM news_entries')
+            for row in cursor:
+                if row[0]: self.logged_entries.add(row[0])
+                if row[1]: self.logged_urls.add(clean_url(row[1]))
+
     async def close(self):
         """Cleanup resources."""
         if self.session and not self.session.closed:
             await self.session.close()
             self.session = None
-            
+
+    def _update_feed_metrics(self, feed_url: str, had_updates: bool, error: bool = False):
+        """Update feed metrics based on check results."""
+        metrics = get_feed_metrics(feed_url)
+        current_time = datetime.datetime.now(datetime.timezone.utc)
+        
+        if error:
+            metrics['consecutive_failures'] += 1
+            metrics['update_frequency'] = min(
+                metrics['update_frequency'] * 2,
+                self.config.max_poll_interval
+            )
+        else:
+            if had_updates:
+                metrics['update_frequency'] = max(
+                    metrics['update_frequency'] // 2,
+                    self.config.min_poll_interval
+                )
+                metrics['consecutive_failures'] = 0
+                metrics['last_success_time'] = current_time
+            else:
+                metrics['update_frequency'] = min(
+                    int(metrics['update_frequency'] * 1.5),
+                    self.config.max_poll_interval
+                )
+                metrics['consecutive_failures'] = 0
+
+        # Get updated source priority
+        metrics['source_priority'] = get_source_priority(feed_url)
+        
+        update_feed_cache(feed_url, metrics)
+        return metrics['update_frequency']
+
     async def check_feed_headers(self, feed_url: str) -> str:
         """Check feed headers for changes using conditional GET."""
         if not self.session:
@@ -88,7 +133,11 @@ class FeedWatcher:
             headers['If-Modified-Since'] = feed_info['last_modified']
             
         try:
-            async with self.session.get(feed_url, headers=headers) as response:
+            timeout = aiohttp.ClientTimeout(
+                connect=self.config.connect_timeout,
+                total=self.config.total_timeout
+            )
+            async with self.session.get(feed_url, headers=headers, timeout=timeout) as response:
                 if response.status == 304:  # Not modified
                     return ""
                     
@@ -98,14 +147,21 @@ class FeedWatcher:
                     'content_type': response.headers.get('Content-Type', '')
                 }
                 
-                return await response.text()
+                text = await response.text()
+                # Check if content was actually received
+                if not text:
+                    raise ValueError("Empty response received")
+                return text
+                
         except aiohttp.ClientError as e:
-            logger.error(f"Network error checking feed {feed_url}: {e}")
+            logger.error(f"Network error checking feed {feed_url}: {str(e)}")
+            self._update_feed_metrics(feed_url, had_updates=False, error=True)
             return ""
         except Exception as e:
-            logger.error(f"Unexpected error checking feed {feed_url}: {e}")
+            logger.error(f"Unexpected error checking feed {feed_url}: {str(e)}")
+            self._update_feed_metrics(feed_url, had_updates=False, error=True)
             return ""
-            
+
     async def process_entry(self, entry: FeedEntry) -> Optional[datetime.datetime]:
         """Process a single feed entry."""
         async with self.semaphore:
@@ -115,42 +171,55 @@ class FeedWatcher:
                     timeout=self.config.process_timeout
                 )
                 
-                if result and result.combined not in self.logged_entries:
-                    await self._store_entry(entry, result)
-                    await send_message(result.combined, result.images)
-                    self.logged_entries.add(result.combined)
+                if result:
+                    # Check both content and URL for duplicates, including in database
+                    clean_link = clean_url(result.link)
+                    is_duplicate = (
+                        result.combined in self.logged_entries or 
+                        (clean_link and (clean_link in self.logged_urls or exists_in_db(clean_link)))
+                    )
                     
-                    # Broadcast update to web clients
-                    news_item = {
-                        'title': result.title,
-                        'description': result.description,
-                        'link': result.link,
-                        'image_url': result.image_url,
-                        'timestamp': datetime.datetime.now().isoformat(),
-                        'emoji1': result.emoji1,
-                        'emoji2': result.emoji2,
-                        'feed_url': entry.feed_url
-                    }
-                    await broadcast_news_update(news_item)
-                    
-                return entry.entry_time
+                    if not is_duplicate:
+                        await self._store_entry(entry, result)
+                        await send_message(result.combined, result.images)
+                        self.logged_entries.add(result.combined)
+                        if clean_link:
+                            self.logged_urls.add(clean_link)
+                        
+                        # Broadcast update to web clients
+                        news_item = {
+                            'title': result.title,
+                            'description': result.description,
+                            'link': result.link,
+                            'image_url': result.image_url,
+                            'timestamp': entry.entry_time.isoformat(),
+                            'emoji1': result.emoji1,
+                            'emoji2': result.emoji2,
+                            'feed_url': entry.feed_url
+                        }
+                        await broadcast_news_update(news_item)
+                        
+                        return entry.entry_time
+                return None
             except asyncio.TimeoutError:
                 logger.warning(f"Timeout processing entry from {entry.feed_url}")
                 return None
             except Exception as e:
                 logger.error(f"Error processing entry: {e}\nTraceback:\n{traceback.format_exc()}")
                 return None
-                
+
     async def _store_entry(self, entry: FeedEntry, result):
         """Store processed entry in database."""
         with get_db() as conn:
             conn.execute('''
                 INSERT INTO news_entries 
-                (message, timestamp, feed_url, title, description, link, image_url, content, emoji1, emoji2)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (message, pub_date, processed_date, feed_url, title, description, 
+                 link, image_url, content, emoji1, emoji2)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 result.message,
-                datetime.datetime.now().isoformat(),
+                entry.entry_time.isoformat(),
+                datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 entry.feed_url,
                 result.title,
                 result.description,
@@ -161,21 +230,25 @@ class FeedWatcher:
                 result.emoji2
             ))
             conn.commit()
-                
+
     async def process_feed_content(self, feed_url: str, content: str) -> None:
         """Process feed content if it has changed."""
         if not content:
+            self._update_feed_metrics(feed_url, had_updates=False)
             return
             
         feed = feedparser.parse(content)
         if not feed.entries:
+            self._update_feed_metrics(feed_url, had_updates=False)
             return
             
         cache = load_feed_cache()
-        last_check = cache.get(feed_url, datetime.datetime.min.replace(tzinfo=datetime.timezone.utc))
+        feed_info = cache.get(feed_url, {})
+        last_check = feed_info.get('last_check', datetime.datetime.min.replace(tzinfo=datetime.timezone.utc))
         
         new_entries = self._get_new_entries(feed, last_check, feed_url)
         if not new_entries:
+            self._update_feed_metrics(feed_url, had_updates=False)
             return
             
         tasks = [self.process_entry(entry) for entry in new_entries]
@@ -183,65 +256,125 @@ class FeedWatcher:
         
         new_entry_times = [t for t in results if t is not None]
         if new_entry_times:
-            update_feed_cache(feed_url, max(new_entry_times))
-            
+            latest = max(new_entry_times)
+            update_feed_cache(feed_url, {
+                'last_check': latest,
+                'etag': self.feeds.get(feed_url, {}).get('etag'),
+                'last_modified': self.feeds.get(feed_url, {}).get('last_modified')
+            })
+            self._update_feed_metrics(feed_url, had_updates=True)
+
     def _get_new_entries(self, feed: Any, last_check: datetime.datetime, feed_url: str) -> List[FeedEntry]:
         """Get new entries from feed that haven't been processed yet."""
         new_entries = []
         
+        # Validate and ensure last_check has timezone info
+        if last_check is None:
+            last_check = datetime.datetime.min.replace(tzinfo=timezone.utc)
+        elif last_check.tzinfo is None:
+            last_check = last_check.replace(tzinfo=timezone.utc)
+        
         for entry in feed.entries:
             try:
                 # Try different date fields in order of preference
-                if hasattr(entry, 'published_parsed') and entry.published_parsed:
-                    time_tuple = entry.published_parsed
-                elif hasattr(entry, 'updated_parsed') and entry.updated_parsed:
-                    time_tuple = entry.updated_parsed
-                else:
-                    # Skip entries without valid dates
-                    continue
-
-                # Ensure we have a valid time tuple
-                if not isinstance(time_tuple, tuple) or len(time_tuple) < 6:
-                    continue
-
-                year, month, day, hour, minute, second = time_tuple[:6]
-                entry_time = datetime.datetime(
-                    year, month, day, hour, minute, second,
-                    tzinfo=datetime.timezone.utc
-                )
+                pub_date = None
                 
-                if entry_time > last_check:
-                    new_entries.append(FeedEntry(entry, entry_time, feed_url))
-            except (AttributeError, TypeError, ValueError) as e:
+                # Try standard RSS date formats with error handling
+                if hasattr(entry, 'published') and entry.published:
+                    try:
+                        pub_date = parsedate_to_datetime(entry.published)
+                    except (TypeError, ValueError, AttributeError):
+                        pass
+                
+                if pub_date is None and hasattr(entry, 'updated') and entry.updated:
+                    try:
+                        pub_date = parsedate_to_datetime(entry.updated)
+                    except (TypeError, ValueError, AttributeError):
+                        pass
+                
+                # Try parsed tuples from feedparser
+                if pub_date is None and hasattr(entry, 'published_parsed') and entry.published_parsed:
+                    try:
+                        timestamp = datetime.datetime(*entry.published_parsed[:6])
+                        pub_date = timestamp.replace(tzinfo=timezone.utc)
+                    except (TypeError, ValueError, AttributeError):
+                        pass
+                
+                if pub_date is None and hasattr(entry, 'updated_parsed') and entry.updated_parsed:
+                    try:
+                        timestamp = datetime.datetime(*entry.updated_parsed[:6])
+                        pub_date = timestamp.replace(tzinfo=timezone.utc)
+                    except (TypeError, ValueError, AttributeError):
+                        pass
+                
+                # If no valid date found, use current time as fallback
+                if pub_date is None:
+                    pub_date = datetime.datetime.now(timezone.utc)
+                    logger.warning(f"No valid date found for entry from {feed_url}, using current time")
+                elif pub_date.tzinfo is None:
+                    # Ensure pub_date has timezone info
+                    pub_date = pub_date.replace(tzinfo=timezone.utc)
+                
+                # Double check we have a valid datetime before comparing
+                if isinstance(pub_date, datetime.datetime) and isinstance(last_check, datetime.datetime):
+                    if pub_date > last_check:
+                        new_entries.append(FeedEntry(entry, pub_date, feed_url))
+                else:
+                    logger.warning(f"Invalid date comparison skipped for {feed_url}: pub_date={pub_date}, last_check={last_check}")
+                    
+            except Exception as e:
                 logger.warning(f"Error parsing entry date from {feed_url}: {e}")
                 continue
                 
         return new_entries
-            
+
     async def watch_feed(self, feed_url: str) -> None:
         """Watch a single feed for updates."""
-        try:
-            # Do initial fetch immediately
-            content = await self.check_feed_headers(feed_url)
-            if content:
-                logger.info(f"🔄 Initial fetch from {feed_url}")
-                await self.process_feed_content(feed_url, content)
-        except Exception as e:
-            logger.error(f"Error during initial fetch from {feed_url}: {e}\nTraceback:\n{traceback.format_exc()}")
-
-        # Then start the regular polling loop
+        consecutive_errors = 0
+        max_consecutive_errors = 5
+        
         while True:
             try:
-                await asyncio.sleep(random.randint(
-                    self.config.min_poll_interval,
-                    self.config.max_poll_interval
-                ))
+                # Get current metrics including source priority
+                metrics = get_feed_metrics(feed_url)
+                source_priority = metrics.get('source_priority', 100)
                 
                 content = await self.check_feed_headers(feed_url)
+                
                 if content:
-                    logger.info(f"🔄 Updates found in {feed_url}")
                     await self.process_feed_content(feed_url, content)
-                    
+                    consecutive_errors = 0
+                else:
+                    consecutive_errors += 1
+                
+                # Get updated poll interval
+                metrics = get_feed_metrics(feed_url)
+                poll_interval = metrics['update_frequency']
+                
+                # Add priority-based jitter
+                # Higher priority (less frequent source) = less jitter
+                priority_factor = source_priority / 100.0  # Will be between 0.1 and 1.0
+                jitter = random.uniform(-0.3, 0.3) * (1 - priority_factor)  # More jitter for lower priority
+                sleep_time = poll_interval * (1 + jitter)
+                
+                # Apply exponential backoff for errors
+                if consecutive_errors > max_consecutive_errors:
+                    backoff_multiplier = min(2 ** (consecutive_errors - max_consecutive_errors), 8)
+                    sleep_time *= backoff_multiplier
+                    logger.warning(f"Feed {feed_url} experiencing repeated errors. Backing off for {sleep_time:.1f}s")
+                
+                # Add priority-based delay
+                # Lower priority = longer delay between checks
+                priority_delay = (100 - source_priority) * 0.01 * poll_interval  # Up to 90% additional delay for lowest priority
+                sleep_time += priority_delay
+                
+                await asyncio.sleep(sleep_time)
+                
+            except asyncio.CancelledError:
+                logger.info(f"Feed watcher for {feed_url} cancelled")
+                raise
             except Exception as e:
-                logger.error(f"Error watching feed {feed_url}: {e}\nTraceback:\n{traceback.format_exc()}")
-                await asyncio.sleep(self.config.error_backoff_delay)
+                logger.error(f"Error watching feed {feed_url}: {str(e)}")
+                consecutive_errors += 1
+                backoff_time = self.config.error_backoff_delay * min(2 ** (consecutive_errors - 1), 8)
+                await asyncio.sleep(backoff_time)

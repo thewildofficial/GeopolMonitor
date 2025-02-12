@@ -76,15 +76,22 @@ class ContentProcessor:
         self.client = genai.Client(api_key=api_key)
         self.model = "gemini-2.0-flash-thinking-exp-01-21"
     
-    async def process_content(self, text: str, is_title: bool = False) -> Tuple[str, str]:
+    async def process_content(self, text: str, is_title: bool = False, instruction: Optional[str] = None) -> Tuple[str, str]:
         """Process content with Gemini API."""
         try:
             await wait_for_rate_limit()
             
             prompt = f"""Analyze this text and provide three things:
-1. If the text is not in English, translate it to natural English. If it's already in English, improve its clarity if needed.
 
-2. You MUST provide TWO highly specific emoji that best represent the context. Generic emojis are not allowed. Follow these rules in order:
+1. TRANSLATION & FORMATTING:
+   - ALWAYS translate non-English text to clear, natural English
+   - If already in English, improve clarity while preserving meaning
+   - Remove any unnecessarily repetitive content
+   - {'Format as a clear, concise title' if is_title else 'Format as exactly THREE short paragraphs that summarize the key points'}
+   - Keep the tone professional and factual
+
+2. EMOJI SELECTION:
+   You MUST provide TWO highly specific emoji that best represent the context. Generic emojis are not allowed.
 
    a) For EMOJI_1, use flag emoji if ANY of these are mentioned (even indirectly):
       - Countries or their adjective forms (e.g., "French" → 🇫🇷)
@@ -94,7 +101,7 @@ class ContentProcessor:
       - Government bodies (e.g., "Parliament" → use country's flag)
       - Regional organizations (e.g., "NATO" → 🇪🇺)
 
-   b) For EMOJI_2, use the MOST SPECIFIC topic emoji possible:
+  b) For EMOJI_2, use the MOST SPECIFIC topic emoji:
       Economy & Finance:
       - Banking/Markets: 🏦
       - Currency/Money: 💵
@@ -134,20 +141,25 @@ class ContentProcessor:
       - Conservation: 🌳
       - Weather: ⛈️
 
-3. {'Keep the text concise but preserve its meaning.' if is_title else 'Provide a concise 2-3 sentence summary.'}
+3. TEXT PROCESSING:
+   {instruction if instruction else 'Keep the text concise but preserve its meaning.' if is_title else 'Provide exactly three short paragraphs summarizing the key points. Each paragraph should be 1-3 sentences.'}
 
-Text: {text}
+Text to process: {text}
 
 Example responses for different scenarios:
-"French elections show tight race" → 🇫🇷🗳️
-"Sydney house prices soar" → 🇦🇺🏘️
-"Chinese tech stocks plummet" → 🇨🇳📉
-"US Senate passes new bill" → 🇺🇸⚖️
-"Tokyo markets open higher" → 🇯🇵📈
-"Indian farmers protest" → 🇮🇳✊
-"German industrial output" → 🇩🇪🏭
-"Brazilian rainforest data" → 🇧🇷🌳
-"Russian military exercise" → 🇷🇺⚔️
+"French elections show tight race" → 
+EMOJI_1: 🇫🇷
+EMOJI_2: 🗳️
+TEXT: French Presidential Election Enters Final Phase as Polls Show Close Contest
+
+"Long article about climate change" →
+EMOJI_1: 🌎
+EMOJI_2: 🌡️
+TEXT: Global temperatures have reached unprecedented levels in 2024, with multiple regions experiencing record-breaking heat waves and extreme weather events.
+
+The impact on agriculture and food security has become increasingly apparent, with crop yields declining in major farming regions and food prices rising globally.
+
+Scientists warn that without immediate action to reduce greenhouse gas emissions, these trends will continue to worsen, potentially leading to catastrophic environmental and economic consequences.
 
 Respond exactly in this format:
 EMOJI_1: [first specific emoji]

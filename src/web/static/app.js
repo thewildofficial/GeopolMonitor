@@ -33,31 +33,47 @@ function initWebSocket() {
 
 async function handleNewsUpdate(newItem) {
     const container = document.getElementById('newsContainer');
-    const element = createNewsElement(newItem);
     
-    // Add animation classes for top entry
-    element.classList.add('news-item-new');
-    element.style.opacity = '0';
-    element.style.transform = 'translateY(-20px)';
+    // Get current news items
+    const currentElements = Array.from(container.children);
+    const currentNews = currentElements.map(el => ({
+        timestamp: el.querySelector('.time').getAttribute('data-timestamp'),
+        element: el
+    }));
     
-    // Insert at the top
-    if (container.firstChild) {
-        container.insertBefore(element, container.firstChild);
-    } else {
-        container.appendChild(element);
+    // Add new item to the array and sort
+    currentNews.push({
+        timestamp: newItem.timestamp,
+        element: createNewsElement(newItem)
+    });
+    
+    currentNews.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    
+    // Clear container and append in new order
+    container.innerHTML = '';
+    currentNews.forEach(item => {
+        if (item.element === currentNews[0].element) {
+            // Add animation only for the newest item
+            item.element.classList.add('news-item-new');
+            item.element.style.opacity = '0';
+            item.element.style.transform = 'translateY(-20px)';
+        }
+        container.appendChild(item.element);
+    });
+    
+    // Animate the new item if it's at the top
+    if (currentNews[0].timestamp === newItem.timestamp) {
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        const newestElement = container.firstElementChild;
+        newestElement.style.transition = 'all 0.5s cubic-bezier(0.4, 0.0, 0.2, 1)';
+        newestElement.style.opacity = '1';
+        newestElement.style.transform = 'translateY(0)';
+        
+        setTimeout(() => {
+            newestElement.classList.remove('news-item-new');
+            newestElement.style.transition = '';
+        }, 500);
     }
-    
-    // Trigger animation
-    await new Promise(resolve => requestAnimationFrame(resolve));
-    element.style.transition = 'all 0.5s cubic-bezier(0.4, 0.0, 0.2, 1)';
-    element.style.opacity = '1';
-    element.style.transform = 'translateY(0)';
-    
-    // Remove animation classes after settled
-    setTimeout(() => {
-        element.classList.remove('news-item-new');
-        element.style.transition = '';
-    }, 500);
 }
 
 async function fetchNews() {
@@ -126,7 +142,11 @@ function createNewsElement(newsItem) {
     
     article.querySelector('h2').textContent = titleWithEmojis;
     article.querySelector('.description').textContent = description || 'No description available';
-    article.querySelector('.time').textContent = formatTimeAgo(newsItem.timestamp);
+    
+    // Store timestamp as data attribute for sorting
+    const timeElement = article.querySelector('.time');
+    timeElement.textContent = formatTimeAgo(newsItem.timestamp);
+    timeElement.setAttribute('data-timestamp', newsItem.timestamp);
 
     // Handle image
     const imageUrl = newsItem.image_url || null;
@@ -254,6 +274,9 @@ async function updateNews() {
         if (!container) return;
         
         const filtered = await filterNews(news);
+        
+        // Sort news by timestamp before processing
+        filtered.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
         
         // Get current items
         const currentItems = Array.from(container.children);
@@ -527,7 +550,9 @@ style.textContent = `
 }
 
 [data-theme="dark"] .scroll-to-top-btn {
-    background: var(--primary-color, #0A84FF);
+    background: var(--card-background, #2c2c2c);
+    color: white;
+    border: 2px solid var(--border-color, #404040);
 }
 `;
 document.head.appendChild(style);
