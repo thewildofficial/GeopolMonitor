@@ -4,6 +4,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 import json
 import atexit
 
@@ -20,6 +21,10 @@ def create_app():
     """Create and configure FastAPI application"""
     app = FastAPI()
     
+    # Add HTTPS redirect middleware in production
+    if not any(host in str(TEMPLATES_DIR) for host in ['localhost', '127.0.0.1']):
+        app.add_middleware(HTTPSRedirectMiddleware)
+    
     # Configure CORS
     app.add_middleware(
         CORSMiddleware,
@@ -32,6 +37,14 @@ def create_app():
     # Mount static files and templates
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
+    # Add request middleware to ensure proper URL scheme
+    @app.middleware("http")
+    async def update_request_scheme(request: Request, call_next):
+        if request.headers.get("x-forwarded-proto") == "https":
+            request.scope["scheme"] = "https"
+        response = await call_next(request)
+        return response
 
     @app.on_event("startup")
     async def startup_event():

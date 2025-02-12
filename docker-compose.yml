@@ -6,17 +6,31 @@ services:
     ports:
       - "8000:8000"
     volumes:
+      - .:/app
       - ./backups:/app/backups
     env_file:
       - .env
     restart: unless-stopped
     environment:
       - PYTHONUNBUFFERED=1
-    command: uvicorn web_server:app --host 0.0.0.0 --port 8000
+    command: uvicorn web_server:app --host 0.0.0.0 --port 8000 --reload
+
+  bot:
+    build: .
+    volumes:
+      - .:/app
+      - ./backups:/app/backups
+    env_file:
+      - .env
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: python bot.py
 
   feed:
     build: .
     volumes:
+      - .:/app
       - ./backups:/app/backups
     env_file:
       - .env
