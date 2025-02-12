@@ -12,17 +12,21 @@ from ..database.models import init_db, get_db, cleanup_db
 from ..core.processor import ImageExtractor
 from ..utils.text import clean_text
 from .websocket_manager import manager
-from config.settings import STATIC_DIR, TEMPLATES_DIR
+from config.settings import STATIC_DIR, TEMPLATES_DIR, WEB_HOST
 
 # Ensure static directory exists
 STATIC_DIR.mkdir(exist_ok=True)
+
+def is_local_environment():
+    """Check if we're running in a local environment"""
+    return WEB_HOST in ['localhost', '127.0.0.1', '0.0.0.0']
 
 def create_app():
     """Create and configure FastAPI application"""
     app = FastAPI()
     
-    # Add HTTPS redirect middleware in production
-    if not any(host in str(TEMPLATES_DIR) for host in ['localhost', '127.0.0.1']):
+    # Add HTTPS redirect middleware only in production
+    if not is_local_environment():
         app.add_middleware(HTTPSRedirectMiddleware)
     
     # Configure CORS
@@ -41,7 +45,8 @@ def create_app():
     # Add request middleware to ensure proper URL scheme
     @app.middleware("http")
     async def update_request_scheme(request: Request, call_next):
-        if request.headers.get("x-forwarded-proto") == "https":
+        forwarded_proto = request.headers.get("x-forwarded-proto")
+        if forwarded_proto == "https" or (not is_local_environment() and forwarded_proto != "http"):
             request.scope["scheme"] = "https"
         response = await call_next(request)
         return response
