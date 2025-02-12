@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backups:/app/backups
+    env_file:
+      - .env
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: uvicorn web_server:app --host 0.0.0.0 --port 8000
+
+  feed:
+    build: .
+    volumes:
+      - ./backups:/app/backups
+    env_file:
+      - .env
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: python feed_service.py
