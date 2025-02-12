@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeopolMonitor 🌍</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌍</text></svg>">
+</head>
+<body>
+    <header>
+        <h1>GeopolMonitor 🌍</h1>
+        <div class="header-controls">
+            <button id="themeToggle" class="theme-toggle" title="Toggle theme">
+                <i class="fas fa-sun"></i>
+            </button>
+            <div class="live-indicator">
+                <span class="pulse"></span>
+                <span>LIVE</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="filters">
+        <div class="filter-group">
+            <input type="text" placeholder="🔍 Search news..." id="searchInput">
+            <select id="timeFilter">
+                <option value="all">⏰ All Time</option>
+                <option value="1h">Last Hour</option>
+                <option value="24h">Last 24 Hours</option>
+                <option value="7d">Last 7 Days</option>
+            </select>
+        </div>
+        <div class="view-toggle">
+            <button id="listViewBtn" class="view-btn active" title="List View">
+                <i class="fas fa-list"></i>
+            </button>
+            <button id="gridViewBtn" class="view-btn" title="Grid View">
+                <i class="fas fa-th-large"></i>
+            </button>
+        </div>
+    </div>
+
+    <main id="newsContainer" class="list-view">
+        <!-- News items will be inserted here dynamically -->
+    </main>
+
+    <template id="newsItemTemplate">
+        <article class="news-item">
+            <div class="news-content">
+                <div class="news-image-container">
+                    <img class="news-image" src="" alt="">
+                </div>
+                <div class="news-text">
+                    <div class="news-header">
+                        <h2></h2>
+                    </div>
+                    <p class="description"></p>
+                    <div class="meta">
+                        <span class="time"></span>
+                    </div>
+                </div>
+            </div>
+        </article>
+    </template>
+
+    <script src="{{ url_for('static', path='app.js') }}"></script>
+</body>
+</html>

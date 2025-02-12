@@ -2,10 +2,11 @@
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
+[![FastAPI](https://img.shields.io/badge/FastAPI-modern_web-009688.svg)](https://fastapi.tiangolo.com)
 [![Telegram Bot API](https://img.shields.io/badge/Telegram-Bot_API-blue.svg)](https://core.telegram.org/bots/api)
 [![Gemini AI](https://img.shields.io/badge/Gemini-AI_Powered-orange.svg)](https://deepmind.google/technologies/gemini/)
 
-A real-time geopolitical news monitoring system that processes RSS feeds and sends formatted updates to Telegram channels with smart context inference and emoji tagging.
+A real-time geopolitical news monitoring system with AI-powered context inference, Telegram integration, and a modern web interface.
 
 ## Table of Contents 📑
 - [Features](#features-)
@@ -20,17 +21,46 @@ A real-time geopolitical news monitoring system that processes RSS feeds and sen
 - [Contributing](#contributing-)
 - [License](#license-)
 
+## Project Structure 📁
+
+```
+GeopolMonitor/
+├── src/                    # Main source code
+│   ├── core/              # Core functionality
+│   │   ├── processor.py   # News processing logic
+│   │   └── feed_watcher.py# Feed monitoring
+│   ├── database/          # Database operations
+│   │   └── models.py      # Database models
+│   ├── utils/             # Utility functions
+│   │   ├── text.py       # Text processing
+│   │   └── ai.py         # AI integration
+│   ├── telegram/          # Telegram integration
+│   │   └── bot.py        # Bot functionality
+│   └── web/              # Web interface
+│       └── main.py       # FastAPI app
+├── config/                # Configuration
+│   └── settings.py       # Settings
+├── web/                  # Web assets
+│   ├── static/           # Static files
+│   └── templates/        # HTML templates
+├── tests/                # Test files
+├── bot.py               # Bot entry point
+└── web_server.py        # Web server entry point
+```
+
 ## Features ✨
 
 - Real-time RSS feed monitoring
-- Smart context inference with Gemini AI
-- Automatic emoji tagging based on location and topic
+- WebSocket-based live updates
+- Responsive grid/list view toggle
+- Theme switching (light/dark mode)
+- AI-powered context inference with Gemini
+- Automatic emoji tagging for locations and topics
 - Telegram channel integration
-- Rate-limited API handling
-- Feed validation and cleaning
-- Image extraction and sharing
-- Markdown formatting support
-- SQLite database for caching and deduplication
+- Modern web interface with search and time filtering
+- Image extraction and handling
+- Rate-limited API management
+- SQLite database for caching
 
 ## Prerequisites 📋
 
@@ -38,79 +68,70 @@ A real-time geopolitical news monitoring system that processes RSS feeds and sen
 - A Telegram Bot Token
 - A Telegram Channel
 - Google Gemini API Key
-- SQLite3 (usually comes with Python)
 
 ## Setup Guide 🚀
 
-1. **Clone the Repository**
+1. **Clone and Setup Environment**
    ```bash
    git clone <repository-url>
    cd GeopolMonitor
-   ```
-
-2. **Create Virtual Environment**
-   ```bash
-   python -m venv geopolenv
-   ```
-
-3. **Activate Virtual Environment**
-   - On Windows:
-     ```bash
-     .\geopolenv\Scripts\activate
-     ```
-   - On macOS/Linux:
-     ```bash
-     source geopolenv/bin/activate
-     ```
-
-4. **Install Dependencies**
-   ```bash
+   python -m venv venv
+   source venv/bin/activate  # or `venv\Scripts\activate` on Windows
    pip install -r requirements.txt
    ```
 
-5. **Configure Environment Variables**
-   - Copy `.env.example` to `.env`
-   ```bash
-   cp .env.example .env
+2. **Configure Environment**
+   Create a `.env` file:
    ```
-   - Edit `.env` and add your credentials:
-     ```
-     TELEGRAM_TOKEN=your_telegram_bot_token
-     TELEGRAM_CHANNEL_ID=your_channel_id
-     GEMINI_API_KEY=your_gemini_api_key
-     ```
+   TELEGRAM_TOKEN=your_bot_token
+   TELEGRAM_CHANNEL_ID=your_channel_id
+   GEMINI_API_KEY=your_gemini_api_key
+   ```
 
-6. **Initialize Database**
-   The database will be automatically initialized when you first run the bot, but you can also initialize it manually:
+3. **Initialize Database**
    ```python
-   python -c "import helper; helper.init_db()"
+   python -c "from src.database.models import init_db; init_db()"
    ```
 
-7. **Configure RSS Feeds**
-   - Add your RSS feed URLs to `feeds.txt`, one per line
-   - Run the feed cleaner to validate feeds:
-     ```bash
-     python clean_feed.py
-     ```
+4. **Configure Feeds**
+   Add RSS feed URLs to `feeds.txt`
 
 ## Usage 💡
 
-### Running the Bot
+### Run the Bot
 ```bash
-python telegram_bot.py
+python bot.py
 ```
 
-### Test Mode
-To test without sending to Telegram:
+### Run the Web Interface
 ```bash
-python dry_run.py
+python web_server.py
 ```
 
-### Headless Mode
-For server deployment:
-```bash
-python headless_geomonitor.py
-```
+The web interface will be available at `http://localhost:8000` with features including:
+- Real-time updates via WebSocket
+- Grid/List view toggle
+- Dark/Light theme switch
+- Search functionality
+- Time-based filtering (1h, 24h, 7d, all)
+- Responsive design for mobile/desktop
+
+## Technical Details 🔧
+### WebSocket Integration
+The system uses WebSocket connections for real-time updates:
+- Automatic reconnection handling
+- Server-side event broadcasting
+- Real-time news delivery
+- Efficient JSON message format
+
+### Web Interface Features
+- Grid/List view with FLIP animations
+- Dark/Light theme with system preference detection
+- Debounced search with real-time filtering
+- Time-based content filtering
+- Responsive image handling
+- Mobile-first design
+- Error state management
 
 ## Database Management 🗄️
 
@@ -122,7 +143,7 @@ The system uses SQLite for:
 The database (`news_monitor.db`) is automatically created in the project root. To reset the database:
 ```bash
 rm news_monitor.db
-python -c "import helper; helper.init_db()"
+python -c "from src.database.models import init_db; init_db()"
 ```
 
 ## Rate Limits ⚠️
