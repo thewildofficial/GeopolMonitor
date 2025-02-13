@@ -7,9 +7,9 @@ import html
 import urllib.parse
 import feedparser
 
-from ..database.models import get_db
+from ..database.models import get_db, add_tag, tag_article
 from ..utils.text import clean_text, clean_url
-from ..utils.ai import process_with_gemini
+from ..utils.ai import process_with_gemini, process_with_tags
 
 # Configure logging
 logging.basicConfig(
@@ -30,6 +30,9 @@ class ProcessedContent(NamedTuple):
     emoji2: str
     image_url: Optional[str]
     content: str
+    topic_tags: List[str]
+    geography_tags: List[str]
+    event_tags: List[str]
 
 class ImageExtractor:
     """Handles extraction of images from feed entries."""
@@ -108,33 +111,28 @@ class ArticleProcessor:
             title_cleaned = self._clean_html(getattr(entry, 'title', 'Untitled'))
             description_cleaned = self._clean_html(getattr(entry, 'description', ''))
             
-            # Process description - ensure it's a proper summary
-            if len(description_cleaned) > 300:
-                # Process with AI to get a concise 3-paragraph summary
-                _, description_processed = await process_with_gemini(
-                    description_cleaned, 
-                    is_title=False,
-                    instruction="Summarize this in exactly three short paragraphs in clear English. Focus on the key points."
-                )
-            else:
-                # For shorter content, just ensure it's in English
-                _, description_processed = await process_with_gemini(
-                    description_cleaned,
-                    is_title=False,
-                    instruction="If not in English, translate to natural English. Otherwise, improve clarity if needed."
-                )
-
-            # Process title - ensure it's clear and in English
-            emojis, title_processed = await process_with_gemini(
-                title_cleaned,
-                is_title=True,
-                instruction="If not in English, translate to a clear English title. Otherwise, improve clarity if needed."
+            # Process with AI and get tags
+            emojis, description_processed, topics, geography, events = await process_with_tags(
+                description_cleaned, 
+                is_title=False,
+                instruction="Summarize in clear English, focusing on key points."
             )
 
-            # Rest of the processing
+            # Process title and get additional tags
+            _, title_processed, title_topics, title_geo, title_events = await process_with_tags(
+                title_cleaned,
+                is_title=True,
+                instruction="Translate to clear English title if needed."
+            )
+
+            # Combine and deduplicate tags
+            topic_tags = list(set(topics + title_topics))
+            geography_tags = list(set(geography + title_geo))
+            event_tags = list(set(events + title_events))
+
+            # Process emojis and content
             link = clean_url(getattr(entry, 'link', ''))
             content = getattr(entry, 'description', '')
-            
             emoji1, emoji2 = self._split_emojis(emojis)
             if not emoji1 or len(emoji1) > 4:
                 emoji1 = self._detect_location(title_cleaned) or '🌎'
@@ -159,7 +157,10 @@ class ArticleProcessor:
                 emoji1=emoji1,
                 emoji2=emoji2,
                 image_url=images[0] if images else None,
-                content=content
+                content=content,
+                topic_tags=topic_tags,
+                geography_tags=geography_tags,
+                event_tags=event_tags
             )
             
         except Exception as e:

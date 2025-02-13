@@ -5,10 +5,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
+from typing import List, Optional
 import json
 import atexit
 
-from ..database.models import init_db, get_db, cleanup_db
+from ..database.models import (
+    init_db, get_db, cleanup_db, 
+    get_article_tags, search_articles_by_tags
+)
 from ..core.processor import ImageExtractor
 from ..utils.text import clean_text
 from .websocket_manager import manager
@@ -61,21 +65,107 @@ def create_app():
         """Clean up database on shutdown."""
         cleanup_db()
 
+    def ensure_source_tag_exists(conn, source_name):
+        """Ensure a source tag exists in the database."""
+        cursor = conn.execute(
+            'SELECT id FROM tags WHERE name = ? AND category = ?',
+            (source_name, 'source')
+        )
+        tag_id = cursor.fetchone()
+        
+        if not tag_id:
+            cursor = conn.execute(
+                'INSERT INTO tags (name, category) VALUES (?, ?)',
+                (source_name, 'source')
+            )
+            conn.commit()
+            return cursor.lastrowid
+        return tag_id[0]
+
     def format_news_item(item):
         """Format news item for API response"""
         image_url = item.get('image_url') or ImageExtractor.extract_first_image_from_content(item.get('content', ''))
+        
+        # Get tags for the article
+        tags = get_article_tags(item.get('id')) if item.get('id') else []
+        
+        # Extract source from feed_url and add as a tag if not already present
+        feed_url = item.get('feed_url', '')
+        if feed_url and item.get('id'):
+            try:
+                from urllib.parse import urlparse
+                domain = urlparse(feed_url).netloc
+                source_name = domain.replace('www.', '').split('.')[0].upper()
+                
+                with get_db() as conn:
+                    # Ensure source tag exists and get its ID
+                    tag_id = ensure_source_tag_exists(conn, source_name)
+                    
+                    # Link tag to article if not already linked
+                    cursor = conn.execute(
+                        'SELECT 1 FROM article_tags WHERE article_id = ? AND tag_id = ?',
+                        (item['id'], tag_id)
+                    )
+                    if not cursor.fetchone():
+                        conn.execute(
+                            'INSERT INTO article_tags (article_id, tag_id) VALUES (?, ?)',
+                            (item['id'], tag_id)
+                        )
+                        conn.commit()
+                
+                # Update tags list to include source tag
+                source_tag = {
+                    'name': source_name,
+                    'category': 'source'
+                }
+                if source_tag not in tags:
+                    tags.append(source_tag)
+            except:
+                pass  # Skip if URL parsing fails
+        
+        # Extract locations from content and add as geography tags
+        content = item.get('content', '')
+        title = item.get('title', '')
+        locations = extract_locations_from_text(f"{title} {content}")
+        
+        for location in locations:
+            geo_tag = {
+                'name': location.upper(),
+                'category': 'geography'
+            }
+            if geo_tag not in tags:
+                tags.append(geo_tag)
         
         return {
             'title': clean_text(item.get('title', '')),
             'description': clean_text(item.get('description', '')),
             'content': item.get('content', ''),
             'link': item.get('link', ''),
-            'timestamp': item.get('pub_date', ''),  # Changed from timestamp to pub_date
+            'timestamp': item.get('pub_date', ''),
             'image_url': image_url,
-            'feed_url': item.get('feed_url', ''),
+            'feed_url': feed_url,
             'emoji1': item.get('emoji1', ''),
-            'emoji2': item.get('emoji2', '')
+            'emoji2': item.get('emoji2', ''),
+            'tags': tags
         }
+
+    def extract_locations_from_text(text):
+        """Extract location names from text using simple keyword matching.
+        This is a basic implementation that could be improved with NLP."""
+        common_locations = {
+            'USA', 'RUSSIA', 'CHINA', 'UK', 'FRANCE', 'GERMANY', 'JAPAN',
+            'INDIA', 'BRAZIL', 'CANADA', 'AUSTRALIA', 'EUROPE', 'ASIA',
+            'AFRICA', 'MIDDLE EAST', 'NORTH AMERICA', 'SOUTH AMERICA'
+        }
+        
+        found_locations = set()
+        text_upper = text.upper()
+        
+        for location in common_locations:
+            if location in text_upper:
+                found_locations.add(location)
+        
+        return list(found_locations)
 
     @app.exception_handler(Exception)
     async def generic_exception_handler(request: Request, exc: Exception):
@@ -91,6 +181,13 @@ def create_app():
             {"request": request}
         )
 
+    @app.get("/map", response_class=HTMLResponse)
+    async def map_page(request: Request):
+        return templates.TemplateResponse(
+            "map.html",
+            {"request": request}
+        )
+
     @app.get("/about", response_class=HTMLResponse)
     async def about(request: Request):
         return templates.TemplateResponse(
@@ -99,22 +196,53 @@ def create_app():
         )
 
     @app.get("/api/news")
-    async def get_news():
+    async def get_news(tags: Optional[str] = None):
+        try:
+            if tags:
+                # Split tags string into list and search by tags
+                tag_list = [t.strip() for t in tags.split(',')]
+                news_items = search_articles_by_tags(tag_list)
+            else:
+                # Get all news items
+                with get_db() as conn:
+                    cursor = conn.execute('''
+                        SELECT 
+                            id, title, description, content, link, pub_date,
+                            feed_url, image_url, message, emoji1, emoji2
+                        FROM news_entries
+                        ORDER BY pub_date DESC
+                        LIMIT 100
+                    ''')
+                    columns = [column[0] for column in cursor.description]
+                    news_items = [dict(zip(columns, row)) for row in cursor]
+            
+            formatted_news = [format_news_item(item) for item in news_items]
+            return {"news": formatted_news}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.get("/api/tags")
+    async def get_tags():
+        """Get all available tags grouped by category."""
         try:
             with get_db() as conn:
                 cursor = conn.execute('''
-                    SELECT 
-                        title, description, content, link, pub_date,
-                        feed_url, image_url, message, emoji1, emoji2
-                    FROM news_entries
-                    ORDER BY pub_date DESC
-                    LIMIT 100
+                    SELECT name, category, COUNT(at.article_id) as usage_count
+                    FROM tags t
+                    LEFT JOIN article_tags at ON t.id = at.tag_id
+                    GROUP BY t.id
+                    ORDER BY usage_count DESC, name ASC
                 ''')
-                columns = [column[0] for column in cursor.description]
-                news_items = [dict(zip(columns, row)) for row in cursor]
-                
-            formatted_news = [format_news_item(item) for item in news_items]
-            return {"news": formatted_news}
+                tags = {}
+                for row in cursor.fetchall():
+                    category = row[1]
+                    if category not in tags:
+                        tags[category] = []
+                    tags[category].append({
+                        'name': row[0],
+                        'count': row[2]
+                    })
+                return tags
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 

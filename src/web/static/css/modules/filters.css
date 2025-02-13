@@ -1,0 +1,177 @@
+/* Filters and view control styles */
+.filters-wrapper {
+    position: sticky;
+    top: 61px; /* Account for header height */
+    z-index: 91;
+    margin-bottom: 1rem;
+    background: var(--background-color);
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
+}
+
+.filters {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background: var(--filter-background);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin: 1rem;
+}
+
+.filter-group {
+    display: flex;
+    gap: 1rem;
+    flex-grow: 1;
+}
+
+.filters input,
+.filters select {
+    padding: 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 0.875rem;
+    background: var(--card-background);
+    color: var(--text-color);
+}
+
+.filters input {
+    flex: 1;
+}
+
+.view-toggle {
+    display: flex;
+    gap: 0.5rem;
+    background: var(--card-background);
+    border-radius: 8px;
+    padding: 4px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.view-btn {
+    background: transparent;
+    border: none;
+    padding: 8px 12px;
+    color: #666;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.view-btn:hover {
+    color: var(--accent-color);
+}
+
+.view-btn.active {
+    background: var(--accent-color);
+    color: white;
+    border-radius: 6px;
+}
+
+.filter-toggle {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    padding: 0.5rem;
+    width: 40px;
+    height: 36px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.filter-toggle:hover {
+    background: var(--accent-color);
+    color: white;
+    border-color: var(--accent-color);
+}
+
+.filter-toggle .filter-count {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background: var(--accent-color);
+    color: white;
+    font-size: 0.7rem;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transform: scale(0.8);
+    transition: all 0.2s ease;
+}
+
+.filter-toggle .filter-count.active {
+    opacity: 1;
+    transform: scale(1);
+}
+
+/* View layout styles */
+#newsContainer.grid-view {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+    padding: 0 1rem;
+}
+
+#newsContainer.list-view {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    padding: 0 1rem;
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 768px) {
+    .filters-wrapper {
+        top: 57px; /* Adjust for smaller mobile header */
+    }
+
+    .filters {
+        flex-direction: column;
+        padding: 1rem;
+        margin: 0.5rem;
+        border-radius: 6px;
+    }
+    
+    .filters input,
+    .filters select {
+        width: 100%;
+    }
+
+    .filter-group {
+        gap: 0.5rem;
+        flex-direction: column;
+    }
+
+    .view-toggle {
+        margin-top: 1rem;
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+    }
+
+    .view-btn {
+        flex: 1;
+        text-align: center;
+    }
+
+    #newsContainer.grid-view {
+        grid-template-columns: 1fr;
+        padding: 0.5rem;
+    }
+
+    #newsContainer.list-view {
+        padding: 0.5rem;
+    }
+}
