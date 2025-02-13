@@ -65,6 +65,63 @@ async def wait_for_rate_limit():
     requests_today += 1
     last_request_time = current_time
 
+async def generate_tags(text: str) -> Tuple[list[str], list[str], list[str]]:
+    """Generate tags for an article using Gemini API."""
+    try:
+        await wait_for_rate_limit()
+        
+        prompt = """Analyze this text and generate three sets of tags:
+
+1. TOPICS (e.g., Politics, Economy, Technology, etc.)
+2. GEOGRAPHY (Countries, Regions, Cities mentioned)
+3. EVENT TYPES (e.g., Election, Conflict, Treaty, Summit, etc.)
+
+Rules for tag generation:
+- Each tag should be a single word or hyphenated phrase
+- Convert multi-word concepts into hyphenated form (e.g., "artificial intelligence" → "artificial-intelligence")
+- Use lowercase for all tags
+- Include only tags that are explicitly or strongly implied in the text
+- Maximum 5 tags per category
+- For geography, prefer country names over city names unless the city is the main focus
+
+Example response format:
+TOPICS: economy, technology, cybersecurity
+GEOGRAPHY: united-states, china, european-union
+EVENTS: trade-agreement, diplomatic-summit
+
+Text to analyze: {text}
+
+Respond exactly in this format:
+TOPICS: [comma-separated tags]
+GEOGRAPHY: [comma-separated tags]
+EVENTS: [comma-separated tags]"""
+
+        response = content_processor.client.models.generate_content(
+            model=content_processor.model,
+            contents=prompt.format(text=text)
+        )
+
+        # Parse response
+        result = response.text.strip().split('\n')
+        topics = []
+        geography = []
+        events = []
+        
+        for line in result:
+            line = line.strip()
+            if line.startswith('TOPICS:'):
+                topics = [t.strip() for t in line.split('TOPICS:')[1].strip().split(',')]
+            elif line.startswith('GEOGRAPHY:'):
+                geography = [t.strip() for t in line.split('GEOGRAPHY:')[1].strip().split(',')]
+            elif line.startswith('EVENTS:'):
+                events = [t.strip() for t in line.split('EVENTS:')[1].strip().split(',')]
+        
+        return topics, geography, events
+
+    except Exception as e:
+        logger.error(f"Error generating tags: {e}")
+        return [], [], []
+
 class ContentProcessor:
     """Handles content processing with Gemini API."""
     
@@ -203,6 +260,13 @@ TEXT: [processed text]"""
                 logger.error(f"Unexpected Gemini API error: {error_msg}")
                 return "🔄❌", text
 
+    async def process_content_with_tags(self, text: str, is_title: bool = False, instruction: Optional[str] = None) -> Tuple[str, str, list[str], list[str], list[str]]:
+        """Process content and generate tags with Gemini API."""
+        emoji_str, processed_text = await self.process_content(text, is_title, instruction)
+        topics, geography, events = await generate_tags(text)
+        return emoji_str, processed_text, topics, geography, events
+
 # Create singleton instance
 content_processor = ContentProcessor()
 process_with_gemini = content_processor.process_content
+process_with_tags = content_processor.process_content_with_tags

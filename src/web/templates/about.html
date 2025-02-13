@@ -4,7 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>About - GeopolMonitor 🌍</title>
-    <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+    <link rel="stylesheet" href="/static/css/modules/base.css">
+    <link rel="stylesheet" href="/static/css/modules/theme.css">
+    <link rel="stylesheet" href="/static/css/modules/about.css">
+    <link rel="stylesheet" href="/static/css/modules/scroll-button.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌍</text></svg>">
 </head>
@@ -12,6 +15,11 @@
     <header>
         <div class="header-left">
             <a href="/" class="nav-brand">GeopolMonitor 🌍</a>
+            <nav class="main-nav">
+                <a href="/" class="nav-link">News</a>
+                <a href="/map" class="nav-link">Map</a>
+                <a href="/about" class="nav-link active">About</a>
+            </nav>
         </div>
         <div class="header-controls">
             <nav class="main-nav">
@@ -75,6 +83,6 @@
         </section>
     </main>
 
-    <script src="{{ url_for('static', path='app.js') }}"></script>
+    <script type="module" src="/static/app.js"></script>
 </body>
 </html>

@@ -1,0 +1,172 @@
+/* Tag base styles */
+.tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.8rem;
+    color: var(--text-color);
+    background: var(--filter-background);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+    max-width: 150px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tag:hover {
+    background: var(--accent-color);
+    color: white;
+    border-color: var(--accent-color);
+    transform: translateY(-1px);
+}
+
+.tag.active {
+    background: var(--accent-color);
+    color: white;
+    border-color: var(--accent-color);
+    box-shadow: 0 2px 6px rgba(52, 152, 219, 0.3);
+}
+
+/* Tag count styles */
+.tag .count {
+    font-size: 0.7rem;
+    opacity: 0.7;
+    background: rgba(0, 0, 0, 0.1);
+    padding: 0.1rem 0.4rem;
+    border-radius: 8px;
+    margin-left: 0.2rem;
+}
+
+/* Tag filters section */
+.tag-filters {
+    position: relative;
+    background: var(--card-background);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    z-index: 90;
+    transition: all 0.3s var(--spring-timing);
+    opacity: 1;
+    transform-origin: top center;
+    max-height: 400px;
+    margin: -1px 1rem 1rem 1rem;
+    border-radius: 0 0 8px 8px;
+    overflow: hidden;
+}
+
+.tag-filters.collapsed {
+    opacity: 0;
+    transform: translateY(-10px) scaleY(0.95);
+    pointer-events: none;
+    max-height: 0;
+    margin-top: 0;
+    border: none;
+}
+
+.tag-sections-wrapper {
+    max-height: 350px;
+    overflow-y: auto;
+    padding: 1rem;
+    scrollbar-width: thin;
+    scrollbar-color: var(--accent-color) var(--filter-background);
+}
+
+/* Tag sections layout */
+.tag-sections {
+    display: flex;
+    gap: 2rem;
+    padding: 0.5rem;
+}
+
+.tag-section {
+    flex: 1;
+    min-width: 200px;
+}
+
+.tag-heading {
+    font-size: 0.9rem;
+    color: var(--text-color);
+    margin-bottom: 1rem;
+    font-weight: 600;
+    opacity: 0.8;
+    padding-left: 0.5rem;
+}
+
+.tag-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.tag-search {
+    width: 100%;
+    padding: 1rem;
+    border: none;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--card-background);
+    color: var(--text-color);
+    font-size: 0.875rem;
+    margin-bottom: 10px;
+}
+
+.tag-search:focus {
+    outline: none;
+    border-color: var(--accent-color);
+}
+
+.header-base {
+    display: flex;
+    align-items: center;
+    padding: 1rem;
+    background: var(--card-background);
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* Mobile styles */
+@media (max-width: 768px) {
+    .tag-filters {
+        position: fixed;
+        top: auto;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        max-height: 80vh;
+        margin: 0;
+        border: none;
+        border-top: 1px solid var(--border-color);
+        border-radius: 16px 16px 0 0;
+        box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .tag-search {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+    }
+
+    .tag-sections {
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+    
+    .tag-section {
+        width: 100%;
+    }
+
+    .tag-filters.collapsed {
+        transform: translateY(100%);
+    }
+}
+
+/* Dark mode adjustments */
+[data-theme="dark"] .tag-filters {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="dark"] .tag .count {
+    background: rgba(255, 255, 255, 0.1);
+}

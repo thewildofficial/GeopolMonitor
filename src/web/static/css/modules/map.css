@@ -1,0 +1,198 @@
+.map-container {
+    width: 100%;
+    height: 600px;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 1rem;
+    border: 1px solid var(--border-color);
+    background: var(--card-background);
+}
+
+#worldMap {
+    width: 100%;
+    height: 700px;
+    background: var(--background-color);
+}
+
+.map-controls {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.timeline-container {
+    padding: 1rem;
+    background: var(--card-background);
+    border-top: 1px solid var(--border-color);
+    border-radius: 8px;
+}
+
+.timeline-slider {
+    width: 100%;
+    margin-bottom: 0.5rem;
+}
+
+.leaflet-popup-content-wrapper {
+    background: var(--card-background);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+}
+
+.leaflet-popup-content {
+    margin: 0;
+    padding: 0.5rem;
+}
+
+.leaflet-popup-tip {
+    background: var(--card-background);
+    border: 1px solid var(--border-color);
+}
+
+.news-preview {
+    max-width: 300px;
+}
+
+.news-preview h4 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1rem;
+    color: var(--text-color);
+}
+
+.news-preview p {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--description-color);
+}
+
+.heat-map-legend {
+    background: var(--card-background);
+    padding: 1rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    font-size: 0.9rem;
+    color: var(--text-color);
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+    .map-container {
+        height: 400px;
+    }
+    
+    .map-controls {
+        flex-direction: column;
+    }
+}
+
+.map-page {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+}
+
+.map-info {
+    margin-bottom: 2rem;
+    text-align: center;
+}
+
+.map-info h1 {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+    color: var(--text-color);
+}
+
+.map-info p {
+    color: var(--description-color);
+    max-width: 600px;
+    margin: 0 auto 2rem;
+}
+
+.map-stats {
+    display: flex;
+    justify-content: center;
+    gap: 3rem;
+    margin-bottom: 2rem;
+}
+
+.stat-item {
+    text-align: center;
+}
+
+.stat-value {
+    display: block;
+    font-size: 2rem;
+    font-weight: 600;
+    color: var(--accent-color);
+    margin-bottom: 0.5rem;
+}
+
+.stat-label {
+    color: var(--description-color);
+    font-size: 0.9rem;
+}
+
+.map-wrapper {
+    background: var(--background-color);
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+}
+
+/* Minimalistic map styles */
+.leaflet-tile-pane {
+    filter: grayscale(100%) brightness(0.7) contrast(1.2);
+}
+
+[data-theme="light"] .leaflet-tile-pane {
+    opacity: 0.7;
+}
+
+[data-theme="dark"] .leaflet-tile-pane {
+    filter: invert(100%) hue-rotate(180deg) brightness(0.5) grayscale(100%) contrast(0.8);
+}
+
+.leaflet-control-attribution {
+    background: var(--background-color) !important;
+    color: var(--meta-color) !important;
+}
+
+.leaflet-popup {
+    filter: none !important;
+}
+
+.leaflet-container {
+    background: var(--background-color) !important;
+}
+
+.leaflet-control-zoom a {
+    background: var(--card-background) !important;
+    color: var(--text-color) !important;
+    border-color: var(--border-color) !important;
+}
+
+/* Mobile styles */
+@media (max-width: 768px) {
+    .map-page {
+        padding: 1rem;
+    }
+
+    .map-info h1 {
+        font-size: 1.5rem;
+    }
+
+    .map-stats {
+        gap: 1.5rem;
+    }
+
+    .stat-value {
+        font-size: 1.5rem;
+    }
+
+    #worldMap {
+        height: 400px;
+    }
+    
+    .map-controls {
+        flex-direction: column;
+    }
+}

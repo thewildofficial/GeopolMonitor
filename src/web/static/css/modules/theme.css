@@ -1,0 +1,56 @@
+/* Theme variables and general theme transitions */
+:root {
+    --animation-timing: cubic-bezier(0.4, 0.0, 0.2, 1);
+    --spring-timing: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    --animation-duration: 0.5s;
+    --fade-in-duration: 0.8s;
+}
+
+:root[data-theme="light"] {
+    --primary-color: #2c3e50;
+    --background-color: #f5f6fa;
+    --text-color: #2c3e50;
+    --accent-color: #3498db;
+    --card-background: #ffffff;
+    --border-color: #ddd;
+    --filter-background: #f5f5f5;
+    --meta-color: #888;
+    --description-color: #666;
+}
+
+:root[data-theme="dark"] {
+    --primary-color: #ecf0f1;
+    --background-color: #1a1a1a;
+    --text-color: #ecf0f1;
+    --accent-color: #3498db;
+    --card-background: #2c2c2c;
+    --border-color: #404040;
+    --filter-background: #2c2c2c;
+    --meta-color: #a0a0a0;
+    --description-color: #b0b0b0;
+}
+
+/* Base theme transitions */
+body, header, .news-item, .filters, .view-toggle {
+    transition: background-color 0.5s var(--animation-timing),
+                color 0.5s var(--animation-timing),
+                border-color 0.5s var(--animation-timing);
+}
+
+/* Dark mode adjustments */
+[data-theme="dark"] .news-image-container::before {
+    opacity: 0.1;
+}
+
+[data-theme="dark"] .view-btn {
+    color: var(--meta-color);
+}
+
+[data-theme="dark"] .view-btn:hover {
+    color: var(--accent-color);
+}
+
+[data-theme="dark"] .view-btn.active {
+    background: var(--accent-color);
+    color: var(--card-background);
+}

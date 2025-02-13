@@ -4,7 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GeopolMonitor 🌍</title>
-    <link rel="stylesheet" href="static/style.css">
+    <link rel="stylesheet" href="/static/css/modules/base.css">
+    <link rel="stylesheet" href="/static/css/modules/theme.css">
+    <link rel="stylesheet" href="/static/css/modules/news.css">
+    <link rel="stylesheet" href="/static/css/modules/tags.css">
+    <link rel="stylesheet" href="/static/css/modules/filters.css">
+    <link rel="stylesheet" href="/static/css/modules/scroll-button.css">
     <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌍</text></svg>">
 </head>
@@ -12,6 +17,11 @@
     <header>
         <div class="header-left">
             <a href="/" class="nav-brand">GeopolMonitor 🌍</a>
+            <nav class="main-nav">
+                <a href="/" class="nav-link active">News</a>
+                <a href="/map" class="nav-link">Map</a>
+                <a href="/about" class="nav-link">About</a>
+            </nav>
         </div>
         <div class="header-controls">
             <nav class="main-nav">
@@ -27,23 +37,54 @@
         </div>
     </header>
 
-    <div class="filters">
-        <div class="filter-group">
-            <input type="text" placeholder="🔍 Search news..." id="searchInput">
-            <select id="timeFilter">
-                <option value="all">⏰ All Time</option>
-                <option value="1h">Last Hour</option>
-                <option value="24h">Last 24 Hours</option>
-                <option value="7d">Last 7 Days</option>
-            </select>
+    <div class="filters-wrapper">
+        <div class="filters">
+            <div class="filter-group">
+                <input type="text" placeholder="🔍 Search news..." id="searchInput">
+                <select id="timeFilter">
+                    <option value="all">⏰ All Time</option>
+                    <option value="1h">Last Hour</option>
+                    <option value="24h">Last 24 Hours</option>
+                    <option value="7d">Last 7 Days</option>
+                </select>
+                <button id="filterToggle" class="filter-toggle" title="Toggle filters">
+                    <i class="fas fa-tag"></i>
+                    <span class="filter-count"></span>
+                </button>
+            </div>
+            
+            <div class="view-toggle">
+                <button id="listViewBtn" class="view-btn active" title="List View">
+                    <i class="fas fa-list"></i>
+                </button>
+                <button id="gridViewBtn" class="view-btn" title="Grid View">
+                    <i class="fas fa-th-large"></i>
+                </button>
+            </div>
         </div>
-        <div class="view-toggle">
-            <button id="listViewBtn" class="view-btn active" title="List View">
-                <i class="fas fa-list"></i>
-            </button>
-            <button id="gridViewBtn" class="view-btn" title="Grid View">
-                <i class="fas fa-th-large"></i>
-            </button>
+
+        <div class="tag-filters collapsed">
+            <input type="text" id="tagSearch" class="tag-search" placeholder="🔍 Search tags...">
+            <div class="tag-sections-wrapper">
+                <div class="tag-sections">
+                    <div class="tag-section">
+                        <h3 class="tag-heading">Sources</h3>
+                        <div class="tag-container" id="sourceTags"></div>
+                    </div>
+                    <div class="tag-section">
+                        <h3 class="tag-heading">Topics</h3>
+                        <div class="tag-container" id="topicTags"></div>
+                    </div>
+                    <div class="tag-section">
+                        <h3 class="tag-heading">Geography</h3>
+                        <div class="tag-container" id="geographyTags"></div>
+                    </div>
+                    <div class="tag-section">
+                        <h3 class="tag-heading">Events</h3>
+                        <div class="tag-container" id="eventTags"></div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -60,6 +101,7 @@
                 <div class="news-text">
                     <div class="news-header">
                         <h2></h2>
+                        <div class="tags"></div>
                     </div>
                     <p class="description"></p>
                     <div class="meta">
@@ -70,6 +112,8 @@
         </article>
     </template>
 
-    <script src="/static/app.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+    <script type="module" src="/static/app.js"></script>
 </body>
 </html>

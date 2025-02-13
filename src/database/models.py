@@ -23,6 +23,27 @@ def init_db(connection=None):
     else:
         conn = sqlite3.connect(DB_PATH)
 
+    # Create tags table
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS tags (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            category TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    # Create article-tag relationships table
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS article_tags (
+            article_id INTEGER,
+            tag_id INTEGER,
+            PRIMARY KEY (article_id, tag_id),
+            FOREIGN KEY (article_id) REFERENCES news_entries(id),
+            FOREIGN KEY (tag_id) REFERENCES tags(id)
+        )
+    ''')
+
     conn.execute('''
         CREATE TABLE IF NOT EXISTS news_entries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -57,6 +78,11 @@ def init_db(connection=None):
             source_priority INTEGER DEFAULT 100
         )
     ''')
+
+    # Create indices for tag tables
+    conn.execute('CREATE INDEX IF NOT EXISTS idx_tag_name ON tags(name)')
+    conn.execute('CREATE INDEX IF NOT EXISTS idx_tag_category ON tags(category)')
+    conn.execute('CREATE INDEX IF NOT EXISTS idx_article_tags ON article_tags(article_id)')
     
     conn.commit()
     
@@ -192,6 +218,54 @@ def get_source_priority(feed_url: str) -> int:
         conn.commit()
         
         return priority
+
+# Add new functions for tag operations
+def add_tag(name: str, category: str) -> int:
+    """Add a new tag or get existing tag ID."""
+    with get_db() as conn:
+        cursor = conn.execute(
+            'INSERT OR IGNORE INTO tags (name, category) VALUES (?, ?)',
+            (name.lower(), category)
+        )
+        if cursor.rowcount == 0:  # Tag already exists
+            cursor = conn.execute('SELECT id FROM tags WHERE name = ?', (name.lower(),))
+            return cursor.fetchone()[0]
+        return cursor.lastrowid
+
+def tag_article(article_id: int, tag_ids: list[int]):
+    """Tag an article with multiple tags."""
+    with get_db() as conn:
+        conn.executemany(
+            'INSERT OR IGNORE INTO article_tags (article_id, tag_id) VALUES (?, ?)',
+            [(article_id, tag_id) for tag_id in tag_ids]
+        )
+        conn.commit()
+
+def get_article_tags(article_id: int) -> list[dict]:
+    """Get all tags for an article."""
+    with get_db() as conn:
+        cursor = conn.execute('''
+            SELECT t.name, t.category 
+            FROM tags t 
+            JOIN article_tags at ON t.id = at.tag_id 
+            WHERE at.article_id = ?
+        ''', (article_id,))
+        return [{'name': row[0], 'category': row[1]} for row in cursor.fetchall()]
+
+def search_articles_by_tags(tag_names: list[str]) -> list[dict]:
+    """Search articles by tags."""
+    with get_db() as conn:
+        placeholders = ','.join('?' * len(tag_names))
+        cursor = conn.execute(f'''
+            SELECT DISTINCT ne.* 
+            FROM news_entries ne
+            JOIN article_tags at ON ne.id = at.article_id
+            JOIN tags t ON at.tag_id = t.id
+            WHERE t.name IN ({placeholders})
+            ORDER BY ne.pub_date DESC
+        ''', [name.lower() for name in tag_names])
+        return [dict(zip([col[0] for col in cursor.description], row))
+                for row in cursor.fetchall()]
 
 # Initialize database on module import
 init_db()

@@ -13,7 +13,8 @@ from .processor import process_article
 from ..telegram.bot import send_message
 from ..database.models import (
     get_db, load_feed_cache, update_feed_cache, 
-    get_feed_metrics, exists_in_db, get_source_priority
+    get_feed_metrics, exists_in_db, get_source_priority,
+    add_tag, tag_article
 )
 from ..utils.text import clean_url
 from ..web.websocket_manager import broadcast_news_update
@@ -211,7 +212,8 @@ class FeedWatcher:
     async def _store_entry(self, entry: FeedEntry, result):
         """Store processed entry in database."""
         with get_db() as conn:
-            conn.execute('''
+            # Insert article
+            cursor = conn.execute('''
                 INSERT INTO news_entries 
                 (message, pub_date, processed_date, feed_url, title, description, 
                  link, image_url, content, emoji1, emoji2)
@@ -229,7 +231,48 @@ class FeedWatcher:
                 result.emoji1,
                 result.emoji2
             ))
+            
+            # Get article ID
+            article_id = cursor.lastrowid
+            
+            # Store tags
+            tag_ids = []
+            
+            # Add topic tags
+            for tag in result.topic_tags:
+                if tag and tag.strip():
+                    tag_ids.append(add_tag(tag.strip(), 'topic'))
+                    
+            # Add geography tags
+            for tag in result.geography_tags:
+                if tag and tag.strip():
+                    tag_ids.append(add_tag(tag.strip(), 'geography'))
+                    
+            # Add event tags
+            for tag in result.event_tags:
+                if tag and tag.strip():
+                    tag_ids.append(add_tag(tag.strip(), 'event'))
+            
+            # Link tags to article
+            if tag_ids:
+                tag_article(article_id, tag_ids)
+            
             conn.commit()
+
+            # Create news item for broadcast
+            news_item = {
+                'title': result.title,
+                'description': result.description,
+                'link': result.link,
+                'timestamp': entry.entry_time.isoformat(),
+                'image_url': result.image_url,
+                'feed_url': entry.feed_url,
+                'emoji1': result.emoji1,
+                'emoji2': result.emoji2
+            }
+            
+            # Broadcast with article ID for tag inclusion
+            await broadcast_news_update(news_item, article_id)
 
     async def process_feed_content(self, feed_url: str, content: str) -> None:
         """Process feed content if it has changed."""
