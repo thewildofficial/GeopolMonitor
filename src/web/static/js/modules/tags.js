@@ -1,4 +1,7 @@
+import { normalizeCountry } from './countries.js';
+
 let activeTags = new Set();
+let relatedTags = new Map();
 
 export async function loadTags() {
     try {
@@ -9,7 +12,6 @@ export async function loadTags() {
         const topicContainer = document.getElementById('topicTags');
         const geoContainer = document.getElementById('geographyTags');
         const eventContainer = document.getElementById('eventTags');
-        const tagSearch = document.getElementById('tagSearch');
         
         // Clear existing tags
         sourceContainer.innerHTML = '';
@@ -17,15 +19,19 @@ export async function loadTags() {
         geoContainer.innerHTML = '';
         eventContainer.innerHTML = '';
         
-        // Store all tags for searching
+        // Store all tags for searching and build relationships
         window.allTags = {
             source: tags.source || [],
             topic: tags.topic || [],
             geography: tags.geography || [],
             events: tags.events || []
         };
+
+        // Build tag relationships based on co-occurrence in articles
+        buildTagRelationships();
         
         // Initialize tag search and render
+        const tagSearch = document.getElementById('tagSearch');
         tagSearch.addEventListener('input', (e) => {
             renderTags(e.target.value);
         });
@@ -37,65 +43,106 @@ export async function loadTags() {
     }
 }
 
-export function updateFilterCount() {
-    const filterCount = document.querySelector('.filter-count');
-    const filterToggle = document.getElementById('filterToggle');
-    
-    if (activeTags.size > 0) {
-        filterCount.textContent = activeTags.size;
-        filterCount.classList.add('active');
-        filterToggle.classList.add('has-active-filters');
-    } else {
-        filterCount.textContent = '';
-        filterCount.classList.remove('active');
-        filterToggle.classList.remove('has-active-filters');
+async function buildTagRelationships() {
+    try {
+        const response = await fetch('/api/news');
+        const { news } = await response.json();
+        
+        relatedTags.clear();
+        
+        // Build relationships based on co-occurrence
+        news.forEach(item => {
+            if (!item.tags) return;
+            
+            item.tags.forEach(tag1 => {
+                item.tags.forEach(tag2 => {
+                    if (tag1.name === tag2.name) return;
+                    
+                    const key1 = tag1.name;
+                    if (!relatedTags.has(key1)) {
+                        relatedTags.set(key1, new Map());
+                    }
+                    
+                    const relationMap = relatedTags.get(key1);
+                    relationMap.set(tag2.name, (relationMap.get(tag2.name) || 0) + 1);
+                });
+            });
+        });
+    } catch (error) {
+        console.error('Error building tag relationships:', error);
     }
 }
 
-export function toggleTagFilters() {
-    const tagFilters = document.querySelector('.tag-filters');
-    const wasCollapsed = tagFilters.classList.contains('collapsed');
+function highlightRelatedTags(tagName, highlight = true) {
+    const related = relatedTags.get(tagName);
+    if (!related) return;
     
-    tagFilters.classList.toggle('collapsed');
-    
-    if (wasCollapsed) {
-        const tagSearch = document.getElementById('tagSearch');
-        tagSearch.focus();
-    }
-}
-
-export function getActiveTags() {
-    return Array.from(activeTags);
-}
-
-export function addTag(tag) {
-    activeTags.add(tag);
-    updateFilterCount();
-}
-
-export function removeTag(tag) {
-    activeTags.delete(tag);
-    updateFilterCount();
+    document.querySelectorAll('.tag').forEach(tag => {
+        if (related.has(tag.dataset.tagName)) {
+            const strength = related.get(tag.dataset.tagName);
+            if (highlight) {
+                tag.style.opacity = '1';
+                tag.style.transform = `scale(${1 + Math.min(strength / 10, 0.1)})`;
+                tag.style.borderColor = 'var(--accent-color)';
+            } else {
+                tag.style.opacity = '';
+                tag.style.transform = '';
+                tag.style.borderColor = '';
+            }
+        }
+    });
 }
 
 function createTag(name, count, category) {
     const tag = document.createElement('span');
     tag.className = 'tag';
-    tag.innerHTML = `${name} <span class="count">${count}</span>`;
-    tag.dataset.tagName = name;
     tag.dataset.category = category;
+    
+    // Format display name with emoji for geography tags
+    if (category === 'geography') {
+        const countryData = normalizeCountry(name);
+        const normalizedName = countryData.name;
+        const flag = countryData.flag;
+        
+        // Create tag content with flag
+        tag.innerHTML = flag ? `${flag} ${normalizedName} ` : `${normalizedName} `;
+        tag.dataset.tagName = normalizedName;
+        tag.dataset.displayName = flag ? `${flag} ${normalizedName}` : normalizedName;
+    } else {
+        tag.textContent = name;
+        tag.dataset.tagName = name;
+        tag.dataset.displayName = name;
+    }
+    
+    // Add count
+    const countSpan = document.createElement('span');
+    countSpan.className = 'count';
+    countSpan.textContent = count;
+    tag.appendChild(countSpan);
+    
+    // Add hover effect to show related tags
+    tag.addEventListener('mouseenter', () => {
+        highlightRelatedTags(tag.dataset.tagName, true);
+    });
+    
+    tag.addEventListener('mouseleave', () => {
+        if (!tag.classList.contains('active')) {
+            highlightRelatedTags(tag.dataset.tagName, false);
+        }
+    });
     
     tag.addEventListener('click', () => {
         tag.classList.toggle('active');
         if (tag.classList.contains('active')) {
-            addTag(name);
+            addTag(tag.dataset.tagName);
+            highlightRelatedTags(tag.dataset.tagName, true);
         } else {
-            removeTag(name);
+            removeTag(tag.dataset.tagName);
+            highlightRelatedTags(tag.dataset.tagName, false);
         }
         window.updateNews();
     });
     
-    tag.title = name;
     return tag;
 }
 
@@ -138,7 +185,16 @@ function renderTags(searchTerm = '') {
     if (window.allTags.geography) {
         const filteredGeo = window.allTags.geography
             .sort((a, b) => b.count - a.count)
-            .filter(tag => tag.name.toLowerCase().includes(searchLower));
+            .filter(tag => {
+                const countryData = normalizeCountry(tag.name);
+                const searchText = [
+                    countryData.name.toLowerCase(),
+                    countryData.flag || '',
+                    tag.name.toLowerCase(),
+                    tag.name.replace(/-/g, ' ').toLowerCase()
+                ].join(' ');
+                return searchText.includes(searchLower);
+            });
         
         filteredGeo.forEach(tag => {
             geoContainer.appendChild(createTag(tag.name, tag.count, 'geography'));
@@ -158,7 +214,7 @@ function renderTags(searchTerm = '') {
         eventContainer.closest('.tag-section').style.display = 
             filteredEvents.length ? 'block' : 'none';
     }
-    
+
     // Restore active state for selected tags
     document.querySelectorAll('.tag').forEach(tag => {
         if (activeTags.has(tag.dataset.tagName)) {
@@ -169,16 +225,19 @@ function renderTags(searchTerm = '') {
 
 // Make toggleTag available globally
 window.toggleTag = (tagName) => {
-    if (activeTags.has(tagName)) {
-        activeTags.delete(tagName);
+    const countryData = normalizeCountry(tagName);
+    const normalizedTagName = countryData.name;
+    
+    if (activeTags.has(normalizedTagName)) {
+        activeTags.delete(normalizedTagName);
     } else {
-        activeTags.add(tagName);
+        activeTags.add(normalizedTagName);
     }
     updateFilterCount();
     
     // Update tag visual states
     document.querySelectorAll('.tag').forEach(tag => {
-        if (tag.textContent === tagName) {
+        if (tag.dataset.tagName === normalizedTagName) {
             tag.classList.toggle('active');
         }
     });
@@ -186,3 +245,92 @@ window.toggleTag = (tagName) => {
     // Update news list with new filter
     window.updateNews();
 };
+
+export async function updateNews() {
+    try {
+        const activeTags = getActiveTags();
+        const tagParam = activeTags.length > 0 ? `?tags=${activeTags.join(',')}` : '';
+        const news = await fetchNews();
+        if (!news || news.length === 0) return;
+        
+        const filtered = await filterNews(news);
+        filtered.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        
+        // Update visual state of tag filter button
+        const filterToggle = document.getElementById('filterToggle');
+        filterToggle.classList.toggle('has-active-filters', activeTags.length > 0);
+
+        // Animate filtering
+        const container = document.getElementById('newsContainer');
+        const currentItems = Array.from(container.children);
+        
+        // First mark items that should be filtered out
+        currentItems.forEach(item => {
+            const shouldShow = filtered.some(news => {
+                const itemLink = item.querySelector('article').onclick.toString().match(/'([^']+)'/)[1];
+                return news.link === itemLink;
+            });
+            
+            if (!shouldShow) {
+                item.classList.add('filtered-out');
+            }
+        });
+
+        // Wait for fade out animation
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        // Update the news list
+        await updateNewsList(filtered);
+
+        // Add filtered-in class to new items for animation
+        container.querySelectorAll('.news-item').forEach(item => {
+            item.classList.add('filtered-in');
+        });
+        
+        lastUpdate = new Date();
+    } catch (error) {
+        console.error('Error updating news:', error);
+    }
+}
+
+// Format the tag name consistently
+export function formatTagName(name) {
+    return name.toLowerCase().split(' ').map(word => 
+        word.charAt(0).toUpperCase() + word.slice(1)
+    ).join(' ');
+}
+
+function addTag(name) {
+    activeTags.add(name);
+    updateFilterCount();
+}
+
+function removeTag(name) {
+    activeTags.delete(name);
+    updateFilterCount();
+}
+
+export function getActiveTags() {
+    return Array.from(activeTags);
+}
+
+function updateFilterCount() {
+    const filterCount = document.querySelector('.filter-count');
+    const count = activeTags.size;
+    filterCount.textContent = count || '';
+    filterCount.classList.toggle('active', count > 0);
+}
+
+export function toggleTagFilters() {
+    const tagFilters = document.querySelector('.tag-filters');
+    tagFilters.classList.toggle('collapsed');
+}
+
+function formatTagDisplayName(name, category) {
+    if (category === 'geography') {
+        return name.toLowerCase().split(' ').map(word => 
+            word.charAt(0).toUpperCase() + word.slice(1)
+        ).join(' ');
+    }
+    return name;
+}

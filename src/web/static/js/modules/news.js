@@ -1,4 +1,11 @@
+import { normalizeCountry, isCountryMatch } from './countries.js';
+
 export function createNewsElement(newsItem) {
+    // Skip articles with no description
+    if (!newsItem.description) {
+        return null;
+    }
+
     const template = document.getElementById('newsItemTemplate');
     const element = template.content.cloneNode(true);
     const article = element.querySelector('article');
@@ -7,8 +14,10 @@ export function createNewsElement(newsItem) {
 
     // Format title with emojis
     const titleText = newsItem.title || "Untitled";
-    const emojis = (newsItem.emoji1 || '') + (newsItem.emoji2 || '');
-    const titleWithEmojis = emojis ? `${emojis} ${titleText}` : titleText;
+    const emoji1 = newsItem.emoji1 || '';
+    const emoji2 = newsItem.emoji2 || '';
+    const emojis = emoji1 + emoji2;
+    const titleWithEmojis = emojis ? `${emoji1}${emoji2} ${titleText}` : titleText;
     
     // Get a clean description
     let description = newsItem.description;
@@ -21,7 +30,7 @@ export function createNewsElement(newsItem) {
     }
     
     article.querySelector('h2').textContent = titleWithEmojis;
-    article.querySelector('.description').textContent = description || 'No description available';
+    article.querySelector('.description').textContent = description;
     
     const timeElement = article.querySelector('.time');
     timeElement.textContent = formatTimeAgo(newsItem.timestamp);
@@ -49,21 +58,32 @@ export function createNewsElement(newsItem) {
         imageContainer.style.display = 'none';
     };
 
-    // Add tags
+    // Add tags with proper formatting for geography tags
     if (newsItem.tags && newsItem.tags.length > 0) {
         const tagsContainer = article.querySelector('.tags');
         newsItem.tags.forEach(tag => {
             const tagEl = document.createElement('span');
             tagEl.className = 'tag';
-            tagEl.textContent = tag.name;
+            
+            // Format geography tags with proper capitalization and add flag
+            if (tag.category === 'geography') {
+                const countryData = normalizeCountry(tag.name);
+                const formattedName = countryData.name;
+                const flag = countryData.flag;
+                tagEl.textContent = flag ? `${flag} ${formattedName}` : formattedName;
+                tagEl.dataset.tagName = formattedName;
+            } else {
+                tagEl.textContent = tag.name;
+                tagEl.dataset.tagName = tag.name;
+            }
+            
             tagEl.dataset.category = tag.category;
             
             // Add click handler for tag filtering
             tagEl.addEventListener('click', (e) => {
                 e.stopPropagation(); // Prevent article click
-                const tagName = tag.name;
                 if (window.toggleTag) {
-                    window.toggleTag(tagName);
+                    window.toggleTag(tagEl.dataset.tagName);
                 }
             });
             
@@ -95,4 +115,112 @@ export function formatTimeAgo(timestamp) {
         }
     }
     return 'Just now';
+}
+
+// Handle country flags and news display
+function showCountryNews(countryName) {
+    console.log('Showing news for country:', countryName);
+    const newsPanel = document.querySelector('.country-news-panel');
+    const countryTitle = document.getElementById('selectedCountry');
+    const newsList = document.getElementById('countryNewsList');
+    
+    const countryData = normalizeCountry(countryName);
+    countryTitle.textContent = countryData.name;
+    if (countryData.flag) {
+        countryTitle.textContent = `${countryData.flag} ${countryData.name}`;
+    }
+    
+    // Reset news list
+    newsList.innerHTML = '';
+    
+    // Filter news items for the selected country
+    const countryNews = filterNewsByCountry(countryData);
+    console.log(`Found ${countryNews.length} news items for ${countryData.name}`);
+    
+    if (countryNews.length === 0) {
+        newsList.innerHTML = '<p class="no-news">No news available for this country.</p>';
+    } else {
+        displayFilteredNews(countryNews, newsList);
+    }
+    
+    newsPanel.style.display = 'flex';
+    
+    // Handle close button click with smooth transition
+    const closeBtn = document.getElementById('closeCountryNews');
+    closeBtn.onclick = (e) => {
+        e.stopPropagation();
+        newsPanel.classList.remove('visible');
+        
+        // Wait for transition to complete before hiding
+        setTimeout(() => {
+            newsPanel.style.display = 'none';
+            if (activeCountryLayer) {
+                map.removeLayer(activeCountryLayer);
+                activeCountryLayer = null;
+            }
+            map.setView([30, 0], 2);
+        }, 300); // Match the CSS transition duration
+    };
+    
+    // Handle clicking outside the panel
+    document.addEventListener('click', (e) => {
+        if (!newsPanel.contains(e.target) && 
+            !e.target.closest('.leaflet-container') &&
+            newsPanel.classList.contains('visible')) {
+            closeBtn.click();
+        }
+    });
+}
+
+// Filter news by country with flexible matching
+function filterNewsByCountry(countryData) {
+    return allNews.filter(item => {
+        const geoTags = item.tags.filter(tag => tag.category === 'geography');
+        return geoTags.some(tag => {
+            const tagCountryData = normalizeCountry(tag.name);
+            return isCountryMatch(countryData, tagCountryData);
+        });
+    });
+}
+
+// Display filtered news with deduplicated flags
+function displayFilteredNews(newsItems, container) {
+    newsItems.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    
+    newsItems.forEach(news => {
+        // Get geography tags and normalize them
+        const geoTags = news.tags
+            .filter(tag => tag.category === 'geography')
+            .map(tag => normalizeCountry(tag.name))
+            .filter(countryData => countryData.flag);
+
+        // Get unique flags (limit to 2) and sort by importance
+        const uniqueFlags = Array.from(new Set(
+            geoTags.map(country => ({
+                flag: country.flag,
+                code: country.code,
+                // Prioritize certain countries
+                priority: ['US', 'RU', 'CN', 'GB', 'UA'].includes(country.code) ? 1 : 0
+            }))
+        ))
+        .sort((a, b) => b.priority - a.priority)
+        .slice(0, 2)
+        .map(country => country.flag);
+        
+        const newsItem = document.createElement('div');
+        newsItem.className = 'country-news-item';
+        newsItem.innerHTML = `
+            <h3>${uniqueFlags.join(' ')} ${news.title}</h3>
+            <p>${news.description}</p>
+            <div class="meta">
+                <span>${formatDate(news.timestamp)}</span>
+                ${news.tags.find(t => t.category === 'source')?.name ? 
+                  `<span class="source">${news.tags.find(t => t.category === 'source').name}</span>` : ''}
+            </div>
+        `;
+        newsItem.addEventListener('click', () => {
+            window.open(news.link, '_blank', 'noopener');
+        });
+        container.appendChild(newsItem);
+    });
 }

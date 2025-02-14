@@ -9,6 +9,8 @@ from typing import List, Optional
 import json
 import atexit
 
+from . import country_utils
+
 from ..database.models import (
     init_db, get_db, cleanup_db, 
     get_article_tags, search_articles_by_tags
@@ -89,6 +91,10 @@ def create_app():
         # Get tags for the article
         tags = get_article_tags(item.get('id')) if item.get('id') else []
         
+        # Handle emojis
+        emoji1 = item.get('emoji1', '')
+        emoji2 = item.get('emoji2', '')
+        
         # Extract source from feed_url and add as a tag if not already present
         feed_url = item.get('feed_url', '')
         if feed_url and item.get('id'):
@@ -123,19 +129,6 @@ def create_app():
             except:
                 pass  # Skip if URL parsing fails
         
-        # Extract locations from content and add as geography tags
-        content = item.get('content', '')
-        title = item.get('title', '')
-        locations = extract_locations_from_text(f"{title} {content}")
-        
-        for location in locations:
-            geo_tag = {
-                'name': location.upper(),
-                'category': 'geography'
-            }
-            if geo_tag not in tags:
-                tags.append(geo_tag)
-        
         return {
             'title': clean_text(item.get('title', '')),
             'description': clean_text(item.get('description', '')),
@@ -144,8 +137,8 @@ def create_app():
             'timestamp': item.get('pub_date', ''),
             'image_url': image_url,
             'feed_url': feed_url,
-            'emoji1': item.get('emoji1', ''),
-            'emoji2': item.get('emoji2', ''),
+            'emoji1': emoji1,
+            'emoji2': emoji2,
             'tags': tags
         }
 

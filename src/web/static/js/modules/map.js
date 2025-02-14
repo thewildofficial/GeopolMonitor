@@ -1,10 +1,272 @@
 import { getActiveTags } from './tags.js';
+import { mapStyles } from './map-styles.js';
+import { normalizeCountry } from './countries.js';
 
 let map;
 let heatLayer;
 let newsMarkers = new Map();
 let currentTimeRange = 'all';
 const newsPoints = [];
+
+export class NewsMap {
+    constructor() {
+        this.map = null;
+        this.countryLayer = null;
+        this.activeCountryLayer = null;
+        this.countryHeatData = new Map();
+        this.regions = new Set();
+        this.todayEvents = 0;
+        this.onCountrySelected = null;
+        this.geoJsonData = null;
+    }
+
+    async init() {
+        this.map = L.map('worldMap', {
+            zoomControl: true,
+            attributionControl: false,
+            minZoom: 2,
+            maxZoom: 6,
+            zoomSnap: 0.5,
+            zoomDelta: 0.5,
+            wheelPxPerZoomLevel: 120
+        }).setView([30, 0], 2);
+
+        await this.initTileLayers();
+        await this.loadCountryBoundaries();
+        this.addLegend();
+        this.setupThemeObserver();
+    }
+
+    async loadCountryBoundaries() {
+        try {
+            const response = await fetch('https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson');
+            this.geoJsonData = await response.json();
+            
+            // Transform GeoJSON to include normalized country data
+            this.geoJsonData.features = this.geoJsonData.features.map(feature => {
+                const countryName = feature.properties.ADMIN || feature.properties.name;
+                const countryData = normalizeCountry(countryName);
+                feature.properties.normalizedData = countryData;
+                return feature;
+            });
+            
+            this.updateCountryLayer();
+        } catch (error) {
+            console.error('Failed to load country boundaries:', error);
+        }
+    }
+
+    updateCountryLayer() {
+        if (!this.geoJsonData) return;
+
+        if (this.countryLayer) {
+            this.map.removeLayer(this.countryLayer);
+        }
+
+        this.countryLayer = L.geoJSON(this.geoJsonData, {
+            style: (feature) => this.getCountryStyle(feature),
+            onEachFeature: (feature, layer) => {
+                const countryData = feature.properties.normalizedData;
+                const heatData = this.countryHeatData.get(countryData.code);
+
+                // Add interactivity
+                layer.on({
+                    mouseover: (e) => this.highlightCountry(e.target),
+                    mouseout: (e) => this.resetHighlight(e.target),
+                    click: (e) => this.handleCountryClick(feature, e.target)
+                });
+
+                // Add tooltip with news count if available
+                if (heatData) {
+                    const tooltipContent = `${countryData.flag} ${countryData.name}: ${heatData.count} news items`;
+                    layer.bindTooltip(tooltipContent, {
+                        permanent: false,
+                        direction: 'center',
+                        className: 'country-tooltip'
+                    });
+                }
+            }
+        }).addTo(this.map);
+
+        // Apply theme-specific styles
+        this.updateMapTheme();
+    }
+
+    updateMapTheme() {
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        
+        // Update map container background
+        const mapContainer = document.getElementById('worldMap');
+        if (mapContainer) {
+            mapContainer.style.background = isDark ? '#111' : '#f5f5f5';
+        }
+
+        // Update legend gradient
+        const legendGradient = document.querySelector('.legend-gradient');
+        if (legendGradient) {
+            legendGradient.style.background = mapStyles.getLegendGradient();
+        }
+
+        // Refresh country styles
+        if (this.countryLayer) {
+            this.countryLayer.eachLayer(layer => {
+                const feature = layer.feature;
+                const style = this.getCountryStyle(feature);
+                layer.setStyle(style);
+            });
+        }
+    }
+
+    getCountryStyle(feature) {
+        const countryData = feature.properties.normalizedData;
+        const heatData = this.countryHeatData.get(countryData.code);
+        const maxCount = this.getMaxCount();
+        
+        return mapStyles.getCountryStyle(heatData, maxCount);
+    }
+
+    highlightCountry(layer) {
+        if (layer === this.activeCountryLayer) return;
+        
+        layer.setStyle(mapStyles.getHoverStyle());
+        layer.bringToFront();
+    }
+
+    resetHighlight(layer) {
+        if (layer === this.activeCountryLayer) return;
+        
+        this.countryLayer.resetStyle(layer);
+    }
+
+    handleCountryClick(feature, layer) {
+        const countryName = feature.properties.ADMIN || feature.properties.name;
+        
+        // Reset previous active country
+        if (this.activeCountryLayer) {
+            this.countryLayer.resetStyle(this.activeCountryLayer);
+        }
+        
+        // Set new active country
+        this.activeCountryLayer = layer;
+        layer.setStyle(mapStyles.getActiveCountryStyle());
+        layer.bringToFront();
+
+        // Trigger callback
+        if (this.onCountrySelected) {
+            this.onCountrySelected(countryName);
+        }
+    }
+
+    initTileLayers() {
+        this.lightTiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors, © CARTO'
+        });
+        
+        this.darkTiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors, © CARTO'
+        });
+
+        const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
+        (isDarkMode ? this.darkTiles : this.lightTiles).addTo(this.map);
+    }
+
+    addLegend() {
+        const mapControls = L.control({ position: 'bottomright' });
+        mapControls.onAdd = () => {
+            const div = L.DomUtil.create('div', 'heat-map-legend');
+            div.innerHTML = `
+                <div class="legend-container">
+                    <div class="legend-gradient" style="background: ${mapStyles.getLegendGradient()}"></div>
+                    <div class="legend-labels">
+                        <span>Less active</span>
+                        <span>More active</span>
+                    </div>
+                </div>
+            `;
+            return div;
+        };
+        mapControls.addTo(this.map);
+    }
+
+    setupThemeObserver() {
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                if (mutation.attributeName === 'data-theme') {
+                    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+                    this.map.removeLayer(isDark ? this.lightTiles : this.darkTiles);
+                    this.map.addLayer(isDark ? this.darkTiles : this.lightTiles);
+                    
+                    // Update legend gradient
+                    const legendGradient = document.querySelector('.legend-gradient');
+                    if (legendGradient) {
+                        legendGradient.style.background = mapStyles.getLegendGradient();
+                    }
+                    
+                    // Update country styles
+                    this.updateCountryLayer();
+                }
+            });
+        });
+        
+        observer.observe(document.documentElement, { attributes: true });
+    }
+
+    getMaxCount() {
+        return Math.max(...Array.from(this.countryHeatData.values()).map(data => data.count));
+    }
+
+    updateHeatData(newsItems) {
+        this.countryHeatData.clear();
+        this.regions.clear();
+        this.todayEvents = 0;
+        
+        const today = new Date().toDateString();
+        
+        // Group news items by country
+        newsItems.forEach(item => {
+            const geoTags = item.tags.filter(tag => tag.category === 'geography');
+            geoTags.forEach(tag => {
+                const countryData = normalizeCountry(tag.name);
+                if (!countryData.code) return;
+
+                if (!this.countryHeatData.has(countryData.code)) {
+                    this.countryHeatData.set(countryData.code, {
+                        name: countryData.name,
+                        flag: countryData.flag,
+                        count: 0,
+                        items: [],
+                        newestTimestamp: null
+                    });
+                }
+                
+                const data = this.countryHeatData.get(countryData.code);
+                data.count++;
+                data.items.push(item);
+                
+                // Track newest timestamp for this country
+                const timestamp = new Date(item.timestamp);
+                if (!data.newestTimestamp || timestamp > data.newestTimestamp) {
+                    data.newestTimestamp = timestamp;
+                }
+                
+                // Count today's events
+                if (timestamp.toDateString() === today) {
+                    this.todayEvents++;
+                }
+                
+                this.regions.add(countryData.code);
+            });
+        });
+        
+        // Update the map visualization
+        this.updateCountryLayer();
+        
+        return {
+            activeRegions: this.regions.size,
+            todayEvents: this.todayEvents
+        };
+    }
+}
 
 export function initMap() {
     map = L.map('worldMap').setView([20, 0], 2);
@@ -173,4 +435,107 @@ export function handleNewsUpdate(newItem) {
         newsPoints.push([coords[0], coords[1], 1]);
         heatLayer.setLatLngs(newsPoints);
     }
+}
+
+function showCountryNews(countryName) {
+    const newsPanel = document.querySelector('.country-news-panel');
+    const countryTitle = document.getElementById('selectedCountry');
+    const newsList = document.getElementById('countryNewsList');
+    const countryFlag = document.querySelector('.country-flag');
+    
+    // Show panel first for smooth animation
+    newsPanel.style.display = 'flex';
+    requestAnimationFrame(() => {
+        newsPanel.classList.add('visible');
+    });
+    
+    // Normalize country names and get flag emoji
+    const countryData = normalizeCountryName(countryName);
+    countryTitle.textContent = countryData.name;
+    countryFlag.textContent = countryData.flag || '';
+    
+    newsList.innerHTML = '';
+    
+    // Filter news items for the selected country
+    const countryNews = allNews.filter(item => 
+        item.tags.some(tag => 
+            tag.category === 'geography' && 
+            normalizeCountryName(tag.name).name.toLowerCase() === countryData.name.toLowerCase()
+        )
+    );
+    
+    if (countryNews.length === 0) {
+        newsList.innerHTML = '<p class="no-news">No news available for this country.</p>';
+    } else {
+        countryNews.forEach(news => {
+            const newsItem = document.createElement('div');
+            newsItem.className = 'country-news-item';
+            newsItem.innerHTML = `
+                <h3>${news.emoji1 || ''}${news.emoji2 || ''} ${news.title}</h3>
+                <p>${news.description || 'No description available'}</p>
+                <div class="meta">
+                    <span>${formatDate(news.timestamp)}</span>
+                    <span>${news.tags.find(t => t.category === 'source')?.name || ''}</span>
+                </div>
+            `;
+            newsItem.addEventListener('click', () => {
+                window.open(news.link, '_blank', 'noopener');
+            });
+            newsList.appendChild(newsItem);
+        });
+    }
+    
+    newsPanel.style.display = 'flex';
+    
+    // Handle close button click with smooth transition
+    const closeBtn = document.getElementById('closeCountryNews');
+    closeBtn.onclick = (e) => {
+        e.stopPropagation();
+        newsPanel.classList.remove('visible');
+        
+        // Wait for transition to complete before hiding
+        setTimeout(() => {
+            newsPanel.style.display = 'none';
+            if (activeCountryLayer) {
+                map.removeLayer(activeCountryLayer);
+                activeCountryLayer = null;
+            }
+            map.setView([30, 0], 2);
+        }, 300); // Match the CSS transition duration
+    };
+    
+    // Handle clicking outside the panel
+    document.addEventListener('click', (e) => {
+        if (!newsPanel.contains(e.target) && 
+            !e.target.closest('.leaflet-container') &&
+            newsPanel.classList.contains('visible')) {
+            closeBtn.click();
+        }
+    });
+}
+
+function normalizeCountryName(name) {
+    const countryMappings = {
+        'United States of America': { name: 'United States', code: 'US' },
+        'USA': { name: 'United States', code: 'US' },
+        'United Kingdom': { name: 'United Kingdom', code: 'GB' },
+        'UK': { name: 'United Kingdom', code: 'GB' },
+        'Russian Federation': { name: 'Russia', code: 'RU' },
+        'People\'s Republic of China': { name: 'China', code: 'CN' }
+        // Add more mappings as needed
+    };
+
+    // Function to convert country code to flag emoji
+    const getCountryFlag = (code) => {
+        if (!code) return '';
+        return code.toUpperCase().replace(/./g, char => 
+            String.fromCodePoint(char.charCodeAt(0) + 127397)
+        );
+    };
+
+    const normalized = countryMappings[name] || { name: name, code: null };
+    return {
+        name: normalized.name,
+        flag: getCountryFlag(normalized.code)
+    };
 }

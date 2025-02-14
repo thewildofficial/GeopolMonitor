@@ -4,7 +4,7 @@ This document outlines the planned features and improvements for GeopolMonitor.
 
 ## 🎯 Upcoming Features
 
-### 1. Automatic Content Tagging System
+### ✅ 1. Automatic Content Tagging System
 - Implement ML-based automatic tagging for news articles
 - Categories will include:
   - Topic-based tags (Sports, Business, Technology, Media, Politics, etc.)
@@ -13,7 +13,7 @@ This document outlines the planned features and improvements for GeopolMonitor.
 - Allow filtering and searching by tags
 - Build tag-based notification system for users
 
-### 2. Interactive World Map Interface
+### ✅ 2. Interactive World Map Interface
 - Add an interactive world map visualization
 - Features:
   - Real-time news overlay on the map

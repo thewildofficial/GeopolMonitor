@@ -96,6 +96,19 @@ GeopolMonitor/
 4. **Configure Feeds**
    Add RSS feed URLs to `feeds.txt`
 
+## Installation
+
+1. Create a virtual environment (recommended):
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows use: venv\Scripts\activate
+```
+
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
 ## Usage 💡
 
 ### Run the Bot

@@ -1,17 +1,38 @@
+// Import statements using correct function names
 import { initTheme } from './modules/theme.js';
 import { initWebSocket } from './modules/websocket.js';
+import { getCountryCoordinates, normalizeCountryName, getCountryFlag, getCountryCode } from './modules/countries.js';
 
+// Global variables and utility functions
 let map;
 let heatLayer;
 let newsMarkers = new Map();
+let activeCountryLayer = null;
 const newsPoints = [];
 let activeRegionsCount = 0;
 let todayEventsCount = 0;
+let allNews = [];
 
-function initMap() {
+// Load Leaflet.heat plugin
+const loadHeatPlugin = () => {
+    return new Promise((resolve) => {
+        const script = document.createElement('script');
+        script.src = 'https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js';
+        script.onload = resolve;
+        document.head.appendChild(script);
+    });
+};
+
+async function initMap() {
+    // Wait for the heatmap plugin to load
+    await loadHeatPlugin();
+    setupMap();
+}
+
+function setupMap() {
     map = L.map('worldMap', {
         zoomControl: true,
-        attributionControl: true,
+        attributionControl: false,  // Remove attribution
         minZoom: 2,
         maxZoom: 6
     }).setView([30, 0], 2);
@@ -24,6 +45,26 @@ function initMap() {
     const darkTiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors, © CARTO'
     });
+    
+    // Load GeoJSON data for countries
+    fetch('https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson')
+        .then(response => response.json())
+        .then(data => {
+            L.geoJSON(data, {
+                style: {
+                    weight: 1,
+                    color: 'var(--border-color)',
+                    fillOpacity: 0
+                },
+                onEachFeature: function(feature, layer) {
+                    layer.on('click', function() {
+                        let countryName = feature.properties.ADMIN || feature.properties.name;
+                        highlightCountry(feature);
+                        showCountryNews(countryName);
+                    });
+                }
+            }).addTo(map);
+        });
     
     // Set initial tile layer based on theme
     const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
@@ -42,28 +83,37 @@ function initMap() {
     
     observer.observe(document.documentElement, { attributes: true });
     
-    // Initialize heatmap with more subtle colors
-    heatLayer = L.heatLayer([], {
-        radius: 25,
-        blur: 15,
-        maxZoom: 6,
-        gradient: {
-            0.2: 'rgba(52, 152, 219, 0.3)',  // Blue, more transparent
-            0.4: 'rgba(46, 204, 113, 0.4)',  // Green
-            0.6: 'rgba(241, 196, 15, 0.5)',  // Yellow
-            0.8: 'rgba(231, 76, 60, 0.6)'    // Red
-        }
-    }).addTo(map);
+    // Initialize heatmap with proper configuration
+    if (typeof L.heatLayer === 'function') {
+        heatLayer = L.heatLayer([], {
+            radius: 30,
+            blur: 20,
+            maxZoom: 6,
+            max: 1.0,
+            minOpacity: 0.3,
+            gradient: {
+                0.1: 'rgba(52, 152, 219, 0.5)',  // Light blue
+                0.3: 'rgba(46, 204, 113, 0.6)',  // Green
+                0.5: 'rgba(241, 196, 15, 0.7)',  // Yellow
+                0.7: 'rgba(230, 126, 34, 0.8)',  // Orange
+                0.9: 'rgba(231, 76, 60, 0.9)'    // Red
+            }
+        }).addTo(map);
+    } else {
+        console.error('Leaflet.heat plugin not loaded properly');
+    }
     
-    // Add custom map controls
+    // Add custom map controls with improved legend
     const mapControls = L.control({ position: 'bottomright' });
     mapControls.onAdd = function() {
         const div = L.DomUtil.create('div', 'heat-map-legend');
         div.innerHTML = `
-            <strong>News Intensity</strong><br>
-            <span style="color: rgba(231, 76, 60, 0.8)">■</span> High<br>
-            <span style="color: rgba(241, 196, 15, 0.7)">■</span> Medium<br>
-            <span style="color: rgba(46, 204, 113, 0.6)">■</span> Low
+            <strong>News Intensity</strong>
+            <div class="intensity-scale"></div>
+            <div class="scale-labels">
+                <span>Low</span>
+                <span>High</span>
+            </div>
         `;
         return div;
     };
@@ -76,6 +126,82 @@ function initMap() {
     
     initTimelineSlider();
     fetchNews();
+}
+
+function highlightCountry(feature) {
+    // Remove previous highlight if it exists
+    if (activeCountryLayer) {
+        map.removeLayer(activeCountryLayer);
+    }
+    
+    // Create new highlight layer
+    activeCountryLayer = L.geoJSON(feature, {
+        style: {
+            className: 'country-highlight'
+        }
+    }).addTo(map);
+    
+    // Fit map to country bounds with padding
+    map.fitBounds(activeCountryLayer.getBounds(), {
+        padding: [50, 50],
+        maxZoom: 6
+    });
+}
+
+function showCountryNews(countryName) {
+    const newsPanel = document.querySelector('.country-news-panel');
+    const countryTitle = document.getElementById('selectedCountry');
+    const newsList = document.getElementById('countryNewsList');
+    const countryFlag = document.querySelector('.country-flag');
+    
+    const normalizedName = normalizeCountryName(countryName);
+    countryTitle.textContent = normalizedName;
+    
+    // Get and set the country flag
+    const countryCode = getCountryCode(normalizedName);
+    countryFlag.textContent = countryCode ? getCountryFlag(countryCode) : '';
+    
+    newsList.innerHTML = '';
+    
+    // Filter news items for the selected country
+    const countryNews = allNews.filter(item => 
+        item.tags.some(tag => 
+            tag.category === 'geography' && 
+            normalizeCountryName(tag.name).toLowerCase() === normalizedName.toLowerCase()
+        )
+    );
+    
+    if (countryNews.length === 0) {
+        newsList.innerHTML = '<p class="no-news">No news available for this country.</p>';
+    } else {
+        countryNews.forEach(news => {
+            const newsItem = document.createElement('div');
+            newsItem.className = 'country-news-item';
+            newsItem.innerHTML = `
+                <h3>${news.title}</h3>
+                <p>${news.description}</p>
+                <div class="meta">
+                    <span>${formatDate(news.timestamp)}</span>
+                </div>
+            `;
+            newsItem.addEventListener('click', () => {
+                window.open(news.link, '_blank', 'noopener');
+            });
+            newsList.appendChild(newsItem);
+        });
+    }
+    
+    newsPanel.style.display = 'flex';
+}
+
+function formatDate(timestamp) {
+    const date = new Date(timestamp);
+    return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
 }
 
 function initTimelineSlider() {
@@ -97,8 +223,8 @@ async function fetchNews() {
         if (!response.ok) throw new Error('Network response was not ok');
         const data = await response.json();
         if (data.news) {
+            allNews = data.news; // Store all news
             updateMap(data.news);
-            updateStats(data.news);
         }
     } catch (error) {
         console.error('Error fetching news:', error);
@@ -112,18 +238,42 @@ function updateMap(news) {
     const today = new Date();
     let todayEvents = 0;
     
+    // Group news by country to avoid overlapping points
+    const countryIntensities = new Map();
+    
     news.forEach(item => {
-        const coords = extractCoordinates(item);
-        if (coords) {
-            addNewsMarker(item, coords);
-            newsPoints.push([coords[0], coords[1], 1]);
-            regions.add(coords.join(','));
-            
-            const itemDate = new Date(item.timestamp);
-            if (itemDate.toDateString() === today.toDateString()) {
-                todayEvents++;
-            }
+        if (item.tags) {
+            const geoTags = item.tags.filter(tag => tag.category === 'geography');
+            geoTags.forEach(tag => {
+                const coords = getCountryCoordinates(tag.name);
+                if (coords) {
+                    const key = coords.join(',');
+                    const age = (new Date() - new Date(item.timestamp)) / (1000 * 60 * 60); // hours
+                    const intensity = Math.max(0.3, 1 - (age / 72)); // Decrease intensity over 72 hours
+                    
+                    if (!countryIntensities.has(key)) {
+                        countryIntensities.set(key, { coords, intensity, count: 0 });
+                    }
+                    
+                    const country = countryIntensities.get(key);
+                    country.intensity = Math.max(country.intensity, intensity);
+                    country.count++;
+                    
+                    regions.add(tag.name);
+                    
+                    if (new Date(item.timestamp).toDateString() === today.toDateString()) {
+                        todayEvents++;
+                    }
+                }
+            });
         }
+    });
+    
+    // Add points to heatmap with weighted intensities
+    countryIntensities.forEach(({ coords, intensity, count }) => {
+        // Adjust intensity based on news count
+        const adjustedIntensity = Math.min(1, intensity * (1 + Math.log(count) / 2));
+        newsPoints.push([coords[0], coords[1], adjustedIntensity]);
     });
     
     // Update stats
@@ -131,8 +281,10 @@ function updateMap(news) {
     todayEventsCount = todayEvents;
     updateStatsDisplay();
     
-    // Update heatmap
-    heatLayer.setLatLngs(newsPoints);
+    // Update heatmap with accumulated points
+    if (heatLayer) {
+        heatLayer.setLatLngs(newsPoints);
+    }
 }
 
 function updateStatsDisplay() {

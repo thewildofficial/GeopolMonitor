@@ -89,6 +89,8 @@ async def send_message(text: str, image_urls: Optional[List[str]] = None) -> Non
             }
             
             success = await make_telegram_request(session, "sendPhoto", data_photo)
+            if success:
+                print(f"✅ Sent photo message to Telegram: {text[:50]}...")
             
             if not success:
                 print("Failed to send photo, falling back to text-only message")
@@ -98,7 +100,9 @@ async def send_message(text: str, image_urls: Optional[List[str]] = None) -> Non
                     'parse_mode': 'MarkdownV2',
                     'disable_web_page_preview': False
                 }
-                await make_telegram_request(session, "sendMessage", data_text)
+                success = await make_telegram_request(session, "sendMessage", data_text)
+                if success:
+                    print(f"✅ Sent fallback text message to Telegram: {text[:50]}...")
             else:
                 # Send remaining images if any
                 remaining_images = image_urls[1:]
@@ -109,7 +113,9 @@ async def send_message(text: str, image_urls: Optional[List[str]] = None) -> Non
                         'media': json.dumps(media),
                         'disable_notification': True
                     }
-                    await make_telegram_request(session, "sendMediaGroup", media_group_data)
+                    success = await make_telegram_request(session, "sendMediaGroup", media_group_data)
+                    if success:
+                        print(f"✅ Sent {len(remaining_images)} additional images to Telegram")
         else:
             # Text-only message
             data_text = {
@@ -118,6 +124,9 @@ async def send_message(text: str, image_urls: Optional[List[str]] = None) -> Non
                 'parse_mode': 'MarkdownV2',
                 'disable_web_page_preview': False
             }
-            await make_telegram_request(session, "sendMessage", data_text)
+            success = await make_telegram_request(session, "sendMessage", data_text)
+            if success:
+                print(f"✅ Sent text message to Telegram: {text[:50]}...")
+        
         # Add delay between messages
         await asyncio.sleep(2)

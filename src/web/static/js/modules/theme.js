@@ -15,7 +15,7 @@ export function setTheme(theme) {
 }
 
 export function initTheme() {
-    const savedTheme = localStorage.getItem('theme') || 'light';
+    const savedTheme = localStorage.getItem('theme') || 'dark';
     setTheme(savedTheme);
     
     const themeToggle = document.getElementById('themeToggle');

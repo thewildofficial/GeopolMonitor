@@ -24,6 +24,7 @@ header {
     z-index: 100;
     border-bottom: 1px solid var(--border-color);
     width: 100%;
+    transition: all 0.5s var(--animation-timing);
 }
 
 .header-left {
@@ -156,6 +157,71 @@ body.loading::after {
     to { background-position: 300% 0; }
 }
 
+/* Loading and filtering states */
+body.filtering::after {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background: linear-gradient(to right, 
+        var(--accent-color) 30%, 
+        rgba(52, 152, 219, 0.3) 30%
+    );
+    animation: loading 1s linear infinite;
+    z-index: 1000;
+}
+
+/* Active filter indicator */
+.filter-toggle.has-active-filters {
+    background: var(--accent-color);
+    color: white;
+    border-color: var(--accent-color);
+    animation: pulse-subtle 2s infinite;
+}
+
+@keyframes pulse-subtle {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+/* Post tags animation on filter */
+.post-tag.highlight {
+    animation: tag-highlight 0.5s var(--spring-timing);
+    border-color: var(--accent-color);
+    background: var(--accent-color);
+    color: white;
+}
+
+@keyframes tag-highlight {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+}
+
+/* Empty state feedback */
+.no-results {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--description-color);
+    font-size: 1.1rem;
+    animation: fade-in 0.3s ease;
+}
+
+.no-results i {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+    color: var(--accent-color);
+    opacity: 0.5;
+}
+
+@keyframes fade-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
 /* Mobile responsive adjustments */
 @media (max-width: 768px) {
     .header-left {
@@ -173,4 +239,8 @@ body.loading::after {
     main {
         padding: 0.5rem;
     }
+}
+
+.news-item, .filters, .view-toggle {
+    transition: all 0.5s var(--animation-timing);
 }

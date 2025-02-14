@@ -8,9 +8,10 @@ from .backup import backup_database
 import atexit
 import logging
 
-# Use absolute path for database
-BASE_DIR = Path(__file__).parent.parent.parent
-DB_PATH = str(BASE_DIR / 'news_monitor.db')
+# Get project root directory and set database path
+PROJECT_ROOT = Path(__file__).parent.parent.parent.absolute()
+DB_PATH = os.path.join(PROJECT_ROOT, 'data', 'news_monitor.db')
+
 _connection = None
 _last_backup = datetime.now()
 
@@ -18,6 +19,9 @@ logger = logging.getLogger(__name__)
 
 def init_db(connection=None):
     """Initialize SQLite database with required tables."""
+    # Ensure data directory exists
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    
     if connection:
         conn = connection
     else:
