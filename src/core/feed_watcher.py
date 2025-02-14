@@ -7,10 +7,9 @@ from datetime import timezone
 import aiohttp
 import logging
 import traceback
-from typing import Set, Dict, Any, Optional, List
+from typing import Set, Dict, Any, Optional, List, Callable
 from email.utils import parsedate_to_datetime
 from .processor import process_article
-from ..telegram.bot import send_message
 from ..database.models import (
     get_db, load_feed_cache, update_feed_cache, 
     get_feed_metrics, exists_in_db, get_source_priority,
@@ -19,16 +18,57 @@ from ..database.models import (
 from ..utils.text import clean_url
 from ..web.websocket_manager import broadcast_news_update
 
-# Configure logging
+# Enhanced logging configuration with colored output
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - \x1b[36m%(message)s\x1b[0m'
 )
 logger = logging.getLogger(__name__)
 
-class FeedError(Exception):
-    """Base exception for feed-related errors."""
-    pass
+class RateLimiter:
+    """Rate limiter for API calls."""
+    def __init__(self, calls_per_minute: int = 15, calls_per_day: int = 1500):
+        self.calls_per_minute = calls_per_minute
+        self.calls_per_day = calls_per_day
+        self.minute_calls = 0
+        self.daily_calls = 0
+        self.last_minute_reset = datetime.datetime.now()
+        self.last_daily_reset = datetime.datetime.now()
+        self._lock = asyncio.Lock()
+    
+    async def acquire(self):
+        """Try to acquire a rate limit token."""
+        async with self._lock:
+            now = datetime.datetime.now()
+            
+            # Reset counters if needed
+            if (now - self.last_minute_reset).total_seconds() >= 60:
+                self.minute_calls = 0
+                self.last_minute_reset = now
+                
+            if (now - self.last_daily_reset).total_seconds() >= 86400:
+                self.daily_calls = 0
+                self.last_daily_reset = now
+            
+            # Check limits
+            if self.minute_calls >= self.calls_per_minute:
+                delay = 60 - (now - self.last_minute_reset).total_seconds()
+                if delay > 0:
+                    logger.warning(f"⏳ Rate limit reached. Waiting {delay:.1f}s")
+                    await asyncio.sleep(delay)
+                    self.minute_calls = 0
+                    self.last_minute_reset = datetime.datetime.now()
+            
+            if self.daily_calls >= self.calls_per_day:
+                delay = 86400 - (now - self.last_daily_reset).total_seconds()
+                if delay > 0:
+                    logger.error(f"❌ Daily limit reached. Waiting {delay:.1f}s")
+                    await asyncio.sleep(delay)
+                    self.daily_calls = 0
+                    self.last_daily_reset = datetime.datetime.now()
+            
+            self.minute_calls += 1
+            self.daily_calls += 1
 
 class FeedConfiguration:
     """Configuration for feed watcher."""
@@ -39,7 +79,9 @@ class FeedConfiguration:
                  error_backoff_delay: int = 60,
                  process_timeout: int = 100,
                  connect_timeout: float = 30.0,
-                 total_timeout: float = 60.0):
+                 total_timeout: float = 60.0,
+                 batch_size: int = 5,
+                 max_entries_per_feed: int = 20):
         self.max_concurrent_feeds = max_concurrent_feeds
         self.min_poll_interval = min_poll_interval
         self.max_poll_interval = max_poll_interval
@@ -47,6 +89,8 @@ class FeedConfiguration:
         self.process_timeout = process_timeout
         self.connect_timeout = connect_timeout
         self.total_timeout = total_timeout
+        self.batch_size = batch_size
+        self.max_entries_per_feed = max_entries_per_feed
 
 class FeedEntry:
     """Represents a processed feed entry."""
@@ -66,12 +110,29 @@ class FeedWatcher:
         self.logged_entries: Set[str] = set()
         self.logged_urls: Set[str] = set()
         self.semaphore = asyncio.Semaphore(self.config.max_concurrent_feeds)
-        
+        self.rate_limiter = RateLimiter()
+        self._on_entry_processed_callbacks: List[Callable] = []
+        logger.info("🚀 Initializing FeedWatcher")
+
+    def add_entry_processed_callback(self, callback: Callable):
+        """Add a callback to be called when an entry is processed."""
+        self._on_entry_processed_callbacks.append(callback)
+
+    async def _notify_entry_processed(self, entry: FeedEntry, result: Any):
+        """Notify all callbacks that an entry has been processed."""
+        for callback in self._on_entry_processed_callbacks:
+            try:
+                await callback(entry, result)
+            except Exception as e:
+                logger.error(f"Error in entry processed callback: {e}")
+
     async def init(self):
         """Initialize aiohttp session and logged entries."""
         if not self.session:
             self.session = aiohttp.ClientSession()
+            logger.info("📡 HTTP session initialized")
         await self._load_logged_entries()
+        logger.info(f"🗄️ Loaded {len(self.logged_entries)} cached entries")
         
     async def _load_logged_entries(self):
         """Load previously processed entries from database."""
@@ -125,6 +186,7 @@ class FeedWatcher:
         if not self.session:
             raise FeedError("Session not initialized")
             
+        logger.info(f"🔍 Checking feed: {feed_url}")
         headers = {}
         feed_info = self.feeds.get(feed_url, {})
         
@@ -140,8 +202,10 @@ class FeedWatcher:
             )
             async with self.session.get(feed_url, headers=headers, timeout=timeout) as response:
                 if response.status == 304:  # Not modified
+                    logger.info(f"📭 No changes in feed: {feed_url}")
                     return ""
                     
+                logger.info(f"📬 Retrieved feed content: {feed_url} (Status: {response.status})")
                 self.feeds[feed_url] = {
                     'etag': response.headers.get('ETag'),
                     'last_modified': response.headers.get('Last-Modified'),
@@ -167,6 +231,7 @@ class FeedWatcher:
         """Process a single feed entry."""
         async with self.semaphore:
             try:
+                logger.info(f"🔄 Processing entry from: {entry.feed_url}")
                 result = await asyncio.wait_for(
                     process_article(entry.entry), 
                     timeout=self.config.process_timeout
@@ -181,8 +246,9 @@ class FeedWatcher:
                     )
                     
                     if not is_duplicate:
+                        logger.info(f"📝 New unique entry found: {result.title}")
                         await self._store_entry(entry, result)
-                        await send_message(result.combined, result.images)
+                        await self._notify_entry_processed(entry, result)
                         self.logged_entries.add(result.combined)
                         if clean_link:
                             self.logged_urls.add(clean_link)
@@ -201,78 +267,134 @@ class FeedWatcher:
                         await broadcast_news_update(news_item)
                         
                         return entry.entry_time
+                    else:
+                        logger.info(f"🔄 Duplicate entry skipped: {result.title}")
                 return None
             except asyncio.TimeoutError:
-                logger.warning(f"Timeout processing entry from {entry.feed_url}")
+                logger.warning(f"⚠️ Timeout processing entry from {entry.feed_url}")
                 return None
             except Exception as e:
-                logger.error(f"Error processing entry: {e}\nTraceback:\n{traceback.format_exc()}")
+                logger.error(f"❌ Error processing entry: {e}\nTraceback:\n{traceback.format_exc()}")
                 return None
 
     async def _store_entry(self, entry: FeedEntry, result):
         """Store processed entry in database."""
-        with get_db() as conn:
-            # Insert article
-            cursor = conn.execute('''
-                INSERT INTO news_entries 
-                (message, pub_date, processed_date, feed_url, title, description, 
-                 link, image_url, content, emoji1, emoji2)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                result.message,
-                entry.entry_time.isoformat(),
-                datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                entry.feed_url,
-                result.title,
-                result.description,
-                result.link,
-                result.image_url,
-                result.content,
-                result.emoji1,
-                result.emoji2
-            ))
-            
-            # Get article ID
-            article_id = cursor.lastrowid
-            
-            # Store tags
-            tag_ids = []
-            
-            # Add topic tags
-            for tag in result.topic_tags:
-                if tag and tag.strip():
-                    tag_ids.append(add_tag(tag.strip(), 'topic'))
-                    
-            # Add geography tags
-            for tag in result.geography_tags:
-                if tag and tag.strip():
-                    tag_ids.append(add_tag(tag.strip(), 'geography'))
-                    
-            # Add event tags
-            for tag in result.event_tags:
-                if tag and tag.strip():
-                    tag_ids.append(add_tag(tag.strip(), 'event'))
-            
-            # Link tags to article
-            if tag_ids:
-                tag_article(article_id, tag_ids)
-            
-            conn.commit()
+        try:
+            with get_db() as conn:
+                # Insert article
+                cursor = conn.execute('''
+                    INSERT INTO news_entries 
+                    (message, pub_date, processed_date, feed_url, title, description, 
+                     link, image_url, content, emoji1, emoji2)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    result.message,
+                    entry.entry_time.isoformat(),
+                    datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                    entry.feed_url,
+                    result.title,
+                    result.description,
+                    result.link,
+                    result.image_url,
+                    result.content,
+                    result.emoji1,
+                    result.emoji2
+                ))
+                
+                article_id = cursor.lastrowid
+                logger.info(f"💾 Stored article in DB: {result.title} (ID: {article_id})")
+                
+                # Store tags
+                tag_ids = []
+                
+                # Add topic tags
+                for tag in result.topic_tags:
+                    if tag and tag.strip():
+                        tag_ids.append(add_tag(tag.strip(), 'topic'))
+                        
+                # Add geography tags
+                for tag in result.geography_tags:
+                    if tag and tag.strip():
+                        tag_ids.append(add_tag(tag.strip(), 'geography'))
+                        
+                # Add event tags
+                for tag in result.event_tags:
+                    if tag and tag.strip():
+                        tag_ids.append(add_tag(tag.strip(), 'event'))
+                
+                # Link tags to article
+                if tag_ids:
+                    tag_article(article_id, tag_ids)
+                    logger.info(f"🏷️ Added {len(tag_ids)} tags to article {article_id}")
+                
+                conn.commit()
+                logger.info(f"✅ Database transaction committed for {result.title}")
 
-            # Create news item for broadcast
-            news_item = {
-                'title': result.title,
-                'description': result.description,
-                'link': result.link,
-                'timestamp': entry.entry_time.isoformat(),
-                'image_url': result.image_url,
-                'feed_url': entry.feed_url,
-                'emoji1': result.emoji1,
-                'emoji2': result.emoji2
-            }
-            
-            # Broadcast with article ID for tag inclusion
-            await broadcast_news_update(news_item, article_id)
+                # Create news item for broadcast
+                news_item = {
+                    'title': result.title,
+                    'description': result.description,
+                    'link': result.link,
+                    'timestamp': entry.entry_time.isoformat(),
+                    'image_url': result.image_url,
+                    'feed_url': entry.feed_url,
+                    'emoji1': result.emoji1,
+                    'emoji2': result.emoji2
+                }
+                
+                # Broadcast with article ID for tag inclusion
+                await broadcast_news_update(news_item, article_id)
+                logger.info(f"📡 Broadcasted to web clients: {result.title}")
+                
+        except Exception as e:
+            logger.error(f"❌ Error storing entry {result.title}: {str(e)}")
+            raise
+
+    async def process_entry_batch(self, entries: List[FeedEntry]) -> List[Optional[datetime.datetime]]:
+        """Process a batch of feed entries with rate limiting."""
+        results = []
+        for entry in entries:
+            try:
+                await self.rate_limiter.acquire()
+                logger.info(f"🔄 Processing entry from: {entry.feed_url}")
+                
+                result = await asyncio.wait_for(
+                    process_article(entry.entry),
+                    timeout=self.config.process_timeout
+                )
+                
+                if not result:
+                    logger.warning(f"❌ Entry processing failed or returned None: {getattr(entry.entry, 'title', 'Unknown title')}")
+                    results.append(None)
+                    continue
+                
+                clean_link = clean_url(result.link)
+                is_content_duplicate = result.combined in self.logged_entries
+                is_url_duplicate = clean_link and (clean_link in self.logged_urls or exists_in_db(clean_link))
+                
+                if is_content_duplicate:
+                    logger.info(f"🔄 Duplicate content detected: {result.title}")
+                    results.append(None)
+                elif is_url_duplicate:
+                    logger.info(f"🔄 Duplicate URL detected: {result.link}")
+                    results.append(None)
+                else:
+                    logger.info(f"📝 New unique entry found: {result.title}")
+                    await self._store_entry(entry, result)
+                    await self._notify_entry_processed(entry, result)
+                    self.logged_entries.add(result.combined)
+                    if clean_link:
+                        self.logged_urls.add(clean_link)
+                    results.append(entry.entry_time)
+                    
+            except asyncio.TimeoutError:
+                logger.warning(f"⚠️ Timeout processing entry from {entry.feed_url}")
+                results.append(None)
+            except Exception as e:
+                logger.error(f"❌ Error processing entry from {entry.feed_url}: {str(e)}")
+                results.append(None)
+                
+        return results
 
     async def process_feed_content(self, feed_url: str, content: str) -> None:
         """Process feed content if it has changed."""
@@ -280,8 +402,10 @@ class FeedWatcher:
             self._update_feed_metrics(feed_url, had_updates=False)
             return
             
+        logger.info(f"📋 Processing content from: {feed_url}")
         feed = feedparser.parse(content)
         if not feed.entries:
+            logger.info(f"📭 No entries found in feed: {feed_url}")
             self._update_feed_metrics(feed_url, had_updates=False)
             return
             
@@ -291,15 +415,32 @@ class FeedWatcher:
         
         new_entries = self._get_new_entries(feed, last_check, feed_url)
         if not new_entries:
+            logger.info(f"📭 No new entries since last check: {feed_url}")
             self._update_feed_metrics(feed_url, had_updates=False)
             return
-            
-        tasks = [self.process_entry(entry) for entry in new_entries]
-        results = await asyncio.gather(*tasks)
         
-        new_entry_times = [t for t in results if t is not None]
+        # Sort entries by date (newest first) and limit max entries
+        new_entries.sort(key=lambda x: x.entry_time, reverse=True)
+        new_entries = new_entries[:self.config.max_entries_per_feed]
+        
+        logger.info(f"📰 Processing {len(new_entries)} new entries in batches from: {feed_url}")
+        processed_entries = 0
+        new_entry_times = []
+        
+        # Process entries in batches
+        for i in range(0, len(new_entries), self.config.batch_size):
+            batch = new_entries[i:i + self.config.batch_size]
+            results = await self.process_entry_batch(batch)
+            processed_entries += sum(1 for r in results if r is not None)
+            new_entry_times.extend([t for t in results if t is not None])
+            
+            if i + self.config.batch_size < len(new_entries):
+                logger.info(f"⏳ Processed {processed_entries} entries, waiting before next batch...")
+                await asyncio.sleep(2)  # Small delay between batches
+        
         if new_entry_times:
             latest = max(new_entry_times)
+            logger.info(f"✅ Successfully processed {processed_entries} entries from: {feed_url}")
             update_feed_cache(feed_url, {
                 'last_check': latest,
                 'etag': self.feeds.get(feed_url, {}).get('etag'),

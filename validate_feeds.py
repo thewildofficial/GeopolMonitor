@@ -5,6 +5,10 @@ import feedparser
 from typing import List, Dict, Tuple
 import logging
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()  # Load environment variables from .env file
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

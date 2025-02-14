@@ -68,6 +68,7 @@ async function fetchNews() {
 async function filterNews(news) {
     const searchTerm = searchInput.value.toLowerCase();
     const timeValue = timeFilter.value;
+    const activeTags = getActiveTags();
     
     let filtered = news;
 
@@ -93,6 +94,22 @@ async function filterNews(news) {
                 break;
         }
         filtered = filtered.filter(item => new Date(item.timestamp) > cutoff);
+    }
+
+    // Filter by active tags
+    if (activeTags.length > 0) {
+        filtered = filtered.filter(item => {
+            if (!item.tags) return false;
+            return activeTags.some(activeTag => 
+                item.tags.some(itemTag => 
+                    itemTag.name === activeTag || 
+                    (itemTag.category === 'geography' && 
+                     itemTag.name.toLowerCase().split(' ').map(word => 
+                         word.charAt(0).toUpperCase() + word.slice(1)
+                     ).join(' ') === activeTag)
+                )
+            );
+        });
     }
 
     return filtered;

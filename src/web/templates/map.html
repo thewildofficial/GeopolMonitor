@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,6 +10,17 @@
     <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌍</text></svg>">
+    
+    <!-- Initialize theme -->
+    <script>
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        document.documentElement.style.setProperty('--legend-gradient', 'linear-gradient(to right, rgba(64, 115, 255, 0.5), rgba(19, 49, 143, 0.9))');
+    </script>
+    
+    <!-- Load Leaflet and plugins -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 </head>
 <body>
     <header>
@@ -49,7 +60,20 @@
         </div>
 
         <div class="map-wrapper">
-            <div id="worldMap"></div>
+            <div class="map-container">
+                <div id="worldMap"></div>
+                <div class="country-news-panel" style="display: none;">
+                    <div class="country-news-header">
+                        <h2><span class="country-flag"></span> <span id="selectedCountry">Country</span></h2>
+                        <button class="close-btn" id="closeCountryNews" title="Close">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="country-news-list" id="countryNewsList">
+                        <!-- News items will be populated here -->
+                    </div>
+                </div>
+            </div>
             <div class="map-controls">
                 <div class="timeline-container">
                     <input type="range" id="timelineSlider" class="timeline-slider" 
@@ -60,7 +84,9 @@
         </div>
     </main>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script type="module" src="/static/js/modules/countries.js"></script>
+    <script type="module" src="/static/js/modules/map-styles.js"></script>
+    <script type="module" src="/static/js/modules/map.js"></script>
     <script type="module" src="/static/js/map-page.js"></script>
 </body>
 </html>

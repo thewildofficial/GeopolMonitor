@@ -5,8 +5,9 @@ import asyncio
 import time
 import logging
 from datetime import datetime
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple, Optional, List
 from google import genai
+from config.settings import GEMINI_API_KEYS
 
 # Configure logging
 logging.basicConfig(
@@ -15,127 +16,106 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Rate limiting configuration
-RPM_LIMIT = 15  # Requests per minute
+# Rate limiting constants
+RPM_LIMIT = 60  # Requests per minute
 RPD_LIMIT = 1500  # Requests per day
-MINUTE_WINDOW = 60  # Time window in seconds for RPM
-DAY_WINDOW = 86400  # Time window in seconds for RPD
+MINUTE_WINDOW = 60  # Window size in seconds
+DAY_WINDOW = 86400  # 24 hours in seconds
 
-# Rate limiting state
-last_request_time = 0
+# Initialize rate limiting variables
+last_request_time = time.time()
 requests_this_minute = 0
 requests_today = 0
 day_start_time = time.time()
 
-async def wait_for_rate_limit():
-    """Implements rate limiting according to free tier limits."""
-    global last_request_time, requests_this_minute, requests_today, day_start_time
-    current_time = time.time()
+class APIKeyManager:
+    """Manages multiple API keys with rate limiting."""
+    def __init__(self, api_keys: List[str]):
+        self.api_keys = api_keys
+        self.current_key_index = 0
+        self.key_states = [{
+            'last_request_time': 0,
+            'requests_this_minute': 0,
+            'requests_today': 0,
+            'day_start_time': time.time(),
+            'backoff_until': 0
+        } for _ in api_keys]
+        self._lock = asyncio.Lock()
+        
+    def get_current_key(self) -> str:
+        """Get current API key."""
+        return self.api_keys[self.current_key_index]
     
-    # Reset daily counter if needed
-    if current_time - day_start_time >= DAY_WINDOW:
-        requests_today = 0
-        day_start_time = current_time
+    async def rotate_key(self):
+        """Rotate to next available API key."""
+        async with self._lock:
+            original_index = self.current_key_index
+            while True:
+                self.current_key_index = (self.current_key_index + 1) % len(self.api_keys)
+                if self.key_states[self.current_key_index]['backoff_until'] <= time.time():
+                    break
+                if self.current_key_index == original_index:
+                    # All keys are in backoff, wait for the one with shortest backoff
+                    min_backoff = min(state['backoff_until'] for state in self.key_states)
+                    wait_time = min_backoff - time.time()
+                    if wait_time > 0:
+                        logger.warning(f"All API keys are rate limited. Waiting {wait_time:.1f}s")
+                        await asyncio.sleep(wait_time)
+                    break
+            return self.get_current_key()
     
-    # Handle daily limit
-    if requests_today >= RPD_LIMIT:
-        wait_time = day_start_time + DAY_WINDOW - current_time
-        logger.warning(f"Daily rate limit reached. Waiting {wait_time:.2f} seconds...")
-        await asyncio.sleep(wait_time)
-        requests_today = 0
-        day_start_time = time.time()
+    async def wait_for_rate_limit(self) -> bool:
+        """Check and wait for rate limits. Returns True if key rotation needed."""
         current_time = time.time()
-    
-    # Reset minute counter if needed
-    time_since_last = current_time - last_request_time
-    if time_since_last >= MINUTE_WINDOW:
-        requests_this_minute = 0
-        last_request_time = current_time
-    
-    # Handle minute limit
-    if requests_this_minute >= RPM_LIMIT:
-        wait_time = MINUTE_WINDOW - time_since_last + 1
-        logger.warning(f"Rate limit reached. Waiting {wait_time:.2f} seconds...")
-        await asyncio.sleep(wait_time)
-        requests_this_minute = 0
-        last_request_time = time.time()
-    
-    # Update counters
-    requests_this_minute += 1
-    requests_today += 1
-    last_request_time = current_time
-
-async def generate_tags(text: str) -> Tuple[list[str], list[str], list[str]]:
-    """Generate tags for an article using Gemini API."""
-    try:
-        await wait_for_rate_limit()
+        state = self.key_states[self.current_key_index]
         
-        prompt = """Analyze this text and generate three sets of tags:
-
-1. TOPICS (e.g., Politics, Economy, Technology, etc.)
-2. GEOGRAPHY (Countries, Regions, Cities mentioned)
-3. EVENT TYPES (e.g., Election, Conflict, Treaty, Summit, etc.)
-
-Rules for tag generation:
-- Each tag should be a single word or hyphenated phrase
-- Convert multi-word concepts into hyphenated form (e.g., "artificial intelligence" → "artificial-intelligence")
-- Use lowercase for all tags
-- Include only tags that are explicitly or strongly implied in the text
-- Maximum 5 tags per category
-- For geography, prefer country names over city names unless the city is the main focus
-
-Example response format:
-TOPICS: economy, technology, cybersecurity
-GEOGRAPHY: united-states, china, european-union
-EVENTS: trade-agreement, diplomatic-summit
-
-Text to analyze: {text}
-
-Respond exactly in this format:
-TOPICS: [comma-separated tags]
-GEOGRAPHY: [comma-separated tags]
-EVENTS: [comma-separated tags]"""
-
-        response = content_processor.client.models.generate_content(
-            model=content_processor.model,
-            contents=prompt.format(text=text)
-        )
-
-        # Parse response
-        result = response.text.strip().split('\n')
-        topics = []
-        geography = []
-        events = []
+        # Reset daily counter if needed
+        if current_time - state['day_start_time'] >= 86400:  # 24 hours
+            state['requests_today'] = 0
+            state['day_start_time'] = current_time
         
-        for line in result:
-            line = line.strip()
-            if line.startswith('TOPICS:'):
-                topics = [t.strip() for t in line.split('TOPICS:')[1].strip().split(',')]
-            elif line.startswith('GEOGRAPHY:'):
-                geography = [t.strip() for t in line.split('GEOGRAPHY:')[1].strip().split(',')]
-            elif line.startswith('EVENTS:'):
-                events = [t.strip() for t in line.split('EVENTS:')[1].strip().split(',')]
+        # Handle daily limit
+        if state['requests_today'] >= 1500:  # Daily limit
+            state['backoff_until'] = state['day_start_time'] + 86400
+            return True
         
-        return topics, geography, events
-
-    except Exception as e:
-        logger.error(f"Error generating tags: {e}")
-        return [], [], []
+        # Reset minute counter if needed
+        time_since_last = current_time - state['last_request_time']
+        if time_since_last >= 60:
+            state['requests_this_minute'] = 0
+            state['last_request_time'] = current_time
+        
+        # Handle minute limit
+        if state['requests_this_minute'] >= 15:  # Per-minute limit
+            state['backoff_until'] = current_time + (60 - time_since_last)
+            return True
+        
+        # Update counters
+        state['requests_this_minute'] += 1
+        state['requests_today'] += 1
+        state['last_request_time'] = current_time
+        return False
 
 class ContentProcessor:
     """Handles content processing with Gemini API."""
     
     def __init__(self):
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            raise ValueError("GEMINI_API_KEY must be set in environment variables")
-        
-        self.client = genai.Client(api_key=api_key)
+        self.key_manager = APIKeyManager(GEMINI_API_KEYS)
+        self._init_client()
         self.model = "gemini-2.0-flash-thinking-exp-01-21"
+    
+    def _init_client(self):
+        """Initialize or reinitialize the Gemini client with current API key."""
+        self.client = genai.Client(api_key=self.key_manager.get_current_key())
     
     async def process_content(self, text: str, is_title: bool = False, instruction: Optional[str] = None) -> Tuple[str, str]:
         """Process content with Gemini API."""
         try:
+            rotate_needed = await self.key_manager.wait_for_rate_limit()
+            if rotate_needed:
+                await self.key_manager.rotate_key()
+                self._init_client()
+
             await wait_for_rate_limit()
             
             prompt = f"""Analyze this text and provide three things:
@@ -156,7 +136,7 @@ class ContentProcessor:
       - Major cities (e.g., "Shanghai" → 🇨🇳)
       - Political leaders (e.g., "Macron" → 🇫🇷)
       - Government bodies (e.g., "Parliament" → use country's flag)
-      - Regional organizations (e.g., "NATO" → 🇪🇺)
+      - Regional organizations (e.g., "EU" → 🇪🇺)
 
   b) For EMOJI_2, use the MOST SPECIFIC topic emoji:
       Economy & Finance:
@@ -270,3 +250,98 @@ TEXT: [processed text]"""
 content_processor = ContentProcessor()
 process_with_gemini = content_processor.process_content
 process_with_tags = content_processor.process_content_with_tags
+
+async def wait_for_rate_limit():
+    """Implements rate limiting according to free tier limits."""
+    global last_request_time, requests_this_minute, requests_today, day_start_time
+    current_time = time.time()
+    
+    # Reset daily counter if needed
+    if current_time - day_start_time >= DAY_WINDOW:
+        requests_today = 0
+        day_start_time = current_time
+    
+    # Handle daily limit
+    if requests_today >= RPD_LIMIT:
+        wait_time = day_start_time + DAY_WINDOW - current_time
+        logger.warning(f"Daily rate limit reached. Waiting {wait_time:.2f} seconds...")
+        await asyncio.sleep(wait_time)
+        requests_today = 0
+        day_start_time = time.time()
+        current_time = time.time()
+    
+    # Reset minute counter if needed
+    time_since_last = current_time - last_request_time
+    if time_since_last >= MINUTE_WINDOW:
+        requests_this_minute = 0
+        last_request_time = current_time
+    
+    # Handle minute limit
+    if requests_this_minute >= RPM_LIMIT:
+        wait_time = MINUTE_WINDOW - time_since_last + 1
+        logger.warning(f"Rate limit reached. Waiting {wait_time:.2f} seconds...")
+        await asyncio.sleep(wait_time)
+        requests_this_minute = 0
+        last_request_time = time.time()
+    
+    # Update counters
+    requests_this_minute += 1
+    requests_today += 1
+    last_request_time = current_time
+
+async def generate_tags(text: str) -> Tuple[list[str], list[str], list[str]]:
+    """Generate tags for an article using Gemini API."""
+    try:
+        await wait_for_rate_limit()
+        
+        prompt = """Analyze this text and generate three sets of tags:
+
+1. TOPICS (e.g., Politics, Economy, Technology, etc.)
+2. GEOGRAPHY (Countries, Regions, Cities mentioned)
+3. EVENT TYPES (e.g., Election, Conflict, Treaty, Summit, etc.)
+
+Rules for tag generation:
+- Each tag should be a single word or hyphenated phrase
+- Convert multi-word concepts into hyphenated form (e.g., "artificial intelligence" → "artificial-intelligence")
+- Use lowercase for all tags
+- Include only tags that are explicitly or strongly implied in the text
+- Maximum 5 tags per category
+- For geography, prefer country names over city names unless the city is the main focus
+
+Example response format:
+TOPICS: economy, technology, cybersecurity
+GEOGRAPHY: united-states, china, european-union
+EVENTS: trade-agreement, diplomatic-summit
+
+Text to analyze: {text}
+
+Respond exactly in this format:
+TOPICS: [comma-separated tags]
+GEOGRAPHY: [comma-separated tags]
+EVENTS: [comma-separated tags]"""
+
+        response = content_processor.client.models.generate_content(
+            model=content_processor.model,
+            contents=prompt.format(text=text)
+        )
+
+        # Parse response
+        result = response.text.strip().split('\n')
+        topics = []
+        geography = []
+        events = []
+        
+        for line in result:
+            line = line.strip()
+            if line.startswith('TOPICS:'):
+                topics = [t.strip() for t in line.split('TOPICS:')[1].strip().split(',')]
+            elif line.startswith('GEOGRAPHY:'):
+                geography = [t.strip() for t in line.split('GEOGRAPHY:')[1].strip().split(',')]
+            elif line.startswith('EVENTS:'):
+                events = [t.strip() for t in line.split('EVENTS:')[1].strip().split(',')]
+        
+        return topics, geography, events
+
+    except Exception as e:
+        logger.error(f"Error generating tags: {e}")
+        return [], [], []

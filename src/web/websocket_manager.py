@@ -26,6 +26,25 @@ class ConnectionManager:
 # Global instance
 manager = ConnectionManager()
 
+def format_tag_name(name: str) -> str:
+    """Format tag names with proper capitalization and handle special cases."""
+    # Handle special cases with hyphens first
+    special_cases = {
+        'united-states': 'United States',
+        'united-kingdom': 'United Kingdom',
+        'europe': 'Europe'  # Single word but commonly used
+    }
+    
+    # Replace hyphens with spaces for processing
+    name_normalized = name.lower().replace('-', ' ')
+    
+    # Check for special cases first
+    if name_normalized in special_cases:
+        return special_cases[name_normalized]
+        
+    # For regular cases, capitalize each word
+    return ' '.join(word.capitalize() for word in name_normalized.split())
+
 def format_news_item_for_broadcast(news_item: dict, article_id: int = None) -> dict:
     """Format a news item for broadcast, including tags if article_id is provided."""
     formatted = {
@@ -44,7 +63,12 @@ def format_news_item_for_broadcast(news_item: dict, article_id: int = None) -> d
     }
     
     if article_id:
-        formatted["data"]["tags"] = get_article_tags(article_id)
+        # Get tags and format geography tags
+        tags = get_article_tags(article_id)
+        for tag in tags:
+            if tag['category'] == 'geography':
+                tag['name'] = format_tag_name(tag['name'])
+        formatted["data"]["tags"] = tags
     
     return formatted
 

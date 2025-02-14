@@ -4,6 +4,7 @@
     --spring-timing: cubic-bezier(0.175, 0.885, 0.32, 1.275);
     --animation-duration: 0.5s;
     --fade-in-duration: 0.8s;
+    --background-color-rgb: 245, 246, 250;
 }
 
 :root[data-theme="light"] {
@@ -16,6 +17,9 @@
     --filter-background: #f5f5f5;
     --meta-color: #888;
     --description-color: #666;
+    --glass-background: rgba(255, 255, 255, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --glass-shadow: rgba(0, 0, 0, 0.1);
 }
 
 :root[data-theme="dark"] {
@@ -28,6 +32,10 @@
     --filter-background: #2c2c2c;
     --meta-color: #a0a0a0;
     --description-color: #b0b0b0;
+    --background-color-rgb: 26, 26, 26;
+    --glass-background: rgba(44, 44, 44, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.05);
+    --glass-shadow: rgba(0, 0, 0, 0.2);
 }
 
 /* Base theme transitions */
