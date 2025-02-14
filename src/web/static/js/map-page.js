@@ -1,7 +1,6 @@
-// Import statements using correct function names
 import { initTheme } from './modules/theme.js';
 import { initWebSocket } from './modules/websocket.js';
-import { getCountryCoordinates, normalizeCountryName, getCountryFlag, getCountryCode } from './modules/countries.js';
+import { getCountryCoordinates, normalizeCountryName, getCountryFlag, getCountryCode, normalizeCountry, isCountryMatch } from './modules/countries.js';
 
 // Global variables and utility functions
 let map;
@@ -12,6 +11,16 @@ const newsPoints = [];
 let activeRegionsCount = 0;
 let todayEventsCount = 0;
 let allNews = [];
+
+const formatDate = (timestamp) => {
+    const date = new Date(timestamp);
+    return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+};
 
 // Load Leaflet.heat plugin
 const loadHeatPlugin = () => {
@@ -150,58 +159,94 @@ function highlightCountry(feature) {
 
 function showCountryNews(countryName) {
     const newsPanel = document.querySelector('.country-news-panel');
-    const countryTitle = document.getElementById('selectedCountry');
     const newsList = document.getElementById('countryNewsList');
-    const countryFlag = document.querySelector('.country-flag');
+    const normalizedCountry = normalizeCountry(countryName);
     
-    const normalizedName = normalizeCountryName(countryName);
-    countryTitle.textContent = normalizedName;
+    // Ensure panel is visible and interactive
+    newsPanel.style.display = 'flex';
+    newsPanel.style.pointerEvents = 'auto';
     
-    // Get and set the country flag
-    const countryCode = getCountryCode(normalizedName);
-    countryFlag.textContent = countryCode ? getCountryFlag(countryCode) : '';
+    // Set country name and flag
+    document.getElementById('selectedCountry').innerHTML = `${normalizedCountry.flag} ${normalizedCountry.name}`;
     
+    // Clear existing news
     newsList.innerHTML = '';
     
-    // Filter news items for the selected country
+    // Filter news for this country
     const countryNews = allNews.filter(item => 
         item.tags.some(tag => 
             tag.category === 'geography' && 
-            normalizeCountryName(tag.name).toLowerCase() === normalizedName.toLowerCase()
+            isCountryMatch(tag.name, countryName)
         )
     );
     
     if (countryNews.length === 0) {
-        newsList.innerHTML = '<p class="no-news">No news available for this country.</p>';
+        newsList.innerHTML = '<div class="no-news">No news available for this country</div>';
     } else {
         countryNews.forEach(news => {
             const newsItem = document.createElement('div');
             newsItem.className = 'country-news-item';
             newsItem.innerHTML = `
                 <h3>${news.title}</h3>
-                <p>${news.description}</p>
+                <p>${news.description || 'No description available'}</p>
                 <div class="meta">
                     <span>${formatDate(news.timestamp)}</span>
+                    <span>${news.tags.find(t => t.category === 'source')?.name || 'Unknown Source'}</span>
                 </div>
             `;
-            newsItem.addEventListener('click', () => {
+            newsItem.addEventListener('click', (e) => {
+                e.stopPropagation();
                 window.open(news.link, '_blank', 'noopener');
             });
             newsList.appendChild(newsItem);
         });
     }
     
-    newsPanel.style.display = 'flex';
-}
-
-function formatDate(timestamp) {
-    const date = new Date(timestamp);
-    return date.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
+    // Add visible class after a short delay for animation
+    requestAnimationFrame(() => {
+        newsPanel.classList.add('visible');
     });
+    
+    // Handle close button click with proper event handling
+    const closeBtn = document.getElementById('closeCountryNews');
+    if (closeBtn) {
+        const newCloseBtn = closeBtn.cloneNode(true);
+        closeBtn.parentNode.replaceChild(newCloseBtn, closeBtn);
+        
+        newCloseBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            closePanel();
+        });
+    }
+    
+    // Handle clicking outside with proper event handling
+    const handleOutsideClick = (e) => {
+        if (!newsPanel.contains(e.target) && 
+            !e.target.closest('.leaflet-container') &&
+            newsPanel.classList.contains('visible')) {
+            closePanel();
+        }
+    };
+    
+    // Clean up old event listener and add new one
+    document.removeEventListener('click', handleOutsideClick);
+    document.addEventListener('click', handleOutsideClick);
+    
+    // Function to handle panel closing
+    function closePanel() {
+        newsPanel.classList.remove('visible');
+        newsPanel.style.pointerEvents = 'none';
+        
+        setTimeout(() => {
+            newsPanel.style.display = 'none';
+            if (activeCountryLayer) {
+                map.removeLayer(activeCountryLayer);
+                activeCountryLayer = null;
+            }
+            map.setView([30, 0], 2);
+        }, 300);
+    }
 }
 
 function initTimelineSlider() {

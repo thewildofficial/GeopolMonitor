@@ -132,6 +132,13 @@ export function getCountryFlag(countryCode) {
         );
 }
 
+export function normalizeCountry(input) {
+    const name = normalizeCountryName(input);
+    const code = getCountryCode(name);
+    const flag = getCountryFlag(code);
+    return { name, code, flag };
+}
+
 export function isCountryMatch(country1, country2) {
     const name1 = normalizeCountryName(country1.name || country1);
     const name2 = normalizeCountryName(country2.name || country2);
