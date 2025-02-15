@@ -1,7 +1,22 @@
 import { normalizeCountry, isCountryMatch } from './countries.js';
 
+// Format news tags and get country emojis for title
+function getNewsEmoji(newsItem) {
+    const geoTags = newsItem.tags.filter(tag => tag.category === 'geography');
+    if (geoTags.length === 0) return '📰';
+    
+    // Get unique country emojis
+    const uniqueFlags = Array.from(new Set(
+        geoTags.map(tag => {
+            const countryData = normalizeCountry(tag.name);
+            return countryData.flag;
+        }).filter(Boolean)
+    ));
+
+    return uniqueFlags.length > 1 ? uniqueFlags.slice(0, 2).join('') : uniqueFlags[0] + ' 📰';
+}
+
 export function createNewsElement(newsItem) {
-    // Skip articles with no description
     if (!newsItem.description) {
         return null;
     }
@@ -14,12 +29,9 @@ export function createNewsElement(newsItem) {
 
     // Format title with emojis
     const titleText = newsItem.title || "Untitled";
-    const emoji1 = newsItem.emoji1 || '';
-    const emoji2 = newsItem.emoji2 || '';
-    const emojis = emoji1 + emoji2;
-    const titleWithEmojis = emojis ? `${emoji1}${emoji2} ${titleText}` : titleText;
+    const countryEmojis = getNewsEmoji(newsItem);
+    const titleWithEmojis = `${countryEmojis} ${titleText}`;
     
-    // Get a clean description
     let description = newsItem.description;
     if (description && description.length > 300) {
         const sentences = description.split('.');
@@ -45,6 +57,16 @@ export function createNewsElement(newsItem) {
     } else {
         imageContainer.style.display = 'none';
     }
+
+    // Add source to meta section
+    const sourceTag = newsItem.tags.find(tag => tag.category === 'source');
+    if (sourceTag) {
+        const meta = article.querySelector('.meta');
+        const sourceSpan = document.createElement('span');
+        sourceSpan.className = 'source';
+        sourceSpan.textContent = sourceTag.name;
+        meta.appendChild(sourceSpan);
+    }
     
     // Make article clickable
     article.style.cursor = 'pointer';
@@ -58,14 +80,15 @@ export function createNewsElement(newsItem) {
         imageContainer.style.display = 'none';
     };
 
-    // Add tags with proper formatting for geography tags
+    // Add tags
     if (newsItem.tags && newsItem.tags.length > 0) {
         const tagsContainer = article.querySelector('.tags');
         newsItem.tags.forEach(tag => {
+            if (tag.category === 'source') return; // Skip source tags as they're shown in meta
+            
             const tagEl = document.createElement('span');
             tagEl.className = 'tag';
             
-            // Format geography tags with proper capitalization and add flag
             if (tag.category === 'geography') {
                 const countryData = normalizeCountry(tag.name);
                 const formattedName = countryData.name;
@@ -78,10 +101,8 @@ export function createNewsElement(newsItem) {
             }
             
             tagEl.dataset.category = tag.category;
-            
-            // Add click handler for tag filtering
             tagEl.addEventListener('click', (e) => {
-                e.stopPropagation(); // Prevent article click
+                e.stopPropagation();
                 if (window.toggleTag) {
                     window.toggleTag(tagEl.dataset.tagName);
                 }

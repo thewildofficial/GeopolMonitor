@@ -94,6 +94,21 @@
     margin-top: auto;
     padding-top: 0.75rem;
     border-top: 1px solid var(--border-color);
+    margin-top: auto;
+    padding-top: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: var(--meta-color);
+    font-size: 0.85rem;
+}
+
+.meta .source {
+    font-weight: 500;
+    color: var(--accent-color);
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--accent-color-transparent);
 }
 
 /* News image styles */
@@ -103,6 +118,7 @@
     padding-top: 56.25%;
     overflow: hidden;
     background: linear-gradient(45deg, var(--filter-background), var(--card-background));
+    border-radius: 8px;
 }
 
 .news-image-container::before {
