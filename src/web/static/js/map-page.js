@@ -26,11 +26,19 @@ async function initMap() {
 }
 
 function setupMap() {
+    // Set maximum bounds to prevent infinite scrolling
+    const maxBounds = L.latLngBounds(
+        L.latLng(-85, -180),  // Southwest corner
+        L.latLng(85, 180)     // Northeast corner
+    );
+
     map = L.map('worldMap', {
         zoomControl: true,
         attributionControl: false,
         minZoom: 2,
-        maxZoom: 6
+        maxZoom: 6,
+        maxBounds: maxBounds,
+        maxBoundsViscosity: 1.0  // Makes the bounds completely solid
     }).setView([30, 0], 2);
     
     // Add tile layers

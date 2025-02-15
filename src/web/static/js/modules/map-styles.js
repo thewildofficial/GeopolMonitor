@@ -2,18 +2,18 @@
 export const mapStyles = {
     colors: {
         light: {
-            low: 'rgba(64, 115, 255, 0.1)',     // Very light blue
-            mediumLow: 'rgba(64, 115, 255, 0.3)', // Light blue
-            medium: 'rgba(64, 115, 255, 0.5)',    // Medium blue
-            mediumHigh: 'rgba(64, 115, 255, 0.7)', // Medium-dark blue
-            high: 'rgba(64, 115, 255, 0.9)'       // Dark blue
+            low: 'rgba(52, 152, 219, 0.2)',     // Light blue
+            mediumLow: 'rgba(52, 152, 219, 0.4)', // Medium blue
+            medium: 'rgba(52, 152, 219, 0.6)',    // Darker blue
+            mediumHigh: 'rgba(52, 152, 219, 0.8)', // Even darker blue
+            high: 'rgba(52, 152, 219, 1.0)'       // Full blue
         },
         dark: {
-            low: 'rgba(64, 115, 255, 0.15)',     // Soft glow
-            mediumLow: 'rgba(64, 115, 255, 0.35)', // Light glow
-            medium: 'rgba(64, 115, 255, 0.55)',    // Medium glow
-            mediumHigh: 'rgba(64, 115, 255, 0.75)', // Strong glow
-            high: 'rgba(64, 115, 255, 0.95)'       // Intense glow
+            low: 'rgba(64, 115, 255, 0.25)',     // Bright glow
+            mediumLow: 'rgba(64, 115, 255, 0.45)', // Brighter glow
+            medium: 'rgba(64, 115, 255, 0.65)',    // Strong glow
+            mediumHigh: 'rgba(64, 115, 255, 0.85)', // Very strong glow
+            high: 'rgba(64, 115, 255, 1.0)'       // Full glow
         }
     },
 
@@ -25,7 +25,8 @@ export const mapStyles = {
     getCountryStyle(heatData, maxCount) {
         if (!heatData || !heatData.count) {
             return {
-                fillOpacity: 0,
+                fillColor: 'transparent',
+                fillOpacity: 0.1,
                 weight: 1,
                 color: 'var(--border-color)',
                 opacity: 0.3,
@@ -50,8 +51,9 @@ export const mapStyles = {
             fillColor = colors.high;
         }
 
-        const baseOpacity = 0.3;
-        const maxOpacity = 0.9;
+        // Increase the base opacity range
+        const baseOpacity = 0.4;
+        const maxOpacity = 1.0;
         const fillOpacity = baseOpacity + (normalizedCount * (maxOpacity - baseOpacity));
 
         return {
