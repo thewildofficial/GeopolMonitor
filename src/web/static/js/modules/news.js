@@ -1,21 +1,5 @@
 import { normalizeCountry, isCountryMatch } from './countries.js';
 
-// Format news tags and get country emojis for title
-function getNewsEmoji(newsItem) {
-    const geoTags = newsItem.tags.filter(tag => tag.category === 'geography');
-    if (geoTags.length === 0) return '📰';
-    
-    // Get unique country emojis
-    const uniqueFlags = Array.from(new Set(
-        geoTags.map(tag => {
-            const countryData = normalizeCountry(tag.name);
-            return countryData.flag;
-        }).filter(Boolean)
-    ));
-
-    return uniqueFlags.length > 1 ? uniqueFlags.slice(0, 2).join('') : uniqueFlags[0] + ' 📰';
-}
-
 export function createNewsElement(newsItem) {
     if (!newsItem.description) {
         return null;
@@ -29,8 +13,7 @@ export function createNewsElement(newsItem) {
 
     // Format title with emojis
     const titleText = newsItem.title || "Untitled";
-    const countryEmojis = getNewsEmoji(newsItem);
-    const titleWithEmojis = `${countryEmojis} ${titleText}`;
+    const titleWithEmojis = `${newsItem.emoji1}${newsItem.emoji2} ${titleText}`;
     
     let description = newsItem.description;
     if (description && description.length > 300) {
@@ -136,61 +119,6 @@ export function formatTimeAgo(timestamp) {
         }
     }
     return 'Just now';
-}
-
-// Handle country flags and news display
-function showCountryNews(countryName) {
-    console.log('Showing news for country:', countryName);
-    const newsPanel = document.querySelector('.country-news-panel');
-    const countryTitle = document.getElementById('selectedCountry');
-    const newsList = document.getElementById('countryNewsList');
-    
-    const countryData = normalizeCountry(countryName);
-    countryTitle.textContent = countryData.name;
-    if (countryData.flag) {
-        countryTitle.textContent = `${countryData.flag} ${countryData.name}`;
-    }
-    
-    // Reset news list
-    newsList.innerHTML = '';
-    
-    // Filter news items for the selected country
-    const countryNews = filterNewsByCountry(countryData);
-    console.log(`Found ${countryNews.length} news items for ${countryData.name}`);
-    
-    if (countryNews.length === 0) {
-        newsList.innerHTML = '<p class="no-news">No news available for this country.</p>';
-    } else {
-        displayFilteredNews(countryNews, newsList);
-    }
-    
-    newsPanel.style.display = 'flex';
-    
-    // Handle close button click with smooth transition
-    const closeBtn = document.getElementById('closeCountryNews');
-    closeBtn.onclick = (e) => {
-        e.stopPropagation();
-        newsPanel.classList.remove('visible');
-        
-        // Wait for transition to complete before hiding
-        setTimeout(() => {
-            newsPanel.style.display = 'none';
-            if (activeCountryLayer) {
-                map.removeLayer(activeCountryLayer);
-                activeCountryLayer = null;
-            }
-            map.setView([30, 0], 2);
-        }, 300); // Match the CSS transition duration
-    };
-    
-    // Handle clicking outside the panel
-    document.addEventListener('click', (e) => {
-        if (!newsPanel.contains(e.target) && 
-            !e.target.closest('.leaflet-container') &&
-            newsPanel.classList.contains('visible')) {
-            closeBtn.click();
-        }
-    });
 }
 
 // Filter news by country with flexible matching
