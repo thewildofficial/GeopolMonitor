@@ -1,0 +1,84 @@
+/* Heatmap Theme Variables */
+:root {
+    /* Light theme */
+    --country-default-color-light: #f0f0f0;
+    --country-intensity-1-light: #edf8e9;
+    --country-intensity-2-light: #bae4b3;
+    --country-intensity-3-light: #74c476;
+    --country-intensity-4-light: #31a354;
+    --country-intensity-5-light: #006d2c;
+    
+    /* Dark theme */
+    --country-default-color-dark: #2d2d2d;
+    --country-intensity-1-dark: #1a3c2f;
+    --country-intensity-2-dark: #1a533d;
+    --country-intensity-3-dark: #1a694b;
+    --country-intensity-4-dark: #1a8059;
+    --country-intensity-5-dark: #1a9667;
+    
+    /* Active theme colors (updated by JavaScript) */
+    --country-default-color: var(--country-default-color-light);
+    --country-intensity-1: var(--country-intensity-1-light);
+    --country-intensity-2: var(--country-intensity-2-light);
+    --country-intensity-3: var(--country-intensity-3-light);
+    --country-intensity-4: var(--country-intensity-4-light);
+    --country-intensity-5: var(--country-intensity-5-light);
+    
+    --border-color-light: rgba(0, 0, 0, 0.2);
+    --border-color-dark: rgba(255, 255, 255, 0.2);
+    --border-color: var(--border-color-light);
+}
+
+/* Dark theme overrides */
+[data-theme="dark"] {
+    --country-default-color: var(--country-default-color-dark);
+    --country-intensity-1: var(--country-intensity-1-dark);
+    --country-intensity-2: var(--country-intensity-2-dark);
+    --country-intensity-3: var(--country-intensity-3-dark);
+    --country-intensity-4: var(--country-intensity-4-dark);
+    --country-intensity-5: var(--country-intensity-5-dark);
+    --border-color: var(--border-color-dark);
+}
+
+/* Legend styling */
+.heatmap-legend {
+    background: var(--bg-color);
+    padding: 12px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    backdrop-filter: blur(8px);
+    max-width: 200px;
+}
+
+.heatmap-legend h4 {
+    margin: 0 0 8px 0;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-color);
+}
+
+.intensity-scale {
+    height: 8px;
+    border-radius: 4px;
+    margin: 8px 0;
+    background: linear-gradient(
+        to right,
+        var(--country-intensity-1) 0%,
+        var(--country-intensity-2) 25%,
+        var(--country-intensity-3) 50%,
+        var(--country-intensity-4) 75%,
+        var(--country-intensity-5) 100%
+    );
+}
+
+.scale-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text-color-secondary);
+}
+
+/* Country hover effect */
+.country-hover {
+    transition: all 0.2s ease;
+}

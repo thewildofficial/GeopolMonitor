@@ -1,0 +1,9 @@
+:root {
+    --card-rgb: 255, 255, 255;
+    --border-rgb: 230, 230, 230;
+}
+
+[data-theme="dark"] {
+    --card-rgb: 35, 35, 35;
+    --border-rgb: 70, 70, 70;
+}
