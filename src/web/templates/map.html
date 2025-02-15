@@ -77,9 +77,17 @@
             </div>
             <div class="map-controls">
                 <div class="timeline-container">
+                    <label for="timelineSlider">News Activity Timeline</label>
                     <input type="range" id="timelineSlider" class="timeline-slider" 
                            min="1" max="30" value="7" step="1">
-                    <label for="timelineSlider">Last <span id="daysValue">7</span> days</label>
+                    <div class="slider-info">
+                        <span class="slider-hint">Recent news →</span>
+                        <span id="daysValue">Last 7 days</span>
+                        <span class="slider-hint">← Older news</span>
+                    </div>
+                    <div class="timeline-help">
+                        Drag the slider to adjust the time range of news activity shown on the map
+                    </div>
                 </div>
             </div>
         </div>

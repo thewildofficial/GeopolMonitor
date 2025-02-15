@@ -1,4 +1,4 @@
-import { normalizeCountryName, initializeISOMapping, matchCountryName } from './countries.js';
+import { normalizeCountryName, initializeISOMapping, matchCountryName, getCountryData } from './countries.js';
 import { mapStyles } from './map-styles.js';
 
 let countryLayer;
@@ -126,13 +126,16 @@ export function updateHeatmap(newsData) {
                 
                 // Update tooltip
                 if (count > 0) {
+                    const country = getCountryData(countryName);
+                    const tooltipContent = `${count} posts ${country.flag}`;
+                    
                     if (layer.getTooltip()) {
-                        layer.setTooltipContent(`${count} posts`);
+                        layer.setTooltipContent(tooltipContent);
                     } else {
-                        layer.bindTooltip(`${count} posts`, {
+                        layer.bindTooltip(tooltipContent, {
                             permanent: false,
                             direction: 'center',
-                            className: 'country-tooltip'
+                            className: 'country-tooltip apple-tooltip'
                         });
                     }
                 } else if (layer.getTooltip()) {

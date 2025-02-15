@@ -180,6 +180,44 @@ function getCountryFlag(countryCode) {
         );
 }
 
+/**
+ * Get country's flag emoji based on ISO code
+ * @param {string} countryCode - The ISO 3166-1 alpha-2 country code
+ * @returns {string} The flag emoji for the country or 🌐 as fallback
+ */
+export function getCountryEmoji(countryCode) {
+    if (!countryCode) return '🌐';
+    
+    try {
+        // Convert country code to regional indicator symbols
+        return countryCode
+            .toUpperCase()
+            .replace(/./g, char => 
+                String.fromCodePoint(char.charCodeAt(0) + 127397)
+            );
+    } catch (error) {
+        console.warn(`Failed to get emoji for country code: ${countryCode}`, error);
+        return '🌐';
+    }
+}
+
+/**
+ * Get country data including name, code, and flag emoji
+ * @param {string} countryName - The country name to normalize
+ * @returns {Object} Object containing normalized name, code and flag emoji
+ */
+export function getCountryData(countryName) {
+    const normalized = normalizeCountryName(countryName);
+    const code = getCountryCode(normalized);
+    const flag = getCountryEmoji(code);
+    
+    return {
+        name: normalized,
+        code: code,
+        flag: flag
+    };
+}
+
 function normalizeCountry(input) {
     const name = normalizeCountryName(input);
     const code = getCountryCode(name);

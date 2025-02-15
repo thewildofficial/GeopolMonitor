@@ -28,15 +28,78 @@
 }
 
 .timeline-container {
-    padding: 1rem;
-    background: var(--card-background);
-    border-top: 1px solid var(--border-color);
-    border-radius: 8px;
+    padding: 1.5rem;
+    background: var(--glass-background);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    width: 100%;
+    max-width: 400px;
+    margin: 0 auto;
+}
+
+.timeline-container label {
+    display: block;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+    color: var(--text-color);
+    text-align: center;
+}
+
+.timeline-container .slider-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--meta-color);
 }
 
 .timeline-slider {
+    -webkit-appearance: none;
     width: 100%;
-    margin-bottom: 0.5rem;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border-color);
+    outline: none;
+    opacity: 0.9;
+    transition: all 0.2s;
+}
+
+.timeline-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--accent-color);
+    cursor: pointer;
+    border: 2px solid var(--card-background);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s ease;
+}
+
+.timeline-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.timeline-slider::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--accent-color);
+    cursor: pointer;
+    border: 2px solid var(--card-background);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s ease;
+}
+
+.timeline-slider::-moz-range-thumb:hover {
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .leaflet-popup-content-wrapper {
@@ -72,16 +135,30 @@
 }
 
 .heat-map-legend {
-    background: var(--card-background);
-    padding: 1rem;
-    border-radius: 8px;
-    border: 1px solid var(--border-color);
-    font-size: 0.9rem;
-    color: var(--text-color);
     padding: 1.2rem;
     background: var(--glass-background);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    font-size: 0.9rem;
+    color: var(--text-color);
+}
+
+.heat-map-legend h4 {
+    margin-bottom: 0.8rem;
+    font-weight: 500;
+    font-size: 0.9rem;
+    color: var(--text-color);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.heat-map-legend h4::before {
+    content: "📊";
+    font-size: 1.1rem;
 }
 
 .heat-map-legend strong {
@@ -90,10 +167,11 @@
 }
 
 .heat-map-legend .intensity-scale {
-    height: 10px;
+    height: 6px;
+    border-radius: 3px;
+    overflow: hidden;
     width: 100%;
     margin: 0.5rem 0;
-    border-radius: 5px;
     background: linear-gradient(to right,
         rgba(52, 152, 219, 0.5),
         rgba(46, 204, 113, 0.6),
@@ -109,6 +187,13 @@
     font-size: 0.8rem;
     color: var(--meta-color);
     margin-top: 0.25rem;
+    font-size: 0.75rem;
+    color: var(--meta-color);
+    margin-top: 0.5rem;
+}
+
+[data-theme="dark"] .heat-map-legend {
+    background: rgba(0, 0, 0, 0.75);
 }
 
 /* Mobile responsiveness */
@@ -496,4 +581,43 @@
     .country-news-panel[style*="display: flex"] {
         transform: translateY(0);
     }
+}
+
+.apple-tooltip {
+    background: rgba(var(--card-rgb), 0.85) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+    border: 0.5px solid rgba(255, 255, 255, 0.2) !important;
+    border-radius: 8px !important;
+    padding: 4px 8px !important;
+    font-size: 12px !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+    transition: all 0.2s ease !important;
+}
+
+[data-theme="dark"] .apple-tooltip {
+    background: rgba(0, 0, 0, 0.85) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    color: #ffffff !important;
+}
+
+/* Timeline help text and additional styles */
+.timeline-help {
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--meta-color);
+    margin-top: 1rem;
+    padding: 0.5rem;
+    border-radius: 6px;
+    background: rgba(var(--card-rgb), 0.5);
+}
+
+.slider-hint {
+    font-size: 0.75rem;
+    opacity: 0.7;
+}
+
+.slider-updated .timeline-slider::-webkit-slider-thumb {
+    transform: scale(1.2);
+    box-shadow: 0 0 0 4px rgba(var(--accent-color-rgb), 0.2);
 }
