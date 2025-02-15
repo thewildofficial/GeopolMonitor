@@ -1,4 +1,5 @@
-import { normalizeCountryName } from './countries.js';
+import { normalizeCountryName, initializeISOMapping, matchCountryName } from './countries.js';
+import { mapStyles } from './map-styles.js';
 
 let countryLayer;
 let currentTheme = 'light';
@@ -21,9 +22,12 @@ export async function initHeatmap(map) {
         if (!data || !data.features) {
             throw new Error('Invalid GeoJSON data format');
         }
+
+        // Initialize ISO mapping with the GeoJSON data
+        initializeISOMapping(data);
         
         countryLayer = L.geoJSON(data, {
-            style: getCountryStyle,
+            style: (feature) => mapStyles.getCountryStyle({ count: 0 }, 1),
             onEachFeature: function(feature, layer) {
                 if (!feature || !feature.properties) return;
                 
@@ -37,19 +41,6 @@ export async function initHeatmap(map) {
                         }
                     }
                 });
-
-                // Add tooltip with post count
-                const countryName = normalizeCountryName(feature.properties.ADMIN || feature.properties.name);
-                if (!countryName) return;
-                
-                const count = countryData.get(countryName) || 0;
-                if (count > 0) {
-                    layer.bindTooltip(`${count} posts`, {
-                        permanent: false,
-                        direction: 'center',
-                        className: 'country-tooltip'
-                    });
-                }
             }
         }).addTo(map);
         
@@ -66,7 +57,7 @@ export async function initHeatmap(map) {
  * @param {Array} newsData - Array of news items
  */
 export function updateHeatmap(newsData) {
-    console.log('Updating heatmap with new data...');
+    console.log('Updating heatmap with new data...', newsData?.length || 0, 'items');
     try {
         if (!Array.isArray(newsData)) {
             console.error('Invalid news data format:', newsData);
@@ -76,41 +67,64 @@ export function updateHeatmap(newsData) {
         // Reset country data
         countryData.clear();
         
-        // Count posts per country
+        // Count posts per country and log for debugging
+        const countryFrequencies = new Map();
+        
         newsData.forEach(item => {
             if (!item || !item.tags || !Array.isArray(item.tags)) return;
             
             const geoTags = item.tags.filter(tag => tag && tag.category === 'geography' && tag.name);
             geoTags.forEach(tag => {
-                const countryName = normalizeCountryName(tag.name);
+                const countryName = tag.name;
                 if (countryName) {
-                    countryData.set(countryName, (countryData.get(countryName) || 0) + 1);
+                    countryFrequencies.set(countryName, (countryFrequencies.get(countryName) || 0) + 1);
                 }
             });
         });
+
+        // Log top countries for debugging
+        const sortedCountries = Array.from(countryFrequencies.entries())
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5);
+        console.log('Top 5 countries by news count:', sortedCountries);
+        
+        // Update country data using GeoJSON feature matching
+        if (countryLayer) {
+            countryLayer.eachLayer(layer => {
+                const feature = layer.feature;
+                if (!feature || !feature.properties) return;
+                
+                let totalCount = 0;
+                countryFrequencies.forEach((count, tagCountry) => {
+                    if (matchCountryName(tagCountry, feature)) {
+                        totalCount += count;
+                    }
+                });
+                
+                if (totalCount > 0) {
+                    const countryName = feature.properties.ADMIN || feature.properties.name;
+                    countryData.set(countryName, totalCount);
+                }
+            });
+        }
         
         // Get the maximum count for normalization
         const values = Array.from(countryData.values());
         const maxCount = values.length > 0 ? Math.max(...values) : 1;
+        console.log('Max count across countries:', maxCount);
         
         // Update country styles
         if (countryLayer) {
-            countryLayer.setStyle(feature => {
-                if (!feature || !feature.properties) return getCountryStyle(null, 0, maxCount);
-                
-                const countryName = normalizeCountryName(feature.properties.ADMIN || feature.properties.name);
-                const count = countryName ? (countryData.get(countryName) || 0) : 0;
-                return getCountryStyle(feature, count, maxCount);
-            });
-            
-            // Update tooltips
             countryLayer.eachLayer(layer => {
-                if (!layer.feature || !layer.feature.properties) return;
+                const feature = layer.feature;
+                if (!feature || !feature.properties) return;
                 
-                const countryName = normalizeCountryName(layer.feature.properties.ADMIN || layer.feature.properties.name);
-                if (!countryName) return;
-                
+                const countryName = feature.properties.ADMIN || feature.properties.name;
                 const count = countryData.get(countryName) || 0;
+                const style = mapStyles.getCountryStyle({ count }, maxCount);
+                layer.setStyle(style);
+                
+                // Update tooltip
                 if (count > 0) {
                     if (layer.getTooltip()) {
                         layer.setTooltipContent(`${count} posts`);
@@ -121,38 +135,14 @@ export function updateHeatmap(newsData) {
                             className: 'country-tooltip'
                         });
                     }
-                } else {
-                    if (layer.getTooltip()) {
-                        layer.unbindTooltip();
-                    }
+                } else if (layer.getTooltip()) {
+                    layer.unbindTooltip();
                 }
             });
         }
     } catch (error) {
         console.error('Error updating heatmap:', error);
     }
-}
-
-/**
- * Get style configuration for a country
- * @param {Object} feature - GeoJSON feature
- * @param {number} count - Number of posts for the country
- * @param {number} maxCount - Maximum post count across all countries
- * @returns {Object} - Leaflet path style options
- */
-function getCountryStyle(feature, count = 0, maxCount = 1) {
-    // Normalize count to get intensity level (0-5)
-    const normalized = count / maxCount;
-    const intensityLevel = Math.ceil(normalized * 5);
-    
-    return {
-        fillColor: `var(--country-intensity-${intensityLevel || 'default'})`,
-        weight: 1,
-        opacity: 1,
-        color: 'var(--border-color)',
-        fillOpacity: count > 0 ? 0.7 : 0.3,
-        className: count > 0 ? 'country-active' : 'country-inactive'
-    };
 }
 
 /**
@@ -163,12 +153,7 @@ function highlightFeature(e) {
     const layer = e.target;
     const currentStyle = layer.options;
     
-    layer.setStyle({
-        weight: 2,
-        opacity: 1,
-        fillOpacity: currentStyle.fillOpacity + 0.2
-    });
-    
+    layer.setStyle(mapStyles.getHoverStyle(currentStyle));
     layer.bringToFront();
 }
 
@@ -177,7 +162,15 @@ function highlightFeature(e) {
  * @param {L.Event} e - Leaflet event
  */
 function resetHighlight(e) {
-    countryLayer.resetStyle(e.target);
+    const layer = e.target;
+    const feature = layer.feature;
+    if (!feature || !feature.properties) return;
+    
+    const countryName = normalizeCountryName(feature.properties.ADMIN || feature.properties.name);
+    const count = countryData.get(countryName) || 0;
+    const maxCount = Math.max(...Array.from(countryData.values()), 1);
+    
+    layer.setStyle(mapStyles.getCountryStyle({ count }, maxCount));
 }
 
 /**
@@ -187,11 +180,15 @@ function resetHighlight(e) {
 export function updateTheme(theme) {
     currentTheme = theme;
     if (countryLayer) {
-        countryLayer.setStyle(feature => {
+        const maxCount = Math.max(...Array.from(countryData.values()), 1);
+        countryLayer.eachLayer(layer => {
+            const feature = layer.feature;
+            if (!feature || !feature.properties) return;
+            
             const countryName = normalizeCountryName(feature.properties.ADMIN || feature.properties.name);
             const count = countryData.get(countryName) || 0;
-            const maxCount = Math.max(...Array.from(countryData.values()), 1);
-            return getCountryStyle(feature, count, maxCount);
+            
+            layer.setStyle(mapStyles.getCountryStyle({ count }, maxCount));
         });
     }
 }

@@ -64,66 +64,114 @@ const countryData = {
     'Taiwan': { coords: [23.5937, 121.0254], code: 'TW' }
 };
 
-export function getCountryCoordinates(countryName) {
+// ISO code mapping for additional country matching
+const isoCodeMapping = new Map();
+
+function getCountryCoordinates(countryName) {
     // Normalize the country name
     const normalizedName = normalizeCountryName(countryName);
     return countryData[normalizedName]?.coords;
 }
 
-export function normalizeCountryName(name) {
+function normalizeCountryName(name) {
+    if (!name) return '';
+    
+    // Convert kebab-case to spaces and capitalize words
+    const formattedName = name.replace(/-/g, ' ')
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
+
     // Special cases and common variations
     const aliases = {
-        'United States of America': 'United States',
-        'USA': 'United States',
-        'UK': 'United Kingdom',
+        'United States Of America': 'United States',
+        'Usa': 'United States',
+        'Us': 'United States',
+        'Uk': 'United Kingdom',
         'Great Britain': 'United Kingdom',
         'Russian Federation': 'Russia',
-        "People's Republic of China": 'China',
+        "People's Republic Of China": 'China',
+        'Prc': 'China',
         'South Korea': 'South Korea',
-        'Republic of Korea': 'South Korea',
-        'DPRK': 'North Korea',
-        "Democratic People's Republic of Korea": 'North Korea',
-        'UAE': 'United Arab Emirates',
-        'KSA': 'Saudi Arabia',
-        'ROK': 'South Korea',
-        'RoC': 'Taiwan',
-        'Republic of China': 'Taiwan',
+        'Republic Of Korea': 'South Korea',
+        'Dprk': 'North Korea',
+        "Democratic People's Republic Of Korea": 'North Korea',
+        'Uae': 'United Arab Emirates',
+        'Ksa': 'Saudi Arabia',
+        'Rok': 'South Korea',
+        'Roc': 'Taiwan',
+        'Republic Of China': 'Taiwan',
         'Chinese Taipei': 'Taiwan',
         'Taipei': 'Taiwan',
-        'Islamic Republic of Iran': 'Iran',
-        'Republic of Türkiye': 'Turkey',
-        'Republic of Turkiye': 'Turkey',
-        'Republic of Turkey': 'Turkey',
-        'Kingdom of Saudi Arabia': 'Saudi Arabia',
+        'Islamic Republic Of Iran': 'Iran',
+        'Republic Of Türkiye': 'Turkey',
+        'Republic Of Turkiye': 'Turkey',
+        'Republic Of Turkey': 'Turkey',
+        'Kingdom Of Saudi Arabia': 'Saudi Arabia',
         'Mainland China': 'China',
-        'PRC': 'China',
-        'Republic of India': 'India',
+        'Republic Of India': 'India',
         'Estado Unidos': 'United States',
         'América': 'United States',
         'Estados Unidos': 'United States',
-        'Republic of South Africa': 'South Africa',
-        'RSA': 'South Africa',
-        'UAE': 'United Arab Emirates',
+        'Republic Of South Africa': 'South Africa',
+        'Rsa': 'South Africa',
         'The Netherlands': 'Netherlands',
         'Holland': 'Netherlands',
         'Reino Unido': 'United Kingdom'
     };
 
-    // First check aliases
-    if (aliases[name]) {
-        return aliases[name];
+    // First check aliases with the formatted name
+    if (aliases[formattedName]) {
+        return aliases[formattedName];
     }
 
-    // Return original name if no alias found
-    return name;
+    // Return formatted name if no alias found
+    return formattedName;
 }
 
-export function getCountryCode(countryName) {
+// Initialize ISO code mapping - call this when loading the GeoJSON
+function initializeISOMapping(geojsonData) {
+    if (!geojsonData || !geojsonData.features) return;
+    
+    geojsonData.features.forEach(feature => {
+        if (feature.properties) {
+            const props = feature.properties;
+            const name = props.ADMIN || props.name;
+            if (props.ISO_A2) isoCodeMapping.set(props.ISO_A2.toLowerCase(), name);
+            if (props.ISO_A3) isoCodeMapping.set(props.ISO_A3.toLowerCase(), name);
+            // Also store normalized name for reverse lookup
+            const normalizedName = normalizeCountryName(name);
+            isoCodeMapping.set(normalizedName.toLowerCase(), name);
+        }
+    });
+}
+
+// Enhanced country matching that uses ISO codes
+function matchCountryName(name, geojsonFeature) {
+    const normalizedInput = normalizeCountryName(name).toLowerCase();
+    const featureProps = geojsonFeature.properties;
+    const featureName = normalizeCountryName(featureProps.ADMIN || featureProps.name).toLowerCase();
+    
+    // Direct name match
+    if (normalizedInput === featureName) return true;
+    
+    // Check if the input matches any ISO code
+    if (featureProps.ISO_A2 && normalizedInput === featureProps.ISO_A2.toLowerCase()) return true;
+    if (featureProps.ISO_A3 && normalizedInput === featureProps.ISO_A3.toLowerCase()) return true;
+    
+    // Check if the normalized name is in our mapping
+    const mappedName = isoCodeMapping.get(normalizedInput);
+    if (mappedName && normalizeCountryName(mappedName).toLowerCase() === featureName) return true;
+    
+    return false;
+}
+
+function getCountryCode(countryName) {
     const normalizedName = normalizeCountryName(countryName);
     return countryData[normalizedName]?.code;
 }
 
-export function getCountryFlag(countryCode) {
+function getCountryFlag(countryCode) {
     if (!countryCode) return '';
     return countryCode
         .toUpperCase()
@@ -132,15 +180,26 @@ export function getCountryFlag(countryCode) {
         );
 }
 
-export function normalizeCountry(input) {
+function normalizeCountry(input) {
     const name = normalizeCountryName(input);
     const code = getCountryCode(name);
     const flag = getCountryFlag(code);
     return { name, code, flag };
 }
 
-export function isCountryMatch(country1, country2) {
+function isCountryMatch(country1, country2) {
     const name1 = normalizeCountryName(country1.name || country1);
     const name2 = normalizeCountryName(country2.name || country2);
     return name1.toLowerCase() === name2.toLowerCase();
 }
+
+export {
+    getCountryCoordinates,
+    normalizeCountryName,
+    initializeISOMapping,
+    matchCountryName,
+    getCountryCode,
+    getCountryFlag,
+    normalizeCountry,
+    isCountryMatch
+};
