@@ -1,7 +1,7 @@
-import { initTheme } from './modules/theme.js';
-import { initWebSocket } from './modules/websocket.js';
-import { normalizeCountryName, getCountryFlag, getCountryCode } from './modules/countries.js';
-import { initHeatmap, updateHeatmap, updateTheme as updateHeatmapTheme } from './modules/heatmap.js';
+import { initTheme } from './theme.js';
+import { initWebSocket } from './websocket.js';
+import { normalizeCountryName, getCountryFlag, getCountryCode } from './countries.js';
+import { initHeatmap, updateHeatmap, updateTheme as updateHeatmapTheme } from './heatmap.js';
 
 // Global variables and utility functions
 let map;
@@ -120,37 +120,63 @@ function showCountryNews(countryName) {
     const countryTitle = document.getElementById('selectedCountry');
     const newsList = document.getElementById('countryNewsList');
     const countryFlag = document.querySelector('.country-flag');
-    
+
     const normalizedName = normalizeCountryName(countryName);
     countryTitle.textContent = normalizedName;
-    
-    // Get and set the country flag
+
+    // Get and set the country flag for the panel header
     const countryCode = getCountryCode(normalizedName);
     countryFlag.textContent = countryCode ? getCountryFlag(countryCode) : '';
-    
+
     newsList.innerHTML = '';
-    
+
     // Filter news items for the selected country
-    const countryNews = allNews.filter(item => 
-        item.tags.some(tag => 
-            tag.category === 'geography' && 
+    const countryNews = allNews.filter(item =>
+        item.tags.some(tag =>
+            tag.category === 'geography' &&
             normalizeCountryName(tag.name).toLowerCase() === normalizedName.toLowerCase()
         )
     );
-    
+
     if (countryNews.length === 0) {
         newsList.innerHTML = '<p class="no-news">No news available for this country.</p>';
     } else {
         countryNews.forEach(news => {
             const newsItem = document.createElement('div');
             newsItem.className = 'country-news-item';
+            
+            // Determine geography tags from the news post
+            const geoTags = (news.tags && Array.isArray(news.tags))
+                ? news.tags.filter(tag => tag.category === 'geography' && tag.name)
+                : [];
+            let flagsHTML = '';
+            
+            // If two or more geography tags are detected, convert first two to flags.
+            if (geoTags.length >= 2) {
+                flagsHTML = geoTags.slice(0, 2).map(tag => {
+                    // Normalize country name from the tag name
+                    const normalizedGeo = normalizeCountryName(tag.name);
+                    // Retrieve the country code
+                    const flagCountryCode = getCountryCode(normalizedGeo);
+                    // If a valid code is found, convert it to a flag; otherwise return empty string
+                    return flagCountryCode ? getCountryFlag(flagCountryCode) : '';
+                }).join(' ');
+            } else {
+                // If no or only one geography tag is present, use the default panel flag
+                const defaultFlagElem = document.querySelector('.country-flag');
+                flagsHTML = defaultFlagElem ? defaultFlagElem.textContent : '';
+            }
+            
+            // Build the news item content, appending the flags before the title
             newsItem.innerHTML = `
-                <h3>${news.title}</h3>
+                <h3>${flagsHTML} ${news.title}</h3>
                 <p>${news.description}</p>
                 <div class="meta">
                     <span>${formatDate(news.timestamp)}</span>
                 </div>
             `;
+            
+            // Add click event to open news link in a new window
             newsItem.addEventListener('click', () => {
                 window.open(news.link, '_blank', 'noopener');
             });
@@ -158,6 +184,7 @@ function showCountryNews(countryName) {
         });
     }
     
+    // Display the news panel
     newsPanel.style.display = 'flex';
 }
 
