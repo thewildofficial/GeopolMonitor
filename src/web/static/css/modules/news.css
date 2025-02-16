@@ -35,6 +35,69 @@
     flex-direction: column;
 }
 
+/* Special styling for articles without images in grid view */
+.grid-view .news-item:not(:has(.news-image[src])) {
+    background: var(--card-background);
+    position: relative;
+    overflow: hidden;
+}
+
+.grid-view .news-item:not(:has(.news-image[src])) .news-image-container {
+    padding-top: 0;
+    height: 0;
+}
+
+.grid-view .news-item:not(:has(.news-image[src])) .news-text {
+    padding: 1.25rem;
+}
+
+.grid-view .news-item:not(:has(.news-image[src])) .news-header {
+    position: relative;
+}
+
+.grid-view .news-item:not(:has(.news-image[src])) .news-header::before {
+    content: '';
+    position: absolute;
+    top: -60px;
+    right: -60px;
+    width: 120px;
+    height: 120px;
+    background: var(--accent-color);
+    opacity: 0.05;
+    border-radius: 60px;
+    transform: scale(0.95);
+    transition: transform 0.3s var(--spring-timing);
+}
+
+.grid-view .news-item:not(:has(.news-image[src])):hover .news-header::before {
+    transform: scale(1);
+}
+
+.grid-view .news-item:not(:has(.news-image[src])) h2 {
+    font-size: 1.1rem;
+    line-height: 1.4;
+    margin-bottom: 0.75rem;
+}
+
+.grid-view .news-item:not(:has(.news-image[src])) .description {
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin-bottom: 1rem;
+    color: var(--description-color);
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* Enhanced hover effect for imageless articles */
+.grid-view .news-item:not(:has(.news-image[src])):hover {
+    transform: translateY(-4px);
+    box-shadow: 
+        0 10px 20px rgba(0,0,0,0.08),
+        0 4px 8px rgba(0,0,0,0.04);
+}
+
 /* List view styles */
 .list-view .news-item {
     display: flex;
