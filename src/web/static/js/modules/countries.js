@@ -214,7 +214,7 @@ function normalizeCountry(input) {
     return { name, code, flag };
 }
 
-function isCountryMatch(country1, country2) {
+export function isCountryMatch(country1, country2) {
     const name1 = normalizeCountryName(country1.name || country1);
     const name2 = normalizeCountryName(country2.name || country2);
     return name1.toLowerCase() === name2.toLowerCase();
@@ -226,15 +226,13 @@ function isCountryMatch(country1, country2) {
  */
 async function loadCountryData() {
     try {
-        const response = await fetch('/static/assets/countries.json');
+        const response = await fetch('/static/assets/countries-lite.json');
         if (!response.ok) {
             throw new Error(`Failed to fetch GeoJSON: ${response.statusText}`);
         }
         const geojsonData = await response.json();
         console.log('GeoJSON loaded:', geojsonData.features.length, 'features');
-        
-        initializeISOMapping(geojsonData);
-        
+         
         // Verify data was loaded
         console.log('Country data loaded:', {
             countries: geoJsonCountryData.size,
@@ -256,6 +254,5 @@ export {
     getCountryCode,
     getCountryFlag,
     normalizeCountry,
-    isCountryMatch,
     loadCountryData
 };
