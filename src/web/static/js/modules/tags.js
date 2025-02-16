@@ -102,12 +102,15 @@ function createTag(name, count, category) {
     if (category === 'geography') {
         const countryData = normalizeCountry(name);
         const normalizedName = countryData.name;
-        const flag = countryData.flag;
+        const flag = countryData.flag || '';
+        
+        // Store both flag and name separately for consistent access
+        tag.dataset.tagName = normalizedName;
+        tag.dataset.flag = flag;
+        tag.dataset.displayName = `${flag} ${normalizedName}`;
         
         // Create tag content with flag
-        tag.innerHTML = flag ? `${flag} ${normalizedName} ` : `${normalizedName} `;
-        tag.dataset.tagName = normalizedName;
-        tag.dataset.displayName = flag ? `${flag} ${normalizedName}` : normalizedName;
+        tag.innerHTML = `${flag} ${normalizedName}`;
     } else {
         tag.textContent = name;
         tag.dataset.tagName = name;
@@ -157,9 +160,40 @@ function renderTags(searchTerm = '') {
     });
     
     const searchLower = searchTerm.toLowerCase();
+
+    // Helper function to merge duplicate tags and their counts
+    function mergeDuplicates(tags) {
+        const mergedMap = new Map();
+        
+        tags.forEach(tag => {
+            let key = tag.name;
+            if (key) {
+                // For geography tags, normalize the country name
+                if (tag.category === 'geography') {
+                    key = normalizeCountry(tag.name).name;
+                }
+                
+                if (mergedMap.has(key)) {
+                    mergedMap.set(key, {
+                        name: key,
+                        count: mergedMap.get(key).count + tag.count,
+                        category: tag.category
+                    });
+                } else {
+                    mergedMap.set(key, {
+                        name: key,
+                        count: tag.count,
+                        category: tag.category
+                    });
+                }
+            }
+        });
+        
+        return Array.from(mergedMap.values());
+    }
     
     if (window.allTags.source) {
-        const filteredSource = window.allTags.source
+        const filteredSource = mergeDuplicates(window.allTags.source.map(t => ({...t, category: 'source'})))
             .sort((a, b) => b.count - a.count)
             .filter(tag => tag.name.toLowerCase().includes(searchLower));
         
@@ -171,7 +205,7 @@ function renderTags(searchTerm = '') {
     }
     
     if (window.allTags.topic) {
-        const filteredTopic = window.allTags.topic
+        const filteredTopic = mergeDuplicates(window.allTags.topic.map(t => ({...t, category: 'topic'})))
             .sort((a, b) => b.count - a.count)
             .filter(tag => tag.name.toLowerCase().includes(searchLower));
         
@@ -183,7 +217,7 @@ function renderTags(searchTerm = '') {
     }
     
     if (window.allTags.geography) {
-        const filteredGeo = window.allTags.geography
+        const filteredGeo = mergeDuplicates(window.allTags.geography.map(t => ({...t, category: 'geography'})))
             .sort((a, b) => b.count - a.count)
             .filter(tag => {
                 const countryData = normalizeCountry(tag.name);
@@ -196,6 +230,17 @@ function renderTags(searchTerm = '') {
                 return searchText.includes(searchLower);
             });
         
+        // Log geography tags sorted by count
+        console.log('Geography tags by count:', 
+            filteredGeo.map(tag => {
+                const countryData = normalizeCountry(tag.name);
+                return {
+                    name: `${countryData.flag || ''} ${countryData.name}`,
+                    count: tag.count
+                };
+            })
+        );
+        
         filteredGeo.forEach(tag => {
             geoContainer.appendChild(createTag(tag.name, tag.count, 'geography'));
         });
@@ -204,7 +249,7 @@ function renderTags(searchTerm = '') {
     }
     
     if (window.allTags.events) {
-        const filteredEvents = window.allTags.events
+        const filteredEvents = mergeDuplicates(window.allTags.events.map(t => ({...t, category: 'events'})))
             .sort((a, b) => b.count - a.count)
             .filter(tag => tag.name.toLowerCase().includes(searchLower));
         
@@ -328,9 +373,8 @@ export function toggleTagFilters() {
 
 function formatTagDisplayName(name, category) {
     if (category === 'geography') {
-        return name.toLowerCase().split(' ').map(word => 
-            word.charAt(0).toUpperCase() + word.slice(1)
-        ).join(' ');
+        const countryData = normalizeCountry(name);
+        return `${countryData.flag || ''} ${countryData.name}`;
     }
     return name;
 }
