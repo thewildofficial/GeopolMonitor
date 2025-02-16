@@ -29,7 +29,7 @@ function initMap() {
     });
     
     // Load GeoJSON data for countries
-    fetch('https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson')
+    fetch('/static/assets/countries.json') 
         .then(response => response.json())
         .then(data => {
             countryLayer = L.geoJSON(data, {

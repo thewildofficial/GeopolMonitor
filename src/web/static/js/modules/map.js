@@ -38,7 +38,7 @@ export class NewsMap {
 
     async loadCountryBoundaries() {
         try {
-            const response = await fetch('https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson');
+            const response = await fetch('/static/assets/countries.json');
             this.geoJsonData = await response.json();
             
             // Transform GeoJSON to include normalized country data

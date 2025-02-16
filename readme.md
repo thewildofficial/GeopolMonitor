@@ -1,6 +1,6 @@
 # GeopolMonitor 🌍
 
-[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![FastAPI](https://img.shields.io/badge/FastAPI-modern_web-009688.svg)](https://fastapi.tiangolo.com)
 [![Telegram Bot API](https://img.shields.io/badge/Telegram-Bot_API-blue.svg)](https://core.telegram.org/bots/api)
@@ -21,74 +21,93 @@ A real-time geopolitical news monitoring system with AI-powered context inferenc
 - [Contributing](#contributing-)
 - [License](#license-)
 
-## Features ✨
-
-- 🤖 AI-powered news analysis with Gemini
-- 🔄 Real-time RSS feed monitoring
-- 📱 Modern web interface with:
-  - WebSocket live updates
-  - Grid/List view toggle
-  - Dark/Light theme
-  - Advanced search
-  - Time-based filtering
-- 🏷️ Automatic emoji tagging for:
-  - Locations (country flags)
-  - Topics (economy, politics, etc.)
-- 📲 Telegram channel integration
-- 🗄️ SQLite database with automated backups
-- 🐳 Docker support for easy deployment
-
 ## Project Structure 📁
 
 ```
 GeopolMonitor/
 ├── src/                    # Main source code
-│   ├── core/              # Core monitoring & processing
-│   ├── database/          # Data models & backup system
-│   ├── utils/             # AI & text processing
-│   ├── telegram/          # Telegram bot integration
-│   └── web/              # FastAPI web interface
-├── config/                # Configuration management
-├── data/                  # Database and backups
-├── tests/                # Test suite
-└── docker/               # Docker configuration
+│   ├── core/              # Core functionality
+│   │   ├── processor.py   # News processing logic
+│   │   └── feed_watcher.py# Feed monitoring
+│   ├── database/          # Database operations
+│   │   └── models.py      # Database models
+│   ├── utils/             # Utility functions
+│   │   ├── text.py       # Text processing
+│   │   └── ai.py         # AI integration
+│   ├── telegram/          # Telegram integration
+│   │   └── bot.py        # Bot functionality
+│   └── web/              # Web interface
+│       └── main.py       # FastAPI app
+├── config/                # Configuration
+│   └── settings.py       # Settings
+├── web/                  # Web assets
+│   ├── static/           # Static files
+│   └── templates/        # HTML templates
+├── tests/                # Test files
+├── bot.py               # Bot entry point
+└── web_server.py        # Web server entry point
 ```
+
+## Features ✨
+
+- Real-time RSS feed monitoring
+- WebSocket-based live updates
+- Responsive grid/list view toggle
+- Theme switching (light/dark mode)
+- AI-powered context inference with Gemini
+- Automatic emoji tagging for locations and topics
+- Telegram channel integration
+- Modern web interface with search and time filtering
+- Image extraction and handling
+- Rate-limited API management
+- SQLite database for caching
 
 ## Prerequisites 📋
 
-- Python 3.12+
-- Telegram Bot Token & Channel
+- Python 3.9+
+- A Telegram Bot Token
+- A Telegram Channel
 - Google Gemini API Key
-- Docker (optional)
 
-## Quick Start 🚀
+## Setup Guide 🚀
 
-1. **Clone and Setup:**
+1. **Clone and Setup Environment**
    ```bash
    git clone <repository-url>
    cd GeopolMonitor
-   python -m venv geopolenv
-   source geopolenv/bin/activate  # Windows: geopolenv\Scripts\activate
+   python -m venv venv
+   source venv/bin/activate  # or `venv\Scripts\activate` on Windows
    pip install -r requirements.txt
    ```
 
-2. **Configure Environment:**
-   Create `.env`:
+2. **Configure Environment**
+   Create a `.env` file:
    ```
    TELEGRAM_TOKEN=your_bot_token
    TELEGRAM_CHANNEL_ID=your_channel_id
    GEMINI_API_KEY=your_gemini_api_key
    ```
 
-3. **Start Services:**
-   ```bash
-   # With Docker:
-   docker-compose up -d
-
-   # Without Docker:
-   python bot.py        # Start monitoring
-   python web_server.py # Start web interface
+3. **Initialize Database**
+   ```python
+   python -c "from src.database.models import init_db; init_db()"
    ```
+
+4. **Configure Feeds**
+   Add RSS feed URLs to `feeds.txt`
+
+## Installation
+
+1. Create a virtual environment (recommended):
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows use: venv\Scripts\activate
+```
+
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
 
 ## Usage 💡
 
@@ -136,7 +155,7 @@ The system uses SQLite for:
 
 The database (`news_monitor.db`) is automatically created in the project root. To reset the database:
 ```bash
-rm data/news_monitor.db
+rm news_monitor.db
 python -c "from src.database.models import init_db; init_db()"
 ```
 
@@ -151,7 +170,7 @@ The system respects Gemini API's free tier limits:
 
 Run the test suite:
 ```bash
-pytest
+pytest test_helper.py
 ```
 
 ## Emoji Classification 🎯
@@ -192,8 +211,8 @@ The system automatically classifies news using:
 
 ## Contributing 🤝
 
-We welcome contributions! Please check our contributing guidelines and roadmap.
+Feel free to submit issues, fork the repository, and create pull requests for any improvements.
 
 ## License 📄
 
-MIT License - see [LICENSE](LICENSE)
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
