@@ -1,5 +1,22 @@
 # Changelog
 
+## [Unreleased] – 2024-2-16
+
+### Major Map Interface Revamp
+- **Country News Panel:** Implemented a floating panel that displays country-specific news when clicking on a country
+- **Enhanced UI:** Improved map interface with Apple-style floating window design and better visual hierarchy
+- **Theme Integration:** Refined dark/light mode handling for the news panel with proper contrast and readability
+- **Performance:** Added comprehensive country name matching and emoji-based detection for better news filtering
+- **Country Detection:** Improved country name normalization and mapping for more accurate news association
+- **Error Handling:** Added debug mode and logging for better troubleshooting of country-news associations
+
+### Visual Improvements
+- **Panel Design:** Added sleek floating panel design with backdrop blur and smooth animations
+- **Contrast:** Enhanced text readability with better background opacity and contrast ratios
+- **Mobile Responsiveness:** Improved mobile view with bottom sheet design for country news
+- **Map Attribution:** Removed map attribution for cleaner interface
+- **Country Highlights:** Added pulsing highlight effect for selected countries
+
 ## [Unreleased] – 2024-2-13
 
 ### Map Updates (In Progress)
