@@ -1,0 +1,2045 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Aruba",
+        "ISO_A3": "ABW",
+        "ISO_A2": "AW"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Afghanistan",
+        "ISO_A3": "AFG",
+        "ISO_A2": "AF"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Angola",
+        "ISO_A3": "AGO",
+        "ISO_A2": "AO"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Anguilla",
+        "ISO_A3": "AIA",
+        "ISO_A2": "AI"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Albania",
+        "ISO_A3": "ALB",
+        "ISO_A2": "AL"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Aland",
+        "ISO_A3": "ALA",
+        "ISO_A2": "AX"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Andorra",
+        "ISO_A3": "AND",
+        "ISO_A2": "AD"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "United Arab Emirates",
+        "ISO_A3": "ARE",
+        "ISO_A2": "AE"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Argentina",
+        "ISO_A3": "ARG",
+        "ISO_A2": "AR"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Armenia",
+        "ISO_A3": "ARM",
+        "ISO_A2": "AM"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "American Samoa",
+        "ISO_A3": "ASM",
+        "ISO_A2": "AS"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Antarctica",
+        "ISO_A3": "ATA",
+        "ISO_A2": "AQ"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Ashmore and Cartier Islands",
+        "ISO_A3": "-99",
+        "ISO_A2": "AQ"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "French Southern and Antarctic Lands",
+        "ISO_A3": "ATF",
+        "ISO_A2": "TF"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Antigua and Barbuda",
+        "ISO_A3": "ATG",
+        "ISO_A2": "AG"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Australia",
+        "ISO_A3": "AUS",
+        "ISO_A2": "AU"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Austria",
+        "ISO_A3": "AUT",
+        "ISO_A2": "AT"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Azerbaijan",
+        "ISO_A3": "AZE",
+        "ISO_A2": "AZ"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Burundi",
+        "ISO_A3": "BDI",
+        "ISO_A2": "BI"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Belgium",
+        "ISO_A3": "BEL",
+        "ISO_A2": "BE"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Benin",
+        "ISO_A3": "BEN",
+        "ISO_A2": "BJ"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Burkina Faso",
+        "ISO_A3": "BFA",
+        "ISO_A2": "BF"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Bangladesh",
+        "ISO_A3": "BGD",
+        "ISO_A2": "BD"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Bulgaria",
+        "ISO_A3": "BGR",
+        "ISO_A2": "BG"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Bahrain",
+        "ISO_A3": "BHR",
+        "ISO_A2": "BH"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "The Bahamas",
+        "ISO_A3": "BHS",
+        "ISO_A2": "BS"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Bosnia and Herzegovina",
+        "ISO_A3": "BIH",
+        "ISO_A2": "BA"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Bajo Nuevo Bank (Petrel Is.)",
+        "ISO_A3": "-99",
+        "ISO_A2": "UM"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Saint Barthelemy",
+        "ISO_A3": "BLM",
+        "ISO_A2": "BL"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Belarus",
+        "ISO_A3": "BLR",
+        "ISO_A2": "BY"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Belize",
+        "ISO_A3": "BLZ",
+        "ISO_A2": "BZ"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Bermuda",
+        "ISO_A3": "BMU",
+        "ISO_A2": "BM"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Bolivia",
+        "ISO_A3": "BOL",
+        "ISO_A2": "BO"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Brazil",
+        "ISO_A3": "BRA",
+        "ISO_A2": "BR"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Barbados",
+        "ISO_A3": "BRB",
+        "ISO_A2": "BB"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Brunei",
+        "ISO_A3": "BRN",
+        "ISO_A2": "BN"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Bhutan",
+        "ISO_A3": "BTN",
+        "ISO_A2": "BT"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Botswana",
+        "ISO_A3": "BWA",
+        "ISO_A2": "BW"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Central African Republic",
+        "ISO_A3": "CAF",
+        "ISO_A2": "CF"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Canada",
+        "ISO_A3": "CAN",
+        "ISO_A2": "CA"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Switzerland",
+        "ISO_A3": "CHE",
+        "ISO_A2": "CH"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Chile",
+        "ISO_A3": "CHL",
+        "ISO_A2": "CL"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "China",
+        "ISO_A3": "CHN",
+        "ISO_A2": "CN"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Ivory Coast",
+        "ISO_A3": "CIV",
+        "ISO_A2": "CI"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Clipperton Island",
+        "ISO_A3": "-99",
+        "ISO_A2": "-"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Cameroon",
+        "ISO_A3": "CMR",
+        "ISO_A2": "CM"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Cyprus No Mans Area",
+        "ISO_A3": "-99",
+        "ISO_A2": "-"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Democratic Republic of the Congo",
+        "ISO_A3": "COD",
+        "ISO_A2": "CD"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Republic of Congo",
+        "ISO_A3": "COG",
+        "ISO_A2": "CG"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Cook Islands",
+        "ISO_A3": "COK",
+        "ISO_A2": "CK"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Colombia",
+        "ISO_A3": "COL",
+        "ISO_A2": "CO"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Comoros",
+        "ISO_A3": "COM",
+        "ISO_A2": "KM"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Cape Verde",
+        "ISO_A3": "CPV",
+        "ISO_A2": "CV"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Costa Rica",
+        "ISO_A3": "CRI",
+        "ISO_A2": "CR"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Coral Sea Islands",
+        "ISO_A3": "-99",
+        "ISO_A2": "-"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Cuba",
+        "ISO_A3": "CUB",
+        "ISO_A2": "CU"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Cura\u00e7ao",
+        "ISO_A3": "CUW",
+        "ISO_A2": "CW"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Cayman Islands",
+        "ISO_A3": "CYM",
+        "ISO_A2": "KY"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Northern Cyprus",
+        "ISO_A3": "-99",
+        "ISO_A2": "-"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Cyprus",
+        "ISO_A3": "CYP",
+        "ISO_A2": "CY"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Czech Republic",
+        "ISO_A3": "CZE",
+        "ISO_A2": "CZ"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Germany",
+        "ISO_A3": "DEU",
+        "ISO_A2": "DE"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Djibouti",
+        "ISO_A3": "DJI",
+        "ISO_A2": "DJ"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Dominica",
+        "ISO_A3": "DMA",
+        "ISO_A2": "DM"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Denmark",
+        "ISO_A3": "DNK",
+        "ISO_A2": "DK"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Dominican Republic",
+        "ISO_A3": "DOM",
+        "ISO_A2": "DO"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Algeria",
+        "ISO_A3": "DZA",
+        "ISO_A2": "DZ"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Ecuador",
+        "ISO_A3": "ECU",
+        "ISO_A2": "EC"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Egypt",
+        "ISO_A3": "EGY",
+        "ISO_A2": "EG"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Eritrea",
+        "ISO_A3": "ERI",
+        "ISO_A2": "ER"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Dhekelia Sovereign Base Area",
+        "ISO_A3": "-99",
+        "ISO_A2": "-"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Spain",
+        "ISO_A3": "ESP",
+        "ISO_A2": "ES"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Estonia",
+        "ISO_A3": "EST",
+        "ISO_A2": "EE"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Ethiopia",
+        "ISO_A3": "ETH",
+        "ISO_A2": "ET"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Finland",
+        "ISO_A3": "FIN",
+        "ISO_A2": "FI"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Fiji",
+        "ISO_A3": "FJI",
+        "ISO_A2": "FJ"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Falkland Islands",
+        "ISO_A3": "FLK",
+        "ISO_A2": "FK"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "France",
+        "ISO_A3": "FRA",
+        "ISO_A2": "FR"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Faroe Islands",
+        "ISO_A3": "FRO",
+        "ISO_A2": "FO"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Federated States of Micronesia",
+        "ISO_A3": "FSM",
+        "ISO_A2": "FM"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Gabon",
+        "ISO_A3": "GAB",
+        "ISO_A2": "GA"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "United Kingdom",
+        "ISO_A3": "GBR",
+        "ISO_A2": "GB"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Georgia",
+        "ISO_A3": "GEO",
+        "ISO_A2": "GE"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Guernsey",
+        "ISO_A3": "GGY",
+        "ISO_A2": "GG"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Ghana",
+        "ISO_A3": "GHA",
+        "ISO_A2": "GH"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Gibraltar",
+        "ISO_A3": "GIB",
+        "ISO_A2": "GI"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Guinea",
+        "ISO_A3": "GIN",
+        "ISO_A2": "GN"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Gambia",
+        "ISO_A3": "GMB",
+        "ISO_A2": "GM"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Guinea Bissau",
+        "ISO_A3": "GNB",
+        "ISO_A2": "GW"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Equatorial Guinea",
+        "ISO_A3": "GNQ",
+        "ISO_A2": "GQ"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Greece",
+        "ISO_A3": "GRC",
+        "ISO_A2": "GR"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Grenada",
+        "ISO_A3": "GRD",
+        "ISO_A2": "GD"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Greenland",
+        "ISO_A3": "GRL",
+        "ISO_A2": "GL"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Guatemala",
+        "ISO_A3": "GTM",
+        "ISO_A2": "GT"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Guam",
+        "ISO_A3": "GUM",
+        "ISO_A2": "GU"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Guyana",
+        "ISO_A3": "GUY",
+        "ISO_A2": "GY"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Hong Kong S.A.R.",
+        "ISO_A3": "HKG",
+        "ISO_A2": "HK"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Heard Island and McDonald Islands",
+        "ISO_A3": "HMD",
+        "ISO_A2": "HM"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Honduras",
+        "ISO_A3": "HND",
+        "ISO_A2": "HN"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Croatia",
+        "ISO_A3": "HRV",
+        "ISO_A2": "HR"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Haiti",
+        "ISO_A3": "HTI",
+        "ISO_A2": "HT"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Hungary",
+        "ISO_A3": "HUN",
+        "ISO_A2": "HU"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Indonesia",
+        "ISO_A3": "IDN",
+        "ISO_A2": "ID"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Isle of Man",
+        "ISO_A3": "IMN",
+        "ISO_A2": "IM"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "India",
+        "ISO_A3": "IND",
+        "ISO_A2": "IN"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Indian Ocean Territories",
+        "ISO_A3": "-99",
+        "ISO_A2": "-"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "British Indian Ocean Territory",
+        "ISO_A3": "IOT",
+        "ISO_A2": "IO"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Ireland",
+        "ISO_A3": "IRL",
+        "ISO_A2": "IE"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Iran",
+        "ISO_A3": "IRN",
+        "ISO_A2": "IR"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Iraq",
+        "ISO_A3": "IRQ",
+        "ISO_A2": "IQ"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Iceland",
+        "ISO_A3": "ISL",
+        "ISO_A2": "IS"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Israel",
+        "ISO_A3": "ISR",
+        "ISO_A2": "IL"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Italy",
+        "ISO_A3": "ITA",
+        "ISO_A2": "IT"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Jamaica",
+        "ISO_A3": "JAM",
+        "ISO_A2": "JM"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Jersey",
+        "ISO_A3": "JEY",
+        "ISO_A2": "JE"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Jordan",
+        "ISO_A3": "JOR",
+        "ISO_A2": "JO"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Japan",
+        "ISO_A3": "JPN",
+        "ISO_A2": "JP"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Baykonur Cosmodrome",
+        "ISO_A3": "-99",
+        "ISO_A2": "-"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Siachen Glacier",
+        "ISO_A3": "-99",
+        "ISO_A2": "-"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Kazakhstan",
+        "ISO_A3": "KAZ",
+        "ISO_A2": "KZ"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Kenya",
+        "ISO_A3": "KEN",
+        "ISO_A2": "KE"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Kyrgyzstan",
+        "ISO_A3": "KGZ",
+        "ISO_A2": "KG"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Cambodia",
+        "ISO_A3": "KHM",
+        "ISO_A2": "KH"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Kiribati",
+        "ISO_A3": "KIR",
+        "ISO_A2": "KI"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Saint Kitts and Nevis",
+        "ISO_A3": "KNA",
+        "ISO_A2": "KN"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "South Korea",
+        "ISO_A3": "KOR",
+        "ISO_A2": "KR"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Kosovo",
+        "ISO_A3": "-99",
+        "ISO_A2": "-"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Kuwait",
+        "ISO_A3": "KWT",
+        "ISO_A2": "KW"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Laos",
+        "ISO_A3": "LAO",
+        "ISO_A2": "LA"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Lebanon",
+        "ISO_A3": "LBN",
+        "ISO_A2": "LB"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Liberia",
+        "ISO_A3": "LBR",
+        "ISO_A2": "LR"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Libya",
+        "ISO_A3": "LBY",
+        "ISO_A2": "LY"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Saint Lucia",
+        "ISO_A3": "LCA",
+        "ISO_A2": "LC"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Liechtenstein",
+        "ISO_A3": "LIE",
+        "ISO_A2": "LI"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Sri Lanka",
+        "ISO_A3": "LKA",
+        "ISO_A2": "LK"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Lesotho",
+        "ISO_A3": "LSO",
+        "ISO_A2": "LS"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Lithuania",
+        "ISO_A3": "LTU",
+        "ISO_A2": "LT"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Luxembourg",
+        "ISO_A3": "LUX",
+        "ISO_A2": "LU"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Latvia",
+        "ISO_A3": "LVA",
+        "ISO_A2": "LV"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Macao S.A.R",
+        "ISO_A3": "MAC",
+        "ISO_A2": "MO"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Saint Martin",
+        "ISO_A3": "MAF",
+        "ISO_A2": "MF"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Morocco",
+        "ISO_A3": "MAR",
+        "ISO_A2": "MA"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Monaco",
+        "ISO_A3": "MCO",
+        "ISO_A2": "MC"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Moldova",
+        "ISO_A3": "MDA",
+        "ISO_A2": "MD"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Madagascar",
+        "ISO_A3": "MDG",
+        "ISO_A2": "MG"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Maldives",
+        "ISO_A3": "MDV",
+        "ISO_A2": "MV"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Mexico",
+        "ISO_A3": "MEX",
+        "ISO_A2": "MX"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Marshall Islands",
+        "ISO_A3": "MHL",
+        "ISO_A2": "MH"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Macedonia",
+        "ISO_A3": "MKD",
+        "ISO_A2": "MK"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Mali",
+        "ISO_A3": "MLI",
+        "ISO_A2": "ML"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Malta",
+        "ISO_A3": "MLT",
+        "ISO_A2": "MT"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Myanmar",
+        "ISO_A3": "MMR",
+        "ISO_A2": "MM"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Montenegro",
+        "ISO_A3": "MNE",
+        "ISO_A2": "ME"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Mongolia",
+        "ISO_A3": "MNG",
+        "ISO_A2": "MN"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Northern Mariana Islands",
+        "ISO_A3": "MNP",
+        "ISO_A2": "MP"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Mozambique",
+        "ISO_A3": "MOZ",
+        "ISO_A2": "MZ"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Mauritania",
+        "ISO_A3": "MRT",
+        "ISO_A2": "MR"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Montserrat",
+        "ISO_A3": "MSR",
+        "ISO_A2": "MS"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Mauritius",
+        "ISO_A3": "MUS",
+        "ISO_A2": "MU"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Malawi",
+        "ISO_A3": "MWI",
+        "ISO_A2": "MW"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Malaysia",
+        "ISO_A3": "MYS",
+        "ISO_A2": "MY"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Namibia",
+        "ISO_A3": "NAM",
+        "ISO_A2": "NA"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "New Caledonia",
+        "ISO_A3": "NCL",
+        "ISO_A2": "NC"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Niger",
+        "ISO_A3": "NER",
+        "ISO_A2": "NE"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Norfolk Island",
+        "ISO_A3": "NFK",
+        "ISO_A2": "NF"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Nigeria",
+        "ISO_A3": "NGA",
+        "ISO_A2": "NG"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Nicaragua",
+        "ISO_A3": "NIC",
+        "ISO_A2": "NI"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Niue",
+        "ISO_A3": "NIU",
+        "ISO_A2": "NU"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Netherlands",
+        "ISO_A3": "NLD",
+        "ISO_A2": "NL"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Norway",
+        "ISO_A3": "NOR",
+        "ISO_A2": "NO"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Nepal",
+        "ISO_A3": "NPL",
+        "ISO_A2": "NP"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Nauru",
+        "ISO_A3": "NRU",
+        "ISO_A2": "NR"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "New Zealand",
+        "ISO_A3": "NZL",
+        "ISO_A2": "NZ"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Oman",
+        "ISO_A3": "OMN",
+        "ISO_A2": "OM"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Pakistan",
+        "ISO_A3": "PAK",
+        "ISO_A2": "PK"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Panama",
+        "ISO_A3": "PAN",
+        "ISO_A2": "PA"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Pitcairn Islands",
+        "ISO_A3": "PCN",
+        "ISO_A2": "PN"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Peru",
+        "ISO_A3": "PER",
+        "ISO_A2": "PE"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Spratly Islands",
+        "ISO_A3": "-99",
+        "ISO_A2": "-"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Philippines",
+        "ISO_A3": "PHL",
+        "ISO_A2": "PH"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Palau",
+        "ISO_A3": "PLW",
+        "ISO_A2": "PW"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Papua New Guinea",
+        "ISO_A3": "PNG",
+        "ISO_A2": "PG"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Poland",
+        "ISO_A3": "POL",
+        "ISO_A2": "PL"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Puerto Rico",
+        "ISO_A3": "PRI",
+        "ISO_A2": "PR"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "North Korea",
+        "ISO_A3": "PRK",
+        "ISO_A2": "KP"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Portugal",
+        "ISO_A3": "PRT",
+        "ISO_A2": "PT"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Paraguay",
+        "ISO_A3": "PRY",
+        "ISO_A2": "PY"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Palestine",
+        "ISO_A3": "PSE",
+        "ISO_A2": "PS"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "French Polynesia",
+        "ISO_A3": "PYF",
+        "ISO_A2": "PF"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Qatar",
+        "ISO_A3": "QAT",
+        "ISO_A2": "QA"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Romania",
+        "ISO_A3": "ROU",
+        "ISO_A2": "RO"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Russia",
+        "ISO_A3": "RUS",
+        "ISO_A2": "RU"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Rwanda",
+        "ISO_A3": "RWA",
+        "ISO_A2": "RW"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Western Sahara",
+        "ISO_A3": "ESH",
+        "ISO_A2": "EH"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Saudi Arabia",
+        "ISO_A3": "SAU",
+        "ISO_A2": "SA"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Scarborough Reef",
+        "ISO_A3": "-99",
+        "ISO_A2": "-"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Sudan",
+        "ISO_A3": "SDN",
+        "ISO_A2": "SD"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "South Sudan",
+        "ISO_A3": "SSD",
+        "ISO_A2": "SS"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Senegal",
+        "ISO_A3": "SEN",
+        "ISO_A2": "SN"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Serranilla Bank",
+        "ISO_A3": "-99",
+        "ISO_A2": "-"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Singapore",
+        "ISO_A3": "SGP",
+        "ISO_A2": "SG"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "South Georgia and South Sandwich Islands",
+        "ISO_A3": "SGS",
+        "ISO_A2": "GS"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Saint Helena",
+        "ISO_A3": "SHN",
+        "ISO_A2": "SH"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Solomon Islands",
+        "ISO_A3": "SLB",
+        "ISO_A2": "SB"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Sierra Leone",
+        "ISO_A3": "SLE",
+        "ISO_A2": "SL"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "El Salvador",
+        "ISO_A3": "SLV",
+        "ISO_A2": "SV"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "San Marino",
+        "ISO_A3": "SMR",
+        "ISO_A2": "SM"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Somaliland",
+        "ISO_A3": "-99",
+        "ISO_A2": "-"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Somalia",
+        "ISO_A3": "SOM",
+        "ISO_A2": "SO"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Saint Pierre and Miquelon",
+        "ISO_A3": "SPM",
+        "ISO_A2": "PM"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Republic of Serbia",
+        "ISO_A3": "SRB",
+        "ISO_A2": "RS"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Sao Tome and Principe",
+        "ISO_A3": "STP",
+        "ISO_A2": "ST"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Suriname",
+        "ISO_A3": "SUR",
+        "ISO_A2": "SR"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Slovakia",
+        "ISO_A3": "SVK",
+        "ISO_A2": "SK"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Slovenia",
+        "ISO_A3": "SVN",
+        "ISO_A2": "SI"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Sweden",
+        "ISO_A3": "SWE",
+        "ISO_A2": "SE"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Swaziland",
+        "ISO_A3": "SWZ",
+        "ISO_A2": "SZ"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Sint Maarten",
+        "ISO_A3": "SXM",
+        "ISO_A2": "SX"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Seychelles",
+        "ISO_A3": "SYC",
+        "ISO_A2": "SC"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Syria",
+        "ISO_A3": "SYR",
+        "ISO_A2": "SY"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Turks and Caicos Islands",
+        "ISO_A3": "TCA",
+        "ISO_A2": "TC"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Chad",
+        "ISO_A3": "TCD",
+        "ISO_A2": "TD"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Togo",
+        "ISO_A3": "TGO",
+        "ISO_A2": "TG"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Thailand",
+        "ISO_A3": "THA",
+        "ISO_A2": "TH"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Tajikistan",
+        "ISO_A3": "TJK",
+        "ISO_A2": "TJ"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Turkmenistan",
+        "ISO_A3": "TKM",
+        "ISO_A2": "TM"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "East Timor",
+        "ISO_A3": "TLS",
+        "ISO_A2": "TL"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Tonga",
+        "ISO_A3": "TON",
+        "ISO_A2": "TO"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Trinidad and Tobago",
+        "ISO_A3": "TTO",
+        "ISO_A2": "TT"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Tunisia",
+        "ISO_A3": "TUN",
+        "ISO_A2": "TN"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Turkey",
+        "ISO_A3": "TUR",
+        "ISO_A2": "TR"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Tuvalu",
+        "ISO_A3": "TUV",
+        "ISO_A2": "TV"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Taiwan",
+        "ISO_A3": "TWN",
+        "ISO_A2": "TW"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "United Republic of Tanzania",
+        "ISO_A3": "TZA",
+        "ISO_A2": "TZ"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Uganda",
+        "ISO_A3": "UGA",
+        "ISO_A2": "UG"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Ukraine",
+        "ISO_A3": "UKR",
+        "ISO_A2": "UA"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "United States Minor Outlying Islands",
+        "ISO_A3": "UMI",
+        "ISO_A2": "UM"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Uruguay",
+        "ISO_A3": "URY",
+        "ISO_A2": "UY"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "United States of America",
+        "ISO_A3": "USA",
+        "ISO_A2": "US"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "US Naval Base Guantanamo Bay",
+        "ISO_A3": "-99",
+        "ISO_A2": "-"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Uzbekistan",
+        "ISO_A3": "UZB",
+        "ISO_A2": "UZ"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Vatican",
+        "ISO_A3": "VAT",
+        "ISO_A2": "VA"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Saint Vincent and the Grenadines",
+        "ISO_A3": "VCT",
+        "ISO_A2": "VC"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Venezuela",
+        "ISO_A3": "VEN",
+        "ISO_A2": "VE"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "British Virgin Islands",
+        "ISO_A3": "VGB",
+        "ISO_A2": "VG"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "United States Virgin Islands",
+        "ISO_A3": "VIR",
+        "ISO_A2": "VI"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Vietnam",
+        "ISO_A3": "VNM",
+        "ISO_A2": "VN"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Vanuatu",
+        "ISO_A3": "VUT",
+        "ISO_A2": "VU"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Wallis and Futuna",
+        "ISO_A3": "WLF",
+        "ISO_A2": "WF"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Akrotiri Sovereign Base Area",
+        "ISO_A3": "-99",
+        "ISO_A2": "-"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Samoa",
+        "ISO_A3": "WSM",
+        "ISO_A2": "WS"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Yemen",
+        "ISO_A3": "YEM",
+        "ISO_A2": "YE"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "South Africa",
+        "ISO_A3": "ZAF",
+        "ISO_A2": "ZA"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Zambia",
+        "ISO_A3": "ZMB",
+        "ISO_A2": "ZM"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "ADMIN": "Zimbabwe",
+        "ISO_A3": "ZWE",
+        "ISO_A2": "ZW"
+      }
+    }
+  ]
+}
