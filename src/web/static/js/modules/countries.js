@@ -226,7 +226,7 @@ function isCountryMatch(country1, country2) {
  */
 async function loadCountryData() {
     try {
-        const response = await fetch('https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson');
+        const response = await fetch('/static/assets/countries.json');
         if (!response.ok) {
             throw new Error(`Failed to fetch GeoJSON: ${response.statusText}`);
         }

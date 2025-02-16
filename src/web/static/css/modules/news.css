@@ -1,18 +1,22 @@
 /* News item base styles */
 .news-item {
     background: var(--card-background);
-    border: 1px solid var(--border-color);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 8px;
     overflow: hidden;
-    transition: all var(--animation-duration) var(--animation-timing);
+    transition: all 0.5s cubic-bezier(0.23, 1, 0.32, 1);
     cursor: pointer;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    box-shadow: 
+        0 4px 6px rgba(0, 0, 0, 0.03),
+        0 1px 3px rgba(0, 0, 0, 0.08);
     transform-origin: center;
     opacity: 1;
     transform: translateY(0) scale(1);
     will-change: transform, opacity, box-shadow;
     backface-visibility: hidden;
     perspective: 1000px;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
 }
 
 /* Grid view styles */
@@ -40,6 +44,8 @@
     background: var(--card-background);
     position: relative;
     overflow: hidden;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
 }
 
 .grid-view .news-item:not(:has(.news-image[src])) .news-image-container {
@@ -66,7 +72,7 @@
     opacity: 0.05;
     border-radius: 60px;
     transform: scale(0.95);
-    transition: transform 0.3s var(--spring-timing);
+    transition: transform 0.5s cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 .grid-view .news-item:not(:has(.news-image[src])):hover .news-header::before {
@@ -137,7 +143,8 @@
     color: var(--primary-color);
     line-height: 1.4;
     margin: 0;
-    font-weight: 600;
+    font-weight: 500; /* Apple uses SF Pro which looks better with 500 weight */
+    letter-spacing: -0.02em;
 }
 
 .description {
@@ -146,6 +153,8 @@
     margin: 0.5rem 0;
     line-height: 1.6;
     flex: 1;
+    font-weight: 400;
+    letter-spacing: -0.01em;
 }
 
 .meta {
@@ -169,9 +178,10 @@
 .meta .source {
     font-weight: 500;
     color: var(--accent-color);
-    padding: 2px 8px;
-    border-radius: 4px;
+    padding: 4px 10px;
+    border-radius: 6px;
     background: var(--accent-color-transparent);
+    letter-spacing: -0.01em;
 }
 
 /* News image styles */
@@ -181,7 +191,7 @@
     padding-top: 56.25%;
     overflow: hidden;
     background: linear-gradient(45deg, var(--filter-background), var(--card-background));
-    border-radius: 8px;
+    border-radius: 12px;
 }
 
 .news-image-container::before {
@@ -201,13 +211,15 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
-    transition: transform 0.3s ease;
+    transition: transform 0.7s cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 /* Animations and hover effects */
 .news-item:hover {
-    transform: translateY(-4px) scale(1.01);
-    box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+    transform: translateY(-4px) scale(1.005);
+    box-shadow: 
+        0 20px 25px rgba(0, 0, 0, 0.06),
+        0 10px 10px rgba(0, 0, 0, 0.04);
     transition: all 0.4s var(--spring-timing);
 }
 
