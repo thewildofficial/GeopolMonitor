@@ -66,6 +66,66 @@ export function setView(viewType) {
     }
 }
 
+let loadingItems = [];
+let loadingTimeout;
+let progressTimeout;
+
 export function setLoading(loading) {
     document.body.classList.toggle('loading', loading);
+    const loadingItemsEl = document.querySelector('.loading-items');
+    
+    if (loading) {
+        // Reset loading items
+        loadingItems = [];
+        updateLoadingItems();
+        loadingItemsEl.classList.remove('show');
+        
+        // Show loading items after a delay
+        clearTimeout(progressTimeout);
+        progressTimeout = setTimeout(() => {
+            loadingItemsEl.classList.add('show');
+        }, 800); // Increased delay for more Apple-like feel
+    } else {
+        clearTimeout(progressTimeout);
+        // Fade out gracefully
+        loadingItemsEl.classList.remove('show');
+        setTimeout(() => {
+            loadingItems = [];
+            updateLoadingItems();
+        }, 300);
+    }
+}
+
+export function addLoadingItem(item) {
+    loadingItems.push(item);
+    updateLoadingItems();
+    
+    // Animate the loading bar
+    const progress = Math.min((loadingItems.length / 5) * 100, 90); // Cap at 90% until complete
+    const loadingBar = document.querySelector('.loading-bar-progress');
+    if (loadingBar) {
+        loadingBar.style.width = `${progress}%`;
+    }
+}
+
+function updateLoadingItems() {
+    const loadingItemsEl = document.querySelector('.loading-items');
+    const loadingTextEl = document.querySelector('.loading-text');
+    
+    if (loadingItems.length > 0) {
+        const latestItem = loadingItems[loadingItems.length - 1];
+        loadingItemsEl.textContent = latestItem;
+        loadingTextEl.textContent = getLoadingPhrase(loadingItems.length);
+    }
+}
+
+function getLoadingPhrase(step) {
+    const phrases = [
+        "Getting things ready...",
+        "Loading latest updates...",
+        "Almost there...",
+        "Putting everything together...",
+        "Just a moment..."
+    ];
+    return phrases[Math.min(step, phrases.length - 1)];
 }

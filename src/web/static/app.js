@@ -2,7 +2,7 @@ import { initWebSocket } from './js/modules/websocket.js';
 import { createNewsElement, formatTimeAgo } from './js/modules/news.js';
 import { initTheme } from './js/modules/theme.js';
 import { loadTags, toggleTagFilters, getActiveTags } from './js/modules/tags.js';
-import { createScrollToTopButton, updateScrollToTopButtonVisibility, setView, setLoading } from './js/modules/ui-utils.js';
+import { createScrollToTopButton, updateScrollToTopButtonVisibility, setView, setLoading, addLoadingItem } from './js/modules/ui-utils.js';
 import { loadCountryData } from './js/modules/countries.js';
 
 let lastUpdate = new Date();
@@ -56,11 +56,13 @@ async function handleNewsUpdate(newItem) {
 
 async function fetchNews() {
     try {
+        addLoadingItem('Fetching latest news articles...');
         const activeTags = getActiveTags();
         const tagParam = activeTags.length > 0 ? `?tags=${activeTags.join(',')}` : '';
         const response = await fetch(`/api/news${tagParam}`);
         if (!response.ok) throw new Error('Network response was not ok');
         const data = await response.json();
+        addLoadingItem('Processing news data...');
         return data.news || [];
     } catch (error) {
         console.error('Error fetching news:', error);
@@ -122,8 +124,57 @@ async function updateNewsList(news) {
     const container = document.getElementById('newsContainer');
     if (!container) return;
     
+    addLoadingItem('Creating news elements...');
     const fragment = document.createDocumentFragment();
     news.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    
+    let loadedImages = 0;
+    const totalImages = news.length;
+    const IMAGE_LOAD_TIMEOUT = 3000; // 3 seconds timeout for each image
+    
+    const imageLoadPromises = news.map((item, index) => {
+        return new Promise((resolve) => {
+            if (!item.image_url) {
+                resolve();
+                return;
+            }
+
+            const img = new Image();
+            let timeoutId;
+
+            const cleanup = () => {
+                clearTimeout(timeoutId);
+                img.onload = null;
+                img.onerror = null;
+            };
+
+            const handleLoad = () => {
+                loadedImages++;
+                addLoadingItem(`Loading images (${loadedImages}/${totalImages})...`);
+                cleanup();
+                resolve();
+            };
+
+            const handleError = () => {
+                console.warn('Failed to load image:', item.image_url);
+                cleanup();
+                resolve();
+            };
+
+            timeoutId = setTimeout(() => {
+                console.warn('Image load timeout:', item.image_url);
+                handleError();
+            }, IMAGE_LOAD_TIMEOUT);
+
+            img.onload = handleLoad;
+            img.onerror = handleError;
+            img.src = item.image_url;
+        });
+    });
+
+    // Wait for all images to either load or timeout
+    await Promise.all(imageLoadPromises);
+    addLoadingItem('Rendering news feed...');
     
     news.forEach((item, index) => {
         try {
