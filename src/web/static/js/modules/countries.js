@@ -86,13 +86,22 @@ function initializeISOMapping(geojsonData) {
 
             const normalizedName = normalizeCountryName(name);
             
-            // Store coordinates and ISO code
-            const bounds = L.geoJSON(feature).getBounds();
-            const center = bounds.getCenter();
-            const countryData = {
-                coords: [center.lat, center.lng],
-                code: props.ISO_A2
-            };
+            // Store coordinates and ISO code if available,
+            // else store ISO and normalized name (lite version fallback)
+            let countryData;
+            if (feature.geometry && feature.geometry.coordinates) {
+                const bounds = L.geoJSON(feature).getBounds();
+                const center = bounds.getCenter();
+                countryData = {
+                    coords: [center.lat, center.lng],
+                    code: props.ISO_A2
+                };
+            } else {
+                countryData = {
+                    code: props.ISO_A2,
+                    name: normalizedName
+                };
+            }
             
             geoJsonCountryData.set(normalizedName, countryData);
 
@@ -231,6 +240,8 @@ async function loadCountryData() {
             throw new Error(`Failed to fetch GeoJSON: ${response.statusText}`);
         }
         const geojsonData = await response.json();
+        // Initialize country and ISO mappings with the fetched GeoJSON data
+        initializeISOMapping(geojsonData);
         console.log('GeoJSON loaded:', geojsonData.features.length, 'features');
          
         // Verify data was loaded
