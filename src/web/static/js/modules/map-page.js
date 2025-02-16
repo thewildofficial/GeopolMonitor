@@ -147,34 +147,35 @@ function showCountryNews(countryName) {
             const newsItem = document.createElement('div');
             newsItem.className = 'country-news-item';
             
-            // Determine geography tags from the news post
+            // Get geography tags and their flags
             const geoTags = (news.tags && Array.isArray(news.tags))
                 ? news.tags.filter(tag => tag.category === 'geography' && tag.name)
                 : [];
             let flagsHTML = '';
             
-            // If two or more geography tags are detected, convert first two to flags.
+            // Get up to two flags for related countries
             if (geoTags.length >= 2) {
                 flagsHTML = geoTags.slice(0, 2).map(tag => {
-                    // Normalize country name from the tag name
                     const normalizedGeo = normalizeCountryName(tag.name);
-                    // Retrieve the country code
                     const flagCountryCode = getCountryCode(normalizedGeo);
-                    // If a valid code is found, convert it to a flag; otherwise return empty string
                     return flagCountryCode ? getCountryFlag(flagCountryCode) : '';
                 }).join(' ');
             } else {
-                // If no or only one geography tag is present, use the default panel flag
                 const defaultFlagElem = document.querySelector('.country-flag');
                 flagsHTML = defaultFlagElem ? defaultFlagElem.textContent : '';
             }
             
-            // Build the news item content, appending the flags before the title
+            // Get the source tag
+            const sourceTag = news.tags.find(tag => tag.category === 'source');
+            const sourceHTML = sourceTag ? `<span class="source">${sourceTag.name}</span>` : '';
+            
+            // Build the news item content with the source in the meta section
             newsItem.innerHTML = `
                 <h3>${flagsHTML} ${news.title}</h3>
                 <p>${news.description}</p>
                 <div class="meta">
                     <span>${formatDate(news.timestamp)}</span>
+                    ${sourceHTML}
                 </div>
             `;
             
@@ -182,6 +183,7 @@ function showCountryNews(countryName) {
             newsItem.addEventListener('click', () => {
                 window.open(news.link, '_blank', 'noopener');
             });
+            
             newsList.appendChild(newsItem);
         });
     }
