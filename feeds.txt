@@ -42,11 +42,9 @@ https://www.recordedfuture.com/feed/
 https://spacenews.com/feed/
 https://www.satellitetoday.com/feed/
 https://spaceref.com/feed/
-https://www.space.com/feeds/all
 https://www.militarytimes.com/arc/outboundfeeds/rss/?outputType=xml
 https://thegrayzone.com/feed/
 https://www.thearabweekly.com/feeds
-https://ecfr.eu/feed/
 https://krebsonsecurity.com/feed/
 https://cyberscoop.com/feed/
 https://foreignpolicy.com/feed/
