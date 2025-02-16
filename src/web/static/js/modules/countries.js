@@ -4,6 +4,9 @@ let geoJsonCountryData = new Map();
 // ISO code mapping for additional country matching
 const isoCodeMapping = new Map();
 
+// Save GeoJSON features for reverse lookup
+let geoJsonFeatures = [];
+
 function getCountryCoordinates(countryName) {
     const normalizedName = normalizeCountryName(countryName);
     const countryData = geoJsonCountryData.get(normalizedName);
@@ -62,28 +65,47 @@ function normalizeCountryName(name) {
 
 // Initialize ISO code mapping and country data from GeoJSON
 function initializeISOMapping(geojsonData) {
-    if (!geojsonData || !geojsonData.features) return;
+    if (!geojsonData || !geojsonData.features) {
+        console.error('Invalid GeoJSON data provided');
+        return;
+    }
+    
+    geoJsonFeatures = geojsonData.features; // store for reverse lookup
+    console.log(`Initializing data with ${geojsonData.features.length} features`);
     
     geojsonData.features.forEach(feature => {
         if (feature.properties) {
             const props = feature.properties;
             const name = props.ADMIN || props.name;
+            if (!name) {
+                console.warn('Feature missing name:', feature);
+                return;
+            }
+
             const normalizedName = normalizeCountryName(name);
             
-            // Store coordinates
+            // Store coordinates and ISO code
             const bounds = L.geoJSON(feature).getBounds();
             const center = bounds.getCenter();
-            geoJsonCountryData.set(normalizedName, {
+            const countryData = {
                 coords: [center.lat, center.lng],
                 code: props.ISO_A2
-            });
+            };
+            
+            geoJsonCountryData.set(normalizedName, countryData);
 
-            // Store ISO codes
-            if (props.ISO_A2) isoCodeMapping.set(props.ISO_A2.toLowerCase(), name);
-            if (props.ISO_A3) isoCodeMapping.set(props.ISO_A3.toLowerCase(), name);
-            isoCodeMapping.set(normalizedName.toLowerCase(), name);
+            // Store ISO codes for lookup
+            if (props.ISO_A2) {
+                isoCodeMapping.set(props.ISO_A2.toLowerCase(), normalizedName);
+            }
+            if (props.ISO_A3) {
+                isoCodeMapping.set(props.ISO_A3.toLowerCase(), normalizedName);
+            }
+            isoCodeMapping.set(normalizedName.toLowerCase(), normalizedName);
         }
     });
+    
+    console.log(`Initialized ${geoJsonCountryData.size} countries and ${isoCodeMapping.size} ISO codes`);
 }
 
 function matchCountryName(name, geojsonFeature) {
@@ -102,9 +124,38 @@ function matchCountryName(name, geojsonFeature) {
 }
 
 function getCountryCode(countryName) {
+    if (geoJsonCountryData.size === 0) {
+        console.warn('Country data not loaded. Call loadCountryData() first.');
+        return null;
+    }
     const normalizedName = normalizeCountryName(countryName);
-    const countryData = geoJsonCountryData.get(normalizedName);
-    return countryData?.code;
+    let countryData = geoJsonCountryData.get(normalizedName);
+    if (!countryData) {
+        // Reverse lookup by iterating over stored features
+        for (const feature of geoJsonFeatures) {
+            if (feature.properties) {
+                const props = feature.properties;
+                const featureName = normalizeCountryName(props.ADMIN || props.name);
+                // Compare lowercased names to avoid minor differences
+                if (featureName.toLowerCase() === normalizedName.toLowerCase()) {
+                    const isoCode = props.ISO_A2;
+                    countryData = { code: isoCode };
+                    // Optionally, update the Map for future fast lookup
+                    geoJsonCountryData.set(normalizedName, countryData);
+                    console.debug(`Reverse lookup successful for ${normalizedName}:`, countryData);
+                    break;
+                }
+            }
+        }
+    }
+    if (!countryData) {
+        return null;
+    }
+    if (!countryData.code) {
+        console.warn(`No ISO code found for: ${normalizedName}`);
+        return null;
+    }
+    return countryData.code;
 }
 
 function getCountryFlag(countryCode) {
@@ -167,6 +218,34 @@ function isCountryMatch(country1, country2) {
     return name1.toLowerCase() === name2.toLowerCase();
 }
 
+/**
+ * Load and initialize country data from GeoJSON
+ * @returns {Promise<void>}
+ */
+async function loadCountryData() {
+    try {
+        const response = await fetch('https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson');
+        if (!response.ok) {
+            throw new Error(`Failed to fetch GeoJSON: ${response.statusText}`);
+        }
+        const geojsonData = await response.json();
+        console.log('GeoJSON loaded:', geojsonData.features.length, 'features');
+        
+        initializeISOMapping(geojsonData);
+        
+        // Verify data was loaded
+        console.log('Country data loaded:', {
+            countries: geoJsonCountryData.size,
+            isoCodes: isoCodeMapping.size,
+            features: geoJsonFeatures.length
+        });
+ 
+    } catch (error) {
+        console.error('Failed to load country data:', error);
+        throw error;
+    }
+}
+
 export {
     getCountryCoordinates,
     normalizeCountryName,
@@ -175,5 +254,6 @@ export {
     getCountryCode,
     getCountryFlag,
     normalizeCountry,
-    isCountryMatch
+    isCountryMatch,
+    loadCountryData
 };

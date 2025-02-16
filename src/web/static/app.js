@@ -3,15 +3,18 @@ import { createNewsElement, formatTimeAgo } from './js/modules/news.js';
 import { initTheme } from './js/modules/theme.js';
 import { loadTags, toggleTagFilters, getActiveTags } from './js/modules/tags.js';
 import { createScrollToTopButton, updateScrollToTopButtonVisibility, setView, setLoading } from './js/modules/ui-utils.js';
+import { loadCountryData } from './js/modules/countries.js';
 
 let lastUpdate = new Date();
 const updateInterval = 30000; // 30 seconds
+
 
 // Make functions globally available for WebSocket handler
 window.handleNewsUpdate = handleNewsUpdate;
 window.updateNews = updateNews;
 
 async function handleNewsUpdate(newItem) {
+ 
     const container = document.getElementById('newsContainer');
     
     const currentElements = Array.from(container.children);
@@ -158,7 +161,8 @@ async function updateNews() {
 document.addEventListener('DOMContentLoaded', async () => {
     initWebSocket();
     initTheme();
-    
+    await loadCountryData();
+
     const scrollToTopBtn = createScrollToTopButton();
     window.addEventListener('scroll', updateScrollToTopButtonVisibility);
     
