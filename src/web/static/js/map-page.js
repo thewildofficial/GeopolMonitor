@@ -9,6 +9,7 @@ const newsPoints = [];
 let activeRegionsCount = 0;
 let todayEventsCount = 0;
 let allNews = []; // Store all news for filtering
+let countryLayer = null; // Add this to track the country boundaries layer
 
 function initMap() {
     map = L.map('worldMap', {
@@ -31,7 +32,7 @@ function initMap() {
     fetch('https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson')
         .then(response => response.json())
         .then(data => {
-            L.geoJSON(data, {
+            countryLayer = L.geoJSON(data, {
                 style: {
                     weight: 1,
                     color: 'var(--border-color)',
@@ -43,8 +44,55 @@ function initMap() {
                         highlightCountry(feature);
                         showCountryNews(countryName);
                     });
+
+                    // Add mouseover tooltip
+                    layer.on('mouseover', function(e) {
+                        const countryName = feature.properties.ADMIN || feature.properties.name;
+                        const normalizedCountryName = normalizeCountry(countryName);
+                        const countryNews = allNews.filter(item => 
+                            item.tags.some(tag => 
+                                tag.category === 'geography' && 
+                                normalizeCountry(tag.name).toLowerCase() === normalizedCountryName.toLowerCase()
+                            )
+                        );
+
+                        const tooltipContent = `
+                            <div class="country-tooltip">
+                                <strong>${countryName}</strong>
+                                <div>${countryNews.length} news items</div>
+                            </div>
+                        `;
+
+                        layer.bindTooltip(tooltipContent, {
+                            className: `custom-tooltip ${document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'}`,
+                            direction: 'top',
+                            permanent: false,
+                            sticky: true,
+                            opacity: 0.9
+                        }).openTooltip(e.latlng);
+                    });
+
+                    // Remove tooltip on mouseout
+                    layer.on('mouseout', function() {
+                        layer.closeTooltip();
+                    });
                 }
             }).addTo(map);
+
+            // Update tooltips when theme changes
+            const observer = new MutationObserver((mutations) => {
+                mutations.forEach((mutation) => {
+                    if (mutation.attributeName === 'data-theme') {
+                        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+                        countryLayer.eachLayer((layer) => {
+                            if (layer.getTooltip()) {
+                                layer.getTooltip().setClassName(`custom-tooltip ${isDark ? 'dark' : 'light'}`);
+                            }
+                        });
+                    }
+                });
+            });
+            observer.observe(document.documentElement, { attributes: true });
         });
     
     // Set initial tile layer based on theme
@@ -96,19 +144,73 @@ function initMap() {
     map.on('focus', () => { map.scrollWheelZoom.enable(); });
     map.on('blur', () => { map.scrollWheelZoom.disable(); });
     
-    initTimelineSlider();
     fetchNews();
+
+    // Update the close button handler to properly reset the map state
+    const closeButton = document.getElementById('closeCountryNews');
+    const newsPanel = document.querySelector('.country-news-panel');
+    
+    closeButton.addEventListener('click', (e) => {
+        // Prevent event from bubbling to map
+        e.stopPropagation();
+        
+        // Hide the panel with animation
+        newsPanel.style.opacity = '0';
+        newsPanel.style.transform = 'translateX(20px)';
+        newsPanel.style.pointerEvents = 'none';
+        
+        // Wait for animation to complete before hiding
+        setTimeout(() => {
+            newsPanel.style.display = 'none';
+            newsPanel.style.zIndex = '-1';
+            // Reset transform and opacity for next open
+            newsPanel.style.opacity = '';
+            newsPanel.style.transform = '';
+        }, 300);
+
+        // Reset the active country highlighting
+        if (activeCountryLayer) {
+            map.removeLayer(activeCountryLayer);
+            activeCountryLayer = null;
+        }
+
+        // Reset all country styles
+        if (countryLayer) {
+            countryLayer.eachLayer((layer) => {
+                layer.setStyle({
+                    weight: 1,
+                    color: 'var(--border-color)',
+                    fillOpacity: 0
+                });
+            });
+        }
+    });
 }
 
 function highlightCountry(feature) {
-    // Remove previous highlight if it exists
+    // Reset previous highlight
     if (activeCountryLayer) {
         map.removeLayer(activeCountryLayer);
+        activeCountryLayer = null;
+    }
+    
+    // Reset all country styles first
+    if (countryLayer) {
+        countryLayer.eachLayer((layer) => {
+            layer.setStyle({
+                weight: 1,
+                color: 'var(--border-color)',
+                fillOpacity: 0
+            });
+        });
     }
     
     // Create new highlight layer
     activeCountryLayer = L.geoJSON(feature, {
         style: {
+            weight: 2,
+            color: 'var(--accent-color)',
+            fillOpacity: 0.2,
             className: 'country-highlight'
         }
     }).addTo(map);
@@ -124,6 +226,10 @@ function showCountryNews(countryName) {
     const newsPanel = document.querySelector('.country-news-panel');
     const countryTitle = document.getElementById('selectedCountry');
     const newsList = document.getElementById('countryNewsList');
+    
+    // Reset panel state before showing
+    newsPanel.style.zIndex = '1000';
+    newsPanel.style.pointerEvents = 'all';
     
     countryTitle.textContent = countryName;
     newsList.innerHTML = '';
@@ -184,19 +290,6 @@ function formatDate(timestamp) {
     });
 }
 
-function initTimelineSlider() {
-    const slider = document.getElementById('timelineSlider');
-    const daysValue = document.getElementById('daysValue');
-    
-    if (!slider || !daysValue) return;
-    
-    slider.addEventListener('input', (e) => {
-        const days = parseInt(e.target.value);
-        daysValue.textContent = days;
-        updateTimeFilter(days);
-    });
-}
-
 async function fetchNews() {
     try {
         const response = await fetch('/api/news');
@@ -204,8 +297,8 @@ async function fetchNews() {
         const data = await response.json();
         if (data.news) {
             allNews = data.news; // Store all news
-            updateMap(data.news);
-            updateStats(data.news);
+            updateMap(allNews); // Pass all news directly
+            updateStats(allNews);
         }
     } catch (error) {
         console.error('Error fetching news:', error);
@@ -219,6 +312,7 @@ function updateMap(news) {
     const today = new Date();
     let todayEvents = 0;
     
+    // Process all news items without time filtering
     news.forEach(item => {
         const coords = extractCoordinates(item);
         if (coords) {
@@ -233,13 +327,15 @@ function updateMap(news) {
         }
     });
     
-    // Update stats
+    // Update stats with all data
     activeRegionsCount = regions.size;
     todayEventsCount = todayEvents;
     updateStatsDisplay();
     
-    // Update heatmap
-    heatLayer.setLatLngs(newsPoints);
+    // Update heatmap with all points
+    if (heatLayer && newsPoints.length > 0) {
+        heatLayer.setLatLngs(newsPoints);
+    }
 }
 
 function updateStatsDisplay() {
@@ -268,34 +364,6 @@ function createPopupContent(newsItem) {
 }
 
 // ... [existing coordinate extraction functions from map.js] ...
-
-function updateTimeFilter(days) {
-    const now = new Date();
-    const cutoff = new Date(now - days * 24 * 60 * 60 * 1000);
-    
-    let visibleRegions = 0;
-    let visibleTodayEvents = 0;
-    
-    newsMarkers.forEach((marker, link) => {
-        const newsItem = Array.from(newsMarkers.keys()).find(item => item.link === link);
-        if (newsItem) {
-            const itemDate = new Date(newsItem.timestamp);
-            const isVisible = itemDate >= cutoff;
-            marker.setOpacity(isVisible ? 1 : 0.2);
-            
-            if (isVisible) {
-                visibleRegions++;
-                if (itemDate.toDateString() === now.toDateString()) {
-                    visibleTodayEvents++;
-                }
-            }
-        }
-    });
-    
-    // Update stats for visible items
-    document.getElementById('activeRegions').textContent = visibleRegions;
-    document.getElementById('todayEvents').textContent = visibleTodayEvents;
-}
 
 // Update marker and popup styles
 function addNewsMarker(newsItem, coords) {

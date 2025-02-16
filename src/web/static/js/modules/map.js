@@ -5,7 +5,6 @@ import { normalizeCountry } from './countries.js';
 let map;
 let heatLayer;
 let newsMarkers = new Map();
-let currentTimeRange = 'all';
 const newsPoints = [];
 
 export class NewsMap {
@@ -298,16 +297,18 @@ export function initMap() {
     
     observer.observe(document.documentElement, { attributes: true });
     
-    // Initialize heatmap layer
+    // Initialize heatmap layer with more visible settings
     heatLayer = L.heatLayer([], {
         radius: 25,
         blur: 15,
         maxZoom: 10,
+        minOpacity: 0.3,
         gradient: {
-            0.4: '#3498db',
-            0.6: '#2ecc71',
-            0.8: '#f1c40f',
-            1.0: '#e74c3c'
+            0.2: '#3498db',  // Light blue
+            0.4: '#2ecc71',  // Green
+            0.6: '#f1c40f',  // Yellow
+            0.8: '#e74c3c',  // Red
+            1.0: '#c0392b'   // Dark red
         }
     }).addTo(map);
     
@@ -317,6 +318,7 @@ export function initMap() {
         const div = L.DomUtil.create('div', 'heat-map-legend');
         div.innerHTML = `
             <strong>News Density</strong><br>
+            <span style="color: #c0392b">■</span> Very High<br>
             <span style="color: #e74c3c">■</span> High<br>
             <span style="color: #f1c40f">■</span> Medium<br>
             <span style="color: #2ecc71">■</span> Low
@@ -324,34 +326,23 @@ export function initMap() {
         return div;
     };
     legend.addTo(map);
-    
-    // Initialize timeline slider
-    initTimelineSlider();
-}
-
-function initTimelineSlider() {
-    const slider = document.getElementById('timelineSlider');
-    if (!slider) return;
-    
-    slider.addEventListener('input', (e) => {
-        const days = parseInt(e.target.value);
-        updateTimeFilter(days);
-    });
 }
 
 export async function updateMap(news) {
     clearMap();
     
+    // Add all news points to heatmap without filtering
     news.forEach(item => {
         const coords = extractCoordinates(item);
         if (coords) {
-            addNewsMarker(item, coords);
-            newsPoints.push([coords[0], coords[1], 1]); // weight of 1 for heatmap
+            newsPoints.push([coords[0], coords[1], 1]);
         }
     });
     
-    // Update heatmap
-    heatLayer.setLatLngs(newsPoints);
+    // Update heatmap with all points
+    if (heatLayer && newsPoints.length > 0) {
+        heatLayer.setLatLngs(newsPoints);
+    }
 }
 
 function clearMap() {
@@ -415,19 +406,6 @@ function extractCoordinatesFromText(content) {
     return null;
 }
 
-function updateTimeFilter(days) {
-    const now = new Date();
-    const cutoff = new Date(now - days * 24 * 60 * 60 * 1000);
-    
-    newsMarkers.forEach((marker, link) => {
-        const newsItem = Array.from(newsMarkers.keys()).find(item => item.link === link);
-        if (newsItem) {
-            const itemDate = new Date(newsItem.timestamp);
-            marker.setOpacity(itemDate >= cutoff ? 1 : 0.3);
-        }
-    });
-}
-
 export function handleNewsUpdate(newItem) {
     const coords = extractCoordinates(newItem);
     if (coords) {
@@ -436,8 +414,6 @@ export function handleNewsUpdate(newItem) {
         heatLayer.setLatLngs(newsPoints);
     }
 }
-
-
 
 function normalizeCountryName(name) {
     const countryMappings = {
