@@ -16,8 +16,11 @@ function getCountryCoordinates(countryName) {
 function normalizeCountryName(name) {
     if (!name) return '';
     
-    // Convert kebab-case to spaces and capitalize words
-    const formattedName = name.replace(/-/g, ' ')
+    // Handle kebab-case first
+    const preFormatted = name.replace(/-/g, ' ').trim();
+    
+    // Convert to title case
+    const formattedName = preFormatted
         .split(' ')
         .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
         .join(' ');
@@ -25,39 +28,38 @@ function normalizeCountryName(name) {
     // Special cases and common variations
     const aliases = {
         'United States Of America': 'United States',
+        'United Kingdom Of Great Britain And Northern Ireland': 'United Kingdom',
+        'Democratic Republic Of The Congo': 'DR Congo',
+        'Dr Congo': 'DR Congo',
+        'Drc': 'DR Congo',
+        'Congo Democratic Republic': 'DR Congo',
+        'Congo Dr': 'DR Congo',
+        'Republic Of The Congo': 'Congo',
+        'Congo Republic': 'Congo',
+        'Peoples Republic Of China': 'China',
+        "People's Republic Of China": 'China',
+        'Republic Of China': 'Taiwan',
+        'Chinese Republic': 'Taiwan',
+        'Russian Federation': 'Russia',
+        'United States': 'United States',
+        'United States Of America': 'United States',
         'Usa': 'United States',
+        'Unidos': 'United States',
+        'Estados Unidos': 'United States',
         'Us': 'United States',
+        'America': 'United States',
+        'América': 'United States',
+        'Democratic Peoples Republic Of Korea': 'North Korea',
+        'Republic Of Korea': 'South Korea',
+        'Korea South': 'South Korea',
+        'Korea North': 'North Korea',
+        'Deutschland': 'Germany',
+        'Federal Republic Of Germany': 'Germany',
+        'Burma': 'Myanmar',
+        'Czech Republic': 'Czechia',
         'Uk': 'United Kingdom',
         'Great Britain': 'United Kingdom',
-        'Russian Federation': 'Russia',
-        "People's Republic Of China": 'China',
-        'Prc': 'China',
-        'South Korea': 'South Korea',
-        'Republic Of Korea': 'South Korea',
-        'Dprk': 'North Korea',
-        "Democratic People's Republic Of Korea": 'North Korea',
-        'Uae': 'United Arab Emirates',
-        'Ksa': 'Saudi Arabia',
-        'Rok': 'South Korea',
-        'Roc': 'Taiwan',
-        'Republic Of China': 'Taiwan',
-        'Chinese Taipei': 'Taiwan',
-        'Taipei': 'Taiwan',
-        'Islamic Republic Of Iran': 'Iran',
-        'Republic Of Türkiye': 'Turkey',
-        'Republic Of Turkiye': 'Turkey',
-        'Republic Of Turkey': 'Turkey',
-        'Kingdom Of Saudi Arabia': 'Saudi Arabia',
-        'Mainland China': 'China',
-        'Republic Of India': 'India',
-        'Estado Unidos': 'United States',
-        'América': 'United States',
-        'Estados Unidos': 'United States',
-        'Republic Of South Africa': 'South Africa',
-        'Rsa': 'South Africa',
-        'The Netherlands': 'Netherlands',
-        'Holland': 'Netherlands',
-        'Reino Unido': 'United Kingdom'
+        'Britain': 'United Kingdom'
     };
 
     return aliases[formattedName] || formattedName;

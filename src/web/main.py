@@ -204,7 +204,6 @@ def create_app():
                             feed_url, image_url, message, emoji1, emoji2
                         FROM news_entries
                         ORDER BY pub_date DESC
-                        LIMIT 100
                     ''')
                     columns = [column[0] for column in cursor.description]
                     news_items = [dict(zip(columns, row)) for row in cursor]

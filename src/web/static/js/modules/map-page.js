@@ -2,6 +2,7 @@ import { initTheme } from './theme.js';
 import { initWebSocket } from './websocket.js';
 import { normalizeCountryName, getCountryFlag, getCountryCode } from './countries.js';
 import { initHeatmap, updateHeatmap, updateTheme as updateHeatmapTheme } from './heatmap.js';
+import {loadCountryData} from './countries.js';
 
 // Global variables and utility functions
 let map;
@@ -23,6 +24,7 @@ const formatDate = (timestamp) => {
 async function initMap() {
     setupMap();
     await initWebSocket();
+    await loadCountryData()
 }
 
 function setupMap() {
@@ -215,7 +217,6 @@ async function fetchNews() {
             console.error('Invalid news data format:', data);
             allNews = [];
         }
-        
         updateMap(allNews);
     } catch (error) {
         console.error('Error fetching news:', error);
@@ -277,4 +278,5 @@ document.addEventListener('DOMContentLoaded', () => {
     initTheme();
     initWebSocket();
     initMap();
+
 });
