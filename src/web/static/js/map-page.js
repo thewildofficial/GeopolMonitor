@@ -146,10 +146,12 @@ function initMap() {
     fetchNews();
 
     // Update the close button handler to properly reset the map state
-    const closeButton = document.getElementById('closeCountryNews');
-    const newsPanel = document.querySelector('.country-news-panel');
-    
-    closeButton.addEventListener('click', (e) => {
+    const closeButton = document.querySelector('.close-panel-button');
+    console.log('closeButton:', closeButton);
+
+    if (closeButton) {
+        console.log('Close button found, adding event listener');
+        closeButton.addEventListener('click', (e) => {
         // Prevent event from bubbling to map
         e.stopPropagation();
         
@@ -222,6 +224,7 @@ function highlightCountry(feature) {
 }
 
 function showCountryNews(countryName) {
+    console.log('showCountryNews called with:', countryName);
     const newsPanel = document.querySelector('.country-news-panel');
     const countryTitle = document.getElementById('selectedCountry');
     const newsList = document.getElementById('countryNewsList');
@@ -264,6 +267,54 @@ function showCountryNews(countryName) {
     }
     
     newsPanel.style.display = 'flex';
+
+
+        const closeButton = document.getElementById('closeCountryNews');
+    console.log('closeButton:', closeButton);
+    if (closeButton) {
+        console.log('Close button found, adding event listener');
+        closeButton.addEventListener('click', (e) => {
+            console.log('Event target:', e.target);
+    console.log('closeButton:', closeButton);
+
+    if (closeButton) {
+        console.log('Close button found, adding event listener');
+        closeButton.addEventListener('click', (e) => {
+            // Prevent event from bubbling to map
+            e.stopPropagation();
+
+            // Hide the panel with animation
+            newsPanel.style.opacity = '0';
+            newsPanel.style.transform = 'translateX(20px)';
+            newsPanel.style.pointerEvents = 'none';
+
+            // Wait for animation to complete before hiding
+            setTimeout(() => {
+                newsPanel.style.display = 'none';
+                newsPanel.style.zIndex = '-1';
+                // Reset transform and opacity for next open
+                newsPanel.style.opacity = '';
+                newsPanel.style.transform = '';
+            }, 300);
+
+            // Reset the active country highlighting
+            if (activeCountryLayer) {
+                map.removeLayer(activeCountryLayer);
+                activeCountryLayer = null;
+            }
+
+            // Reset all country styles
+            if (countryLayer) {
+                countryLayer.eachLayer((layer) => {
+                    layer.setStyle({
+                        weight: 1,
+                        color: 'var(--border-color)',
+                        fillOpacity: 0
+                    });
+                });
+            }
+        });
+    }
 }
 
 function formatDate(timestamp) {
