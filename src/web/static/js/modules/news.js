@@ -66,9 +66,21 @@ export function createNewsElement(newsItem) {
     // Add tags
     if (newsItem.tags && newsItem.tags.length > 0) {
         const tagsContainer = article.querySelector('.tags');
-        newsItem.tags.forEach(tag => {
+        tagsContainer.innerHTML = ''; // Clear existing tags
+        
+        // Sort tags by category for consistent display
+        const sortedTags = [...newsItem.tags].sort((a, b) => {
+            const categoryOrder = {
+                'geography': 1,
+                'events': 2,
+                'topic': 3,
+                'source': 4
+            };
+            return (categoryOrder[a.category] || 99) - (categoryOrder[b.category] || 99);
+        });
+
+        sortedTags.forEach(tag => {
             if (tag.category === 'source') return; // Skip source tags as they're shown in meta
-            
             const tagEl = renderTag(tag.name, tag.category);
             tagsContainer.appendChild(tagEl);
         });
@@ -153,20 +165,57 @@ function displayFilteredNews(newsItems, container) {
     });
 }
 
-function renderTag(tag, category) {
+function renderTag(name, category) {
     const span = document.createElement('span');
-    span.className = 'tag';
+    span.className = 'tag-in-article';
     span.dataset.category = category;
-
+    
     if (category === 'geography') {
-        const countryData = normalizeCountry(tag);
+        const countryData = normalizeCountry(name);
+        const normalizedName = countryData.name;
         const flag = countryData.flag || '';
-        span.innerHTML = `${flag} ${countryData.name}`;
-        span.dataset.tagName = countryData.name;
+        
+        span.dataset.tag = normalizedName;
+        span.innerHTML = `${flag} ${normalizedName}`;
     } else {
-        span.textContent = tag;
-        span.dataset.tagName = tag;
+        span.dataset.tag = name;
+        span.textContent = name;
     }
-
+    
+    span.addEventListener('click', (e) => {
+        e.stopPropagation(); // Prevent the article click event
+        window.toggleTag(span.dataset.tag);
+    });
+    
     return span;
+}
+
+export async function fetchNews(tagParam = '') {
+    try {
+        const response = await fetch(`/api/news${tagParam}`);
+        const data = await response.json();
+        return data.news;
+    } catch (error) {
+        console.error('Error fetching news:', error);
+        return [];
+    }
+}
+
+export async function filterNews(news) {
+    return news.filter(item => item.title && item.description);
+}
+
+export async function updateNewsList(newsItems) {
+    const container = document.getElementById('newsContainer');
+    container.innerHTML = '';
+    
+    newsItems.forEach(item => {
+        const element = createNewsElement(item);
+        if (element) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'news-item';
+            wrapper.appendChild(element);
+            container.appendChild(wrapper);
+        }
+    });
 }

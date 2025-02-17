@@ -7,3 +7,29 @@
     --card-rgb: 35, 35, 35;
     --border-rgb: 70, 70, 70;
 }
+
+:root[data-theme="light"] {
+    --tag-bg: rgba(0, 0, 0, 0.05);
+    --tag-color: var(--text-color);
+    --tag-hover-bg: rgba(0, 0, 0, 0.1);
+    
+    --geography-tag-bg: rgba(0, 120, 210, 0.1);
+    --geography-tag-color: rgb(0, 90, 160);
+    --events-tag-bg: rgba(220, 50, 50, 0.1);
+    --events-tag-color: rgb(180, 40, 40);
+    --topic-tag-bg: rgba(50, 180, 50, 0.1);
+    --topic-tag-color: rgb(40, 140, 40);
+}
+
+:root[data-theme="dark"] {
+    --tag-bg: rgba(255, 255, 255, 0.1);
+    --tag-color: var(--text-color);
+    --tag-hover-bg: rgba(255, 255, 255, 0.15);
+    
+    --geography-tag-bg: rgba(0, 120, 210, 0.2);
+    --geography-tag-color: rgb(100, 180, 255);
+    --events-tag-bg: rgba(220, 50, 50, 0.2);
+    --events-tag-color: rgb(255, 120, 120);
+    --topic-tag-bg: rgba(50, 180, 50, 0.2);
+    --topic-tag-color: rgb(120, 255, 120);
+}
