@@ -12,3 +12,5 @@ feeds.txt
 feeds.txt
 backups
 feeds.txt
+/.goose
+src/core/processor.py
