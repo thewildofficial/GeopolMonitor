@@ -234,27 +234,59 @@ export function isCountryMatch(country1, country2) {
  * @returns {Promise<void>}
  */
 async function loadCountryData() {
-    try {
-        const response = await fetch('/static/assets/countries-lite.json');
-        if (!response.ok) {
-            throw new Error(`Failed to fetch GeoJSON: ${response.statusText}`);
+    const endpoints = [
+        {
+            url: '/api/countries-lite',
+            headers: {
+                'Accept': 'application/json',
+                'Cache-Control': 'no-cache'
+            }
+        },
+        {
+            url: '/static/assets/countries-lite.json',
+            headers: {
+                'Accept': 'application/json',
+                'Cache-Control': 'no-cache'
+            }
         }
-        const geojsonData = await response.json();
-        // Initialize country and ISO mappings with the fetched GeoJSON data
-        initializeISOMapping(geojsonData);
-        console.log('GeoJSON loaded:', geojsonData.features.length, 'features');
-         
-        // Verify data was loaded
-        console.log('Country data loaded:', {
-            countries: geoJsonCountryData.size,
-            isoCodes: isoCodeMapping.size,
-            features: geoJsonFeatures.length
-        });
- 
-    } catch (error) {
-        console.error('Failed to load country data:', error);
-        throw error;
+    ];
+
+    let lastError = null;
+    
+    for (const endpoint of endpoints) {
+        try {
+            console.log(`Attempting to fetch from ${endpoint.url}`);
+            const response = await fetch(endpoint.url, {
+                headers: endpoint.headers,
+                cache: 'no-cache'
+            });
+            
+            if (!response.ok) {
+                const text = await response.text();
+                console.warn(`Failed to fetch from ${endpoint.url}:`, text);
+                lastError = new Error(`${response.statusText} (${response.status}): ${text}`);
+                continue;
+            }
+
+            const data = await response.json();
+            if (!data || !Array.isArray(data.features)) {
+                console.warn(`Invalid data structure from ${endpoint.url}:`, data);
+                lastError = new Error('Invalid GeoJSON data structure');
+                continue;
+            }
+
+            // Initialize country and ISO mappings with the fetched data
+            initializeISOMapping(data);
+            console.log(`Successfully loaded ${data.features.length} features from ${endpoint.url}`);
+            return;  // Success - exit the function
+        } catch (error) {
+            console.warn(`Error fetching from ${endpoint.url}:`, error);
+            lastError = error;
+        }
     }
+    
+    // If we get here, all endpoints failed
+    throw new Error(`Failed to load country data: ${lastError?.message || 'Unknown error'}`);
 }
 
 export {
