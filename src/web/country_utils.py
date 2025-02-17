@@ -2,6 +2,12 @@ import pycountry
 from typing import Dict, Optional
 from difflib import get_close_matches
 import json
+import gzip
+import os
+from pathlib import Path
+
+# Get the absolute path to the assets directory
+ASSETS_DIR = Path(__file__).parent / 'static' / 'assets'
 
 # UTIL SCRIPT TO HANDLE JSON FILE
 
@@ -119,8 +125,15 @@ def normalize_country(country_name: str) -> Dict[str, Optional[str]]:
     }
 
 def create_lite_countries_file():
-    # Read the original countries.json file
-    with open('static/assets/countries.json', 'r') as f:
+    # Use absolute paths for file operations
+    input_path = ASSETS_DIR / 'countries.json'
+    output_path = ASSETS_DIR / 'countries-lite.json'
+    gzip_path = ASSETS_DIR / 'countries.json.gz'
+    
+    # Ensure the assets directory exists
+    ASSETS_DIR.mkdir(parents=True, exist_ok=True)
+    
+    with open(input_path, 'r') as f:
         data = json.load(f)
     
     # Create a new FeatureCollection with only properties
@@ -138,8 +151,17 @@ def create_lite_countries_file():
         lite_data['features'].append(lite_feature)
     
     # Write the simplified data to a new file
-    with open('static/assets/countries-lite.json', 'w') as f:
+    with open(output_path, 'w') as f:
         json.dump(lite_data, f, indent=2)
+    
+    # Create gzipped version of the original file
+    with open(input_path, 'rb') as f_in:
+        with gzip.open(gzip_path, 'wb', compresslevel=9) as f_out:
+            f_out.write(f_in.read())
+    
+    print(f"Created compressed file: {gzip_path}")
+    print(f"Original size: {os.path.getsize(input_path):,} bytes")
+    print(f"Compressed size: {os.path.getsize(gzip_path):,} bytes")
 
 if __name__ == '__main__':
     create_lite_countries_file()

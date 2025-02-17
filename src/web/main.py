@@ -1,13 +1,16 @@
 """FastAPI web interface for GeopolMonitor."""
+from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from typing import List, Optional
 import json
 import atexit
+from starlette.staticfiles import StaticFiles as StarletteStaticFiles
 
 from . import country_utils
 
@@ -27,13 +30,20 @@ def is_local_environment():
     """Check if we're running in a local environment"""
     return WEB_HOST in ['localhost', '127.0.0.1', '0.0.0.0']
 
+class CompressedStaticFiles(StarletteStaticFiles):
+    """Custom static files handler that adds compression headers"""
+    async def get_response(self, path: str, scope):
+        response = await super().get_response(path, scope)
+        if path.endswith('.json'):
+            response.headers['Content-Type'] = 'application/json'
+            response.headers['Content-Encoding'] = 'gzip'
+            response.headers['Vary'] = 'Accept-Encoding'
+            response.headers.add('Cache-Control', 'public, max-age=3600')
+        return response
+
 def create_app():
     """Create and configure FastAPI application"""
-    app = FastAPI()
-    
-    # Add HTTPS redirect middleware only in production
-    if not is_local_environment():
-        app.add_middleware(HTTPSRedirectMiddleware)
+    app = FastAPI(debug=True)
     
     # Configure CORS
     app.add_middleware(
@@ -43,8 +53,7 @@ def create_app():
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    
-    # Mount static files and templates
+    # Mount static files normally without compression
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
@@ -97,7 +106,7 @@ def create_app():
         
         # Extract source from feed_url and add as a tag if not already present
         feed_url = item.get('feed_url', '')
-        if feed_url and item.get('id'):
+        if (feed_url and item.get('id')):
             try:
                 from urllib.parse import urlparse
                 domain = urlparse(feed_url).netloc
@@ -237,6 +246,37 @@ def create_app():
                     })
                 return tags
         except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.get("/api/countries-lite")
+    async def get_countries_lite():
+        """Serve the countries-lite.json file"""
+        try:
+            file_path = STATIC_DIR / "assets" / "countries-lite.json"
+            print(f"Reading countries data from: {file_path}")
+            
+            if not file_path.exists():
+                raise HTTPException(
+                    status_code=404, 
+                    detail=f"File not found: {file_path}"
+                )
+                
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                
+            return JSONResponse(
+                content=data,
+                headers={
+                    "Content-Type": "application/json",
+                    "Cache-Control": "no-cache",
+                    "Access-Control-Allow-Origin": "*"
+                }
+            )
+        except json.JSONDecodeError as e:
+            print(f"Error parsing JSON: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Invalid JSON data: {str(e)}")
+        except Exception as e:
+            print(f"Error serving countries data: {str(e)}")
             raise HTTPException(status_code=500, detail=str(e))
 
     @app.websocket("/ws")
