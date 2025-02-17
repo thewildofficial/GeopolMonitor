@@ -261,3 +261,45 @@
         margin-bottom: 0.5rem;
     }
 }
+
+/* Tag styles */
+.tag-in-article {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    margin: 0 4px 4px 0;
+    border-radius: 12px;
+    font-size: 0.85em;
+    background: var(--tag-bg);
+    color: var(--tag-color);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+}
+
+.tag-in-article:hover {
+    background: var(--tag-hover-bg);
+}
+
+.news-item .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 8px;
+}
+
+/* Tag category specific styles */
+.tag-in-article[data-category="geography"] {
+    background: var(--geography-tag-bg);
+    color: var(--geography-tag-color);
+}
+
+.tag-in-article[data-category="events"] {
+    background: var(--events-tag-bg);
+    color: var(--events-tag-color);
+}
+
+.tag-in-article[data-category="topic"] {
+    background: var(--topic-tag-bg);
+    color: var(--topic-tag-color);
+}

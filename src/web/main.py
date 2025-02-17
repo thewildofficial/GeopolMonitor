@@ -191,7 +191,7 @@ def create_app():
     @app.get("/api/news")
     async def get_news(tags: Optional[str] = None):
         try:
-            if tags:
+            if (tags):
                 # Split tags string into list and search by tags
                 tag_list = [t.strip() for t in tags.split(',')]
                 news_items = search_articles_by_tags(tag_list)
@@ -214,8 +214,8 @@ def create_app():
             raise HTTPException(status_code=500, detail=str(e))
 
     @app.get("/api/tags")
-    async def get_tags():
-        """Get all available tags grouped by category."""
+    async def get_tags(limit: int = 100, offset: int = 0):
+        """Get all available tags grouped by category with pagination."""
         try:
             with get_db() as conn:
                 cursor = conn.execute('''
@@ -224,7 +224,8 @@ def create_app():
                     LEFT JOIN article_tags at ON t.id = at.tag_id
                     GROUP BY t.id
                     ORDER BY usage_count DESC, name ASC
-                ''')
+                    LIMIT ? OFFSET ?
+                ''', (limit, offset))
                 tags = {}
                 for row in cursor.fetchall():
                     category = row[1]

@@ -1,4 +1,5 @@
 import { normalizeCountry } from './countries.js';
+import { fetchNews, filterNews, updateNewsList } from './news.js';
 
 let activeTags = new Set();
 let relatedTags = new Map();
@@ -309,13 +310,12 @@ export async function updateNews() {
         const container = document.getElementById('newsContainer');
         const currentItems = Array.from(container.children);
         
-        // First mark items that should be filtered out
         currentItems.forEach(item => {
             const shouldShow = filtered.some(news => {
                 const itemLink = item.querySelector('article').onclick.toString().match(/'([^']+)'/)[1];
                 return news.link === itemLink;
-            });
-            
+            }) || (activeTags.size === 0);
+
             if (!shouldShow) {
                 item.classList.add('filtered-out');
             }
@@ -331,8 +331,6 @@ export async function updateNews() {
         container.querySelectorAll('.news-item').forEach(item => {
             item.classList.add('filtered-in');
         });
-        
-        lastUpdate = new Date();
     } catch (error) {
         console.error('Error updating news:', error);
     }
