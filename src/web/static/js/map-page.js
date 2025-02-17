@@ -29,7 +29,7 @@ function initMap() {
     });
     
     // Load GeoJSON data for countries
-    fetch('/static/assets/countries.json') 
+    fetch('/static/assets/countries-lite.json') 
         .then(response => response.json())
         .then(data => {
             countryLayer = L.geoJSON(data, {
@@ -48,11 +48,10 @@ function initMap() {
                     // Add mouseover tooltip
                     layer.on('mouseover', function(e) {
                         const countryName = feature.properties.ADMIN || feature.properties.name;
-                        const normalizedCountryName = normalizeCountry(countryName);
                         const countryNews = allNews.filter(item => 
                             item.tags.some(tag => 
                                 tag.category === 'geography' && 
-                                normalizeCountry(tag.name).toLowerCase() === normalizedCountryName.toLowerCase()
+                                normalizeCountry(tag.name).toLowerCase() === normalizeCountry(countryName).toLowerCase()
                             )
                         );
 
@@ -235,19 +234,6 @@ function showCountryNews(countryName) {
     newsList.innerHTML = '';
     
     // Normalize country names for comparison
-    const normalizeCountry = (name) => {
-        const specialCases = {
-            'United States of America': 'United States',
-            'USA': 'United States',
-            'United Kingdom': 'United Kingdom',
-            'UK': 'United Kingdom',
-            'Russian Federation': 'Russia',
-        };
-        
-        return specialCases[name] || name;
-    };
-
-    const normalizedCountryName = normalizeCountry(countryName);
     
     // Filter news items for the selected country with more flexible matching
     const countryNews = allNews.filter(item => 
