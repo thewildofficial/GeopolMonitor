@@ -38,7 +38,7 @@ export class NewsMap {
 
     async loadCountryBoundaries() {
         try {
-            const response = await fetch('/static/assets/countries.json');
+            const response = await fetch('/static/assets/countries-lite.json');
             this.geoJsonData = await response.json();
             
             // Transform GeoJSON to include normalized country data
@@ -415,28 +415,3 @@ export function handleNewsUpdate(newItem) {
     }
 }
 
-function normalizeCountryName(name) {
-    const countryMappings = {
-        'United States of America': { name: 'United States', code: 'US' },
-        'USA': { name: 'United States', code: 'US' },
-        'United Kingdom': { name: 'United Kingdom', code: 'GB' },
-        'UK': { name: 'United Kingdom', code: 'GB' },
-        'Russian Federation': { name: 'Russia', code: 'RU' },
-        'People\'s Republic of China': { name: 'China', code: 'CN' }
-        // Add more mappings as needed
-    };
-
-    // Function to convert country code to flag emoji
-    const getCountryFlag = (code) => {
-        if (!code) return '';
-        return code.toUpperCase().replace(/./g, char => 
-            String.fromCodePoint(char.charCodeAt(0) + 127397)
-        );
-    };
-
-    const normalized = countryMappings[name] || { name: name, code: null };
-    return {
-        name: normalized.name,
-        flag: getCountryFlag(normalized.code)
-    };
-}
