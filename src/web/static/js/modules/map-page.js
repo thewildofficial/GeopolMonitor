@@ -190,8 +190,19 @@ function showCountryNews(countryName) {
     
     // Display the news panel
     newsPanel.style.display = 'flex';
-}
 
+    const closePanelBtn = document.getElementById('closeCountryNews');
+    console.log('closePanelBtn:', closePanelBtn);
+    if (closePanelBtn) {
+        closePanelBtn.addEventListener('click', () => {
+            console.log('Close button clicked');
+            const newsPanel = document.querySelector('.country-news-panel');
+            if (newsPanel) {
+                newsPanel.style.display = 'none';
+            }
+        });
+    }
+}
 function initTimelineSlider() {
     const slider = document.getElementById('timelineSlider');
     const daysValue = document.getElementById('daysValue');
