@@ -22,3 +22,4 @@ flake8>=6.0.0  # Code linting
 mypy>=1.0.0   # Type checking
 
 google-genai
+pycountry
