@@ -129,8 +129,10 @@ class FeedWatcher:
     async def init(self):
         """Initialize aiohttp session and logged entries."""
         if not self.session:
-            self.session = aiohttp.ClientSession()
-            logger.info("📡 HTTP session initialized")
+            # Create a connector with SSL verification disabled
+            connector = aiohttp.TCPConnector(ssl=False)
+            self.session = aiohttp.ClientSession(connector=connector)
+            logger.info("📡 HTTP session initialized with SSL verification disabled")
         await self._load_logged_entries()
         logger.info(f"🗄️ Loaded {len(self.logged_entries)} cached entries")
         
@@ -285,8 +287,8 @@ class FeedWatcher:
                 cursor = conn.execute('''
                     INSERT INTO news_entries 
                     (message, pub_date, processed_date, feed_url, title, description, 
-                     link, image_url, content, emoji1, emoji2)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     link, image_url, content, emoji1, emoji2, sentiment_score, bias_category, bias_score)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     result.message,
                     entry.entry_time.isoformat(),
@@ -298,56 +300,31 @@ class FeedWatcher:
                     result.image_url,
                     result.content,
                     result.emoji1,
-                    result.emoji2
+                    result.emoji2,
+                    result.sentiment_score,
+                    result.bias_category,
+                    result.bias_score
                 ))
-                
                 article_id = cursor.lastrowid
-                logger.info(f"💾 Stored article in DB: {result.title} (ID: {article_id})")
-                
-                # Store tags
-                tag_ids = []
-                
-                # Add topic tags
+
+                # Add tags
                 for tag in result.topic_tags:
-                    if tag and tag.strip():
-                        tag_ids.append(add_tag(tag.strip(), 'topic'))
-                        
-                # Add geography tags
+                    tag_id = add_tag(tag, 'topic')
+                    tag_article(article_id, [tag_id])
+                    
                 for tag in result.geography_tags:
-                    if tag and tag.strip():
-                        tag_ids.append(add_tag(tag.strip(), 'geography'))
-                        
-                # Add event tags
+                    tag_id = add_tag(tag, 'geography')
+                    tag_article(article_id, [tag_id])
+                    
                 for tag in result.event_tags:
-                    if tag and tag.strip():
-                        tag_ids.append(add_tag(tag.strip(), 'event'))
-                
-                # Link tags to article
-                if tag_ids:
-                    tag_article(article_id, tag_ids)
-                    logger.info(f"🏷️ Added {len(tag_ids)} tags to article {article_id}")
+                    tag_id = add_tag(tag, 'event')
+                    tag_article(article_id, [tag_id])
                 
                 conn.commit()
-                logger.info(f"✅ Database transaction committed for {result.title}")
-
-                # Create news item for broadcast
-                news_item = {
-                    'title': result.title,
-                    'description': result.description,
-                    'link': result.link,
-                    'timestamp': entry.entry_time.isoformat(),
-                    'image_url': result.image_url,
-                    'feed_url': entry.feed_url,
-                    'emoji1': result.emoji1,
-                    'emoji2': result.emoji2
-                }
-                
-                # Broadcast with article ID for tag inclusion
-                await broadcast_news_update(news_item, article_id)
-                logger.info(f"📡 Broadcasted to web clients: {result.title}")
+                logger.info(f"✅ Stored entry: {result.title}")
                 
         except Exception as e:
-            logger.error(f"❌ Error storing entry {result.title}: {str(e)}")
+            logger.error(f"❌ Error storing entry: {e}\nTraceback:\n{traceback.format_exc()}")
             raise
 
     async def process_entry_batch(self, entries: List[FeedEntry]) -> List[Optional[datetime.datetime]]:

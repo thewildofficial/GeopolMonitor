@@ -36,7 +36,7 @@ This document outlines the planned features and improvements for GeopolMonitor.
   - Topic-based sentiment analysis
   - Historical sentiment trends
   - Sentiment shift detection
-  - Interactive visualization dashboard
+  - Interactive visualization dashboard (web interface)
 
 - ✅ Source Bias Detection
   - Multi-category bias classification system
@@ -44,7 +44,7 @@ This document outlines the planned features and improvements for GeopolMonitor.
   - Bias distribution analytics
   - Historical bias tracking
   - Source comparison tools
-  - Bias trend visualization
+  - bias analysed based on geopolitical interests (western,russian,chinese,israeli,turkish,arab etc)
 
 ## 🚀 Upcoming Features
 

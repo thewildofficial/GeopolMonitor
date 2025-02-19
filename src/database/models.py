@@ -48,23 +48,7 @@ def init_db(connection=None):
         )
     ''')
 
-    conn.execute('''
-        CREATE TABLE IF NOT EXISTS news_entries (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            message TEXT,
-            pub_date TEXT,
-            processed_date TEXT,
-            feed_url TEXT,
-            title TEXT,
-            description TEXT,
-            link TEXT UNIQUE,
-            image_url TEXT,
-            content TEXT,
-            emoji1 TEXT,
-            emoji2 TEXT,
-            source_priority INTEGER DEFAULT 100
-        )
-    ''')
+    conn.execute('''\n        CREATE TABLE IF NOT EXISTS news_entries (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            message TEXT,\n            pub_date TEXT,\n            processed_date TEXT,\n            feed_url TEXT,\n            title TEXT,\n            description TEXT,\n            link TEXT UNIQUE,\n            image_url TEXT,\n            content TEXT,\n            emoji1 TEXT,\n            emoji2 TEXT,\n            source_priority INTEGER DEFAULT 100,\n            sentiment_score REAL,\n            bias_category TEXT,\n            bias_score REAL\n        )\n    ''')
     
     conn.execute('CREATE INDEX IF NOT EXISTS idx_link ON news_entries(link)')
     conn.execute('CREATE INDEX IF NOT EXISTS idx_feed_url ON news_entries(feed_url)')
@@ -107,10 +91,12 @@ def exists_in_db(link: str) -> bool:
 def get_db():
     """Context manager for database connections."""
     global _connection, _last_backup
-    if _connection is None:
-        _connection = sqlite3.connect(DB_PATH)
+    connection = None
     try:
-        yield _connection
+        if _connection is None:
+            _connection = sqlite3.connect(DB_PATH)
+        connection = _connection
+        yield connection
         
         # Create periodic backup every 6 hours
         now = datetime.now()
@@ -119,8 +105,13 @@ def get_db():
             _last_backup = now
             
     except Exception as e:
-        _connection.rollback()
+        if connection:
+            connection.rollback()
         raise e
+    finally:
+        # Only close the connection if it's not the global one
+        if connection and connection != _connection:
+            connection.close()
 
 def cleanup_db():
     """Cleanup function to be called on program exit."""
