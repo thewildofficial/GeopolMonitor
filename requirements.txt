@@ -27,3 +27,4 @@ pycountry
 aiofiles
 newspaper3k
 lxml[html_clean]>=4.9.0  # HTML cleaning support
+brotli
