@@ -1,6 +1,29 @@
 import { normalizeCountry, isCountryMatch } from './countries.js';
+import { SentimentPanel } from './sentiment-panel.js';
+
+function getSentimentColor(sentiment) {
+    // Convert sentiment score (-1 to 1) to a color
+    const normalizedScore = (sentiment + 1) / 2; // Convert to 0-1 range
+    if (normalizedScore < 0.4) return 'var(--negative-sentiment)';
+    if (normalizedScore > 0.6) return 'var(--positive-sentiment)';
+    return 'var(--neutral-sentiment)';
+}
+
+function getBiasLabel(bias) {
+    // Convert bias score to a human-readable label
+    if (bias >= 0.7) return 'Strong bias';
+    if (bias >= 0.4) return 'Moderate bias';
+    return 'Low bias';
+}
 
 export function createNewsElement(newsItem) {
+    console.log('News item data:', {
+        title: newsItem.title,
+        sentiment_score: newsItem.sentiment_score,
+        bias_score: newsItem.bias_score,
+        bias_category: newsItem.bias_category
+    });
+
     if (!newsItem.description) {
         return null;
     }
@@ -24,9 +47,36 @@ export function createNewsElement(newsItem) {
             .join('. ') + '.';
     }
     
-    article.querySelector('h2').textContent = titleWithEmojis;
-    article.querySelector('.description').textContent = description;
+    // Add sentiment indicator
+    const titleContainer = article.querySelector('h2');
+    titleContainer.textContent = titleWithEmojis;
     
+    if (newsItem.sentiment_score !== undefined) {
+        console.log('Adding sentiment indicator with score:', newsItem.sentiment_score);
+        const sentimentIndicator = document.createElement('span');
+        sentimentIndicator.className = 'sentiment-indicator';
+        sentimentIndicator.style.backgroundColor = getSentimentColor(newsItem.sentiment_score);
+        sentimentIndicator.title = `Sentiment: ${Math.round(newsItem.sentiment_score * 100)}%`;
+        titleContainer.appendChild(sentimentIndicator);
+    } else {
+        console.log('No sentiment score available for:', newsItem.title);
+    }
+
+    const descContainer = article.querySelector('.description');
+    descContainer.textContent = description;
+
+    // Add bias indicator if available
+    if (newsItem.bias_score !== undefined) {
+        console.log('Adding bias indicator with score:', newsItem.bias_score);
+        const biasIndicator = document.createElement('div');
+        biasIndicator.className = 'bias-indicator';
+        biasIndicator.textContent = getBiasLabel(newsItem.bias_score);
+        biasIndicator.title = `Bias score: ${Math.round(newsItem.bias_score * 100)}%`;
+        descContainer.appendChild(biasIndicator);
+    } else {
+        console.log('No bias score available for:', newsItem.title);
+    }
+
     const timeElement = article.querySelector('.time');
     timeElement.textContent = formatTimeAgo(newsItem.timestamp);
     timeElement.setAttribute('data-timestamp', newsItem.timestamp);

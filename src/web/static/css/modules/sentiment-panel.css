@@ -1,0 +1,137 @@
+.sentiment-panel {
+    position: absolute;
+    left: 20px;
+    top: 20px;
+    width: 320px;
+    max-height: calc(100% - 40px);
+    background: rgba(var(--card-background-rgb), 0.6);
+    border-radius: 16px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+    border: 1px solid rgba(var(--border-color-rgb), 0.3);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    z-index: 1000;
+}
+
+.sentiment-header {
+    padding: 20px;
+    background: rgba(var(--card-background-rgb), 0.8);
+    border-bottom: 1px solid rgba(var(--border-color-rgb), 0.2);
+}
+
+.sentiment-content {
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.sentiment-score {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.score-circle {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    font-weight: 600;
+    background: linear-gradient(135deg, var(--accent-color-light), var(--accent-color));
+    color: white;
+}
+
+.score-details {
+    flex: 1;
+}
+
+.score-label {
+    font-size: 0.9rem;
+    color: var(--description-color);
+    margin-bottom: 4px;
+}
+
+.score-value {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.bias-section {
+    margin-top: 24px;
+}
+
+.bias-header {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-color);
+    margin-bottom: 16px;
+}
+
+.bias-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: rgba(var(--card-background-rgb), 0.4);
+    border-radius: 8px;
+    margin-bottom: 8px;
+}
+
+.bias-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent-color);
+    color: white;
+}
+
+.bias-details {
+    flex: 1;
+}
+
+.bias-type {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-color);
+    margin-bottom: 2px;
+}
+
+.bias-value {
+    font-size: 0.8rem;
+    color: var(--description-color);
+}
+
+@media (max-width: 768px) {
+    .sentiment-panel {
+        left: 0;
+        top: auto;
+        bottom: 0;
+        width: 100%;
+        max-height: 80vh;
+        border-radius: 16px 16px 0 0;
+        transform: translateY(100%);
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .sentiment-panel.active {
+        transform: translateY(0);
+    }
+
+    .sentiment-header {
+        padding: 16px;
+    }
+
+    .sentiment-content {
+        padding: 16px;
+    }
+}

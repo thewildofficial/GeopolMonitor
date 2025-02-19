@@ -178,6 +178,14 @@ async function updateNewsList(news) {
     
     news.forEach((item, index) => {
         try {
+            // Ensure sentiment and bias data is properly formatted
+            if (item.sentiment) {
+                item.sentiment = parseFloat(item.sentiment);
+            }
+            if (item.bias) {
+                item.bias = parseFloat(item.bias);
+            }
+            
             const element = createNewsElement(item);
             if (element && element.firstElementChild) {
                 element.firstElementChild.classList.add('news-item-initial');
@@ -191,6 +199,17 @@ async function updateNewsList(news) {
 
     container.innerHTML = '';
     container.appendChild(fragment);
+    
+    // Show "no results" message if no valid news items
+    if (!fragment.children.length) {
+        const noResults = document.createElement('div');
+        noResults.className = 'no-results';
+        noResults.innerHTML = `
+            <i class="fas fa-newspaper"></i>
+            <p>No news articles available</p>
+        `;
+        container.appendChild(noResults);
+    }
 }
 
 async function updateNews() {
