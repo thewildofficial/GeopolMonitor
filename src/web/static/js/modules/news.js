@@ -88,13 +88,17 @@ export function createNewsElement(newsItem) {
         biasWrapper.className = 'bias-wrapper';
         
         const biasIcon = document.createElement('span');
-        
+        biasIcon.className = 'bias-icon';
+        biasIcon.textContent = getBiasIcon(newsItem.bias_score);
         
         const biasLabel = document.createElement('span');
-        
+        biasLabel.className = 'bias-label';
+        biasLabel.textContent = getBiasLabel(newsItem.bias_score);
         
         const biasScore = document.createElement('span');
-        biasScore.className = 'bias-score';        
+        biasScore.className = 'bias-score';
+        biasScore.textContent = `${Math.round(newsItem.bias_score * 100)}%`;
+        
         biasWrapper.appendChild(biasIcon);
         biasWrapper.appendChild(biasLabel);
         biasWrapper.appendChild(biasScore);
