@@ -29,36 +29,58 @@ This document outlines the planned features and improvements for GeopolMonitor.
 - ✅ Mobile-responsive design
 - 🚧 Link countries with common stories in the UI. (TODO)
 
+### ✅ 4. Enhanced Content Analysis
+- ✅ Sentiment Analysis
+  - Implemented -1 to 1 scoring system
+  - Region-based sentiment tracking
+  - Topic-based sentiment analysis
+  - Historical sentiment trends
+  - Sentiment shift detection
+  - Interactive visualization dashboard
+
+- ✅ Source Bias Detection
+  - Multi-category bias classification system
+  - Source credibility scoring
+  - Bias distribution analytics
+  - Historical bias tracking
+  - Source comparison tools
+  - Bias trend visualization
+
 ## 🚀 Upcoming Features
 
-### 1. Advanced Analytics
-- News trend analysis dashboard
-- Geographic distribution insights
-- Topic correlation analysis
+### 1. Advanced Analytics Dashboard
+- News trend analysis
+  - Topic correlation matrix
+  - Geographic distribution heatmaps
+  - Sentiment flow visualization
+  - Bias distribution charts
 - Custom reporting tools
+  - PDF report generation
+  - Scheduled analytics emails
+  - Custom metric tracking
 - Historical data visualization
+  - Timeline comparison tools
+  - Pattern detection
+  - Anomaly highlighting
 
 ### 2. Enhanced User Features
 - Custom alert system
   - Region-based notifications
   - Topic-based alerts
   - Keyword monitoring
+  - Sentiment threshold alerts
+  - Bias detection notifications
 - Multi-language support
 - User accounts and preferences
 - API access for developers
 - Browser extension
 
-### 3. Enhanced Content Analysis
-- ✅ Sentiment Analysis: Implemented sentiment analysis to gauge the overall tone of news articles related to specific regions or topics.
-- ✅ Source Bias Detection: Implemented a system to analyze news sources and identify potential biases.
 
-### 4. Ground News Replication (Free):
 -   **News Source Comparison:** Display headlines from multiple sources side-by-side for the same news event.
 -   **Media Bias Ratings:** Implement community-based media bias ratings.
 -   **Factuality Ratings:** Integrate with fact-checking APIs and implement AI-powered fact-checking.
 -   **Blindspot Feed:** Identify and highlight underreported stories.
 -   **My News Bias:** Track user reading habits and provide personalized recommendations.
-
 
 ## 🤝 Contributing
 We welcome contributions! If you'd like to help implement any of these features, please check our contributing guidelines and open a pull request.
