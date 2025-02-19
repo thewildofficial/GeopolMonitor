@@ -1,6 +1,7 @@
 import { getActiveTags } from './tags.js';
 import { mapStyles } from './map-styles.js';
 import { normalizeCountry } from './countries.js';
+import { mapLoader } from './map-loader.js';
 
 let map;
 let heatLayer;
@@ -17,6 +18,8 @@ export class NewsMap {
         this.todayEvents = 0;
         this.onCountrySelected = null;
         this.geoJsonData = null;
+        this.currentZoom = 'low';
+        this.currentRegion = null;
     }
 
     async init() {
@@ -27,13 +30,74 @@ export class NewsMap {
             maxZoom: 6,
             zoomSnap: 0.5,
             zoomDelta: 0.5,
-            wheelPxPerZoomLevel: 120
+            wheelPxPerZoomLevel: 120,
+            preferCanvas: true // Use Canvas renderer for better performance
         }).setView([30, 0], 2);
 
+        // Initialize countryHeatData before loading map data
+        this.countryHeatData = new Map();
+
+        await mapLoader.init();
         await this.initTileLayers();
-        await this.loadCountryBoundaries();
+        await this.loadVisibleRegions();
         this.addLegend();
         this.setupThemeObserver();
+        this.setupZoomHandler();
+    }
+
+    setupZoomHandler() {
+        this.map.on('zoomend moveend', async () => {
+            const zoom = mapLoader.getZoomLevel(this.map.getZoom());
+            const center = this.map.getCenter();
+            const region = mapLoader.getRegionForCoordinates(center.lat, center.lng);
+
+            if (zoom !== this.currentZoom || region !== this.currentRegion) {
+                this.currentZoom = zoom;
+                this.currentRegion = region;
+                await this.loadVisibleRegions();
+            }
+        });
+    }
+
+    async loadVisibleRegions() {
+        try {
+            const bounds = this.map.getBounds();
+            const visibleRegions = new Set();
+
+            // Calculate visible regions based on bounds
+            for (let lat = bounds.getSouth(); lat <= bounds.getNorth(); lat += 45) {
+                for (let lng = bounds.getWest(); lng <= bounds.getEast(); lng += 45) {
+                    const region = mapLoader.getRegionForCoordinates(lat, lng);
+                    visibleRegions.add(region);
+                }
+            }
+
+            // Load data for each visible region
+            const loadPromises = Array.from(visibleRegions).map(region =>
+                mapLoader.loadChunk(this.currentZoom, region)
+            );
+
+            const chunks = await Promise.all(loadPromises);
+            this.geoJsonData = this.mergeGeoJsonChunks(chunks);
+            this.updateCountryLayer();
+
+        } catch (error) {
+            console.error('Failed to load visible regions:', error);
+        }
+    }
+
+    mergeGeoJsonChunks(chunks) {
+        return {
+            type: 'FeatureCollection',
+            features: chunks.flatMap(chunk => 
+                chunk?.features || []
+            ).map(feature => {
+                const countryName = feature.properties.ADMIN || feature.properties.name;
+                const countryData = normalizeCountry(countryName);
+                feature.properties.normalizedData = countryData;
+                return feature;
+            })
+        };
     }
 
     async loadCountryBoundaries() {
