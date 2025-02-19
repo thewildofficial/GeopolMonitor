@@ -148,7 +148,10 @@ def create_app():
             'feed_url': feed_url,
             'emoji1': emoji1,
             'emoji2': emoji2,
-            'tags': tags
+            'tags': tags,
+            'sentiment_score': item.get('sentiment_score', 0.0),
+            'bias_category': item.get('bias_category', 'neutral'),
+            'bias_score': item.get('bias_score', 0.0)
         }
 
     def extract_locations_from_text(text):
@@ -210,7 +213,8 @@ def create_app():
                     cursor = conn.execute('''
                         SELECT 
                             id, title, description, content, link, pub_date,
-                            feed_url, image_url, message, emoji1, emoji2
+                            feed_url, image_url, message, emoji1, emoji2,
+                            sentiment_score, bias_category, bias_score
                         FROM news_entries
                         ORDER BY pub_date DESC
                     ''')

@@ -1,5 +1,6 @@
 import { initTheme } from './modules/theme.js';
 import { initWebSocket } from './modules/websocket.js';
+import { SentimentPanel } from './modules/sentiment-panel.js';
 
 let map;
 let heatLayer;
@@ -10,6 +11,7 @@ let activeRegionsCount = 0;
 let todayEventsCount = 0;
 let allNews = []; // Store all news for filtering
 let countryLayer = null; // Add this to track the country boundaries layer
+let sentimentPanel = null; // Track the sentiment panel instance
 
 function initMap() {
     map = L.map('worldMap', {
@@ -224,6 +226,28 @@ function highlightCountry(feature) {
 }
 
 function showCountryNews(countryName) {
+    // Initialize sentiment panel if not already done
+    if (!sentimentPanel) {
+        sentimentPanel = new SentimentPanel();
+    }
+
+    // Calculate sentiment and bias data for the country
+    const countryNews = allNews.filter(item => 
+        item.tags.some(tag => 
+            tag.category === 'geography' && 
+            normalizeCountry(tag.name).toLowerCase() === normalizeCountry(countryName).toLowerCase()
+        )
+    );
+
+    // Example sentiment calculation (replace with actual data from your backend)
+    const sentimentData = {
+        sentiment: calculateAverageSentiment(countryNews),
+        biases: analyzeSourceBiases(countryNews)
+    };
+
+    // Update and show the sentiment panel
+    sentimentPanel.updateSentiment(sentimentData);
+    sentimentPanel.show();
     console.log('showCountryNews called with:', countryName);
     const newsPanel = document.querySelector('.country-news-panel');
     const countryTitle = document.getElementById('selectedCountry');
@@ -252,11 +276,25 @@ function showCountryNews(countryName) {
         countryNews.forEach(news => {
             const newsItem = document.createElement('div');
             newsItem.className = 'country-news-item';
+            // Log sentiment and bias data for verification
+            console.log('News item sentiment:', news.sentiment);
+            console.log('News item bias:', news.bias);
+
+            // Calculate sentiment color
+            const sentimentColor = news.sentiment ? getSentimentColor(news.sentiment) : 'var(--neutral-sentiment)';
+            const biasLabel = news.bias ? getBiasLabel(news.bias) : 'No bias data';
+
             newsItem.innerHTML = `
-                <h3>${news.title}</h3>
+                <div class="news-header">
+                    <h3>
+                        <span class="sentiment-dot" style="background-color: ${sentimentColor}" title="Sentiment score: ${Math.round((news.sentiment || 0) * 100)}%"></span>
+                        ${news.title}
+                    </h3>
+                </div>
                 <p>${news.description}</p>
                 <div class="meta">
                     <span>${formatDate(news.timestamp)}</span>
+                    <span class="bias-badge" title="Bias score: ${Math.round((news.bias || 0) * 100)}%">${biasLabel}</span>
                 </div>
             `;
             newsItem.addEventListener('click', () => {
@@ -315,6 +353,21 @@ function showCountryNews(countryName) {
             }
         });
     }
+}
+
+function getSentimentColor(sentiment) {
+    // Convert sentiment score (-1 to 1) to a color
+    const normalizedScore = (sentiment + 1) / 2; // Convert to 0-1 range
+    if (normalizedScore < 0.4) return 'var(--negative-sentiment)';
+    if (normalizedScore > 0.6) return 'var(--positive-sentiment)';
+    return 'var(--neutral-sentiment)';
+}
+
+function getBiasLabel(bias) {
+    // Convert bias score to a human-readable label
+    if (bias >= 0.7) return 'Strong bias';
+    if (bias >= 0.4) return 'Moderate bias';
+    return 'Low bias';
 }
 
 function formatDate(timestamp) {
