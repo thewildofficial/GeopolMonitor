@@ -15,6 +15,7 @@ asyncio>=3.4.3
 beautifulsoup4>=4.12.2
 pytest>=8.0.0
 python-telegram-bot>=20.7
+fake-useragent>=1.4.0  # For rotating user agents
 
 # Development dependencies
 black>=23.0.0  # Code formatting
@@ -24,3 +25,5 @@ mypy>=1.0.0   # Type checking
 google-genai
 pycountry
 aiofiles
+newspaper3k
+lxml[html_clean]>=4.9.0  # HTML cleaning support

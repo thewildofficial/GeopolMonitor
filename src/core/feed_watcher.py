@@ -65,7 +65,7 @@ class RateLimiter:
                     logger.error(f"❌ Daily limit reached. Waiting {delay:.1f}s")
                     await asyncio.sleep(delay)
                     self.daily_calls = 0
-                    self.last_daily_reset = datetime.datetime.now()
+                    self.last_daily_reset = now
             
             self.minute_calls += 1
             self.daily_calls += 1
@@ -73,15 +73,15 @@ class RateLimiter:
 class FeedConfiguration:
     """Configuration for feed watcher."""
     def __init__(self, 
-                 max_concurrent_feeds: int = 10,
-                 min_poll_interval: int = 30,
-                 max_poll_interval: int = 3600,
-                 error_backoff_delay: int = 60,
+                 max_concurrent_feeds: int = 20,  # Increased from 10
+                 min_poll_interval: int = 10,    # Reduced from 30
+                 max_poll_interval: int = 1800,  # Reduced from 3600
+                 error_backoff_delay: int = 30,  # Reduced from 60
                  process_timeout: int = 100,
-                 connect_timeout: float = 30.0,
-                 total_timeout: float = 60.0,
-                 batch_size: int = 5,
-                 max_entries_per_feed: int = 20):
+                 connect_timeout: float = 60.0,
+                 total_timeout: float = 120.0,
+                 batch_size: int = 10,          # Increased from 5
+                 max_entries_per_feed: int = 50): # Increased from 20
         self.max_concurrent_feeds = max_concurrent_feeds
         self.min_poll_interval = min_poll_interval
         self.max_poll_interval = max_poll_interval
@@ -152,9 +152,10 @@ class FeedWatcher:
             self.session = None
 
     def _update_feed_metrics(self, feed_url: str, had_updates: bool, error: bool = False):
-        """Update feed metrics based on check results."""
+        """Update feed metrics based on check results and source priority."""
         metrics = get_feed_metrics(feed_url)
         current_time = datetime.datetime.now(datetime.timezone.utc)
+        source_priority = get_source_priority(feed_url)
         
         if error:
             metrics['consecutive_failures'] += 1
@@ -164,22 +165,24 @@ class FeedWatcher:
             )
         else:
             if had_updates:
+                # High priority sources get more frequent updates
+                priority_factor = max(0.2, 1 - (source_priority * 0.2))
                 metrics['update_frequency'] = max(
-                    metrics['update_frequency'] // 2,
+                    int(metrics['update_frequency'] * priority_factor),
                     self.config.min_poll_interval
                 )
                 metrics['consecutive_failures'] = 0
                 metrics['last_success_time'] = current_time
             else:
+                # Slower increase for high priority sources
+                increase_factor = 1.2 if source_priority > 0.8 else 1.5
                 metrics['update_frequency'] = min(
-                    int(metrics['update_frequency'] * 1.5),
+                    int(metrics['update_frequency'] * increase_factor),
                     self.config.max_poll_interval
                 )
                 metrics['consecutive_failures'] = 0
 
-        # Get updated source priority
-        metrics['source_priority'] = get_source_priority(feed_url)
-        
+        metrics['source_priority'] = source_priority
         update_feed_cache(feed_url, metrics)
         return metrics['update_frequency']
 
@@ -196,38 +199,49 @@ class FeedWatcher:
             headers['If-None-Match'] = feed_info['etag']
         if 'last_modified' in feed_info:
             headers['If-Modified-Since'] = feed_info['last_modified']
+
+        max_retries = 3
+        retry_delay = 5
             
-        try:
-            timeout = aiohttp.ClientTimeout(
-                connect=self.config.connect_timeout,
-                total=self.config.total_timeout
-            )
-            async with self.session.get(feed_url, headers=headers, timeout=timeout) as response:
-                if response.status == 304:  # Not modified
-                    logger.info(f"📭 No changes in feed: {feed_url}")
-                    return ""
+        for attempt in range(max_retries):
+            try:
+                timeout = aiohttp.ClientTimeout(
+                    connect=self.config.connect_timeout,
+                    total=self.config.total_timeout
+                )
+                async with self.session.get(feed_url, headers=headers, timeout=timeout) as response:
+                    if response.status == 304:  # Not modified
+                        logger.info(f"📭 No changes in feed: {feed_url}")
+                        return ""
+                        
+                    logger.info(f"📬 Retrieved feed content: {feed_url} (Status: {response.status})")
+                    self.feeds[feed_url] = {
+                        'etag': response.headers.get('ETag'),
+                        'last_modified': response.headers.get('Last-Modified'),
+                        'content_type': response.headers.get('Content-Type', '')
+                    }
                     
-                logger.info(f"📬 Retrieved feed content: {feed_url} (Status: {response.status})")
-                self.feeds[feed_url] = {
-                    'etag': response.headers.get('ETag'),
-                    'last_modified': response.headers.get('Last-Modified'),
-                    'content_type': response.headers.get('Content-Type', '')
-                }
-                
-                text = await response.text()
-                # Check if content was actually received
-                if not text:
-                    raise ValueError("Empty response received")
-                return text
-                
-        except aiohttp.ClientError as e:
-            logger.error(f"Network error checking feed {feed_url}: {str(e)}")
-            self._update_feed_metrics(feed_url, had_updates=False, error=True)
-            return ""
-        except Exception as e:
-            logger.error(f"Unexpected error checking feed {feed_url}: {str(e)}")
-            self._update_feed_metrics(feed_url, had_updates=False, error=True)
-            return ""
+                    text = await response.text()
+                    # Check if content was actually received
+                    if not text:
+                        raise ValueError("Empty response received")
+                    return text
+                    
+            except aiohttp.ClientError as e:
+                if attempt < max_retries - 1:
+                    logger.warning(f"Network error on attempt {attempt + 1}/{max_retries} for {feed_url}: {str(e)}. Retrying in {retry_delay}s...")
+                    await asyncio.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                else:
+                    logger.error(f"Network error checking feed {feed_url} after {max_retries} attempts: {str(e)}")
+                    self._update_feed_metrics(feed_url, had_updates=False, error=True)
+                    return ""
+            except Exception as e:
+                logger.error(f"Unexpected error checking feed {feed_url}: {str(e)}")
+                self._update_feed_metrics(feed_url, had_updates=False, error=True)
+                return ""
+
+        return ""
 
     async def process_entry(self, entry: FeedEntry) -> Optional[datetime.datetime]:
         """Process a single feed entry."""
@@ -400,20 +414,20 @@ class FeedWatcher:
         new_entries.sort(key=lambda x: x.entry_time, reverse=True)
         new_entries = new_entries[:self.config.max_entries_per_feed]
         
-        logger.info(f"📰 Processing {len(new_entries)} new entries in batches from: {feed_url}")
+        logger.info(f"📰 Processing {len(new_entries)} new entries from: {feed_url}")
         processed_entries = 0
         new_entry_times = []
         
-        # Process entries in batches
+        # Process entries in batches with minimal delay
         for i in range(0, len(new_entries), self.config.batch_size):
             batch = new_entries[i:i + self.config.batch_size]
             results = await self.process_entry_batch(batch)
             processed_entries += sum(1 for r in results if r is not None)
             new_entry_times.extend([t for t in results if t is not None])
             
+            # Reduced delay between batches to 0.5 seconds
             if i + self.config.batch_size < len(new_entries):
-                logger.info(f"⏳ Processed {processed_entries} entries, waiting before next batch...")
-                await asyncio.sleep(2)  # Small delay between batches
+                await asyncio.sleep(0.5)
         
         if new_entry_times:
             latest = max(new_entry_times)

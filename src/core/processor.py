@@ -111,6 +111,12 @@ class ArticleProcessor:
             # Extract images with improved method
             images = self.image_extractor.extract_images(entry)
             
+           # Get article link
+            link = clean_url(getattr(entry, 'link', ''))
+            if not link:
+                logger.error("No valid link found in entry")
+                return None
+            
             # Initial cleaning
             title_cleaned = self._clean_html(getattr(entry, 'title', 'Untitled'))
             description_cleaned = self._clean_html(getattr(entry, 'description', ''))
@@ -118,6 +124,7 @@ class ArticleProcessor:
             # Process with AI and get tags
             emojis, description_processed, topics, geography, events = await self.content_processor.process_content_with_tags(
                 description_cleaned, 
+                url=link,
                 is_title=False,
                 instruction="Summarize in clear English, focusing on key points."
             )
@@ -125,6 +132,7 @@ class ArticleProcessor:
             # Process title and get additional tags
             _, title_processed, title_topics, title_geo, title_events = await self.content_processor.process_content_with_tags(
                 title_cleaned,
+                url=link,
                 is_title=True,
                 instruction="Translate to clear English title if needed."
             )
@@ -138,7 +146,6 @@ class ArticleProcessor:
             event_tags = list(set(events + title_events))
 
             # Process emojis and content
-            link = clean_url(getattr(entry, 'link', ''))
             content = getattr(entry, 'description', '')
             emoji1, emoji2 = self._split_emojis(emojis)
             if not emoji1 or len(emoji1) > 4:

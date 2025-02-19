@@ -108,13 +108,29 @@ class ContentProcessor:
         """Initialize or reinitialize the Gemini client with current API key."""
         self.client = genai.Client(api_key=self.key_manager.get_current_key())
     
-    async def process_content(self, text: str, is_title: bool = False, instruction: Optional[str] = None) -> Tuple[str, str]:
+    async def process_content(self, text: str, url: str, is_title: bool = False, instruction: Optional[str] = None) -> Tuple[str, str]:
         """Process content with Gemini API."""
         try:
             rotate_needed = await self.key_manager.wait_for_rate_limit()
             if rotate_needed:
                 await self.key_manager.rotate_key()
                 self._init_client()
+
+            # Validate URL parameter
+            if not isinstance(url, str) or not url.startswith(('http://', 'https://')):
+                logger.error(f"Invalid URL provided: {url}")
+                raise ValueError(f"Invalid URL format: {url}")
+
+            # Always scrape full article content from URL
+            from .scraper import scrape_article
+            logger.info(f"Attempting to scrape article content from: {url}")
+            article_data = await scrape_article(url)
+            if article_data and article_data.get('text'):
+                logger.info(f"Successfully scraped article content from: {url}")
+                text = f"{article_data.get('title', '')}\n\n{article_data['text']}"
+            else:
+                logger.error(f"Failed to scrape required article content from: {url}")
+                raise ValueError(f"Could not scrape content from {url}")
 
             await wait_for_rate_limit()
             
@@ -240,9 +256,9 @@ TEXT: [processed text]"""
                 logger.error(f"Unexpected Gemini API error: {error_msg}")
                 return "🔄❌", text
 
-    async def process_content_with_tags(self, text: str, is_title: bool = False, instruction: Optional[str] = None) -> Tuple[str, str, list[str], list[str], list[str]]:
+    async def process_content_with_tags(self, text: str, url: str, is_title: bool = False, instruction: Optional[str] = None) -> Tuple[str, str, list[str], list[str], list[str]]:
         """Process content and generate tags with Gemini API."""
-        emoji_str, processed_text = await self.process_content(text, is_title, instruction)
+        emoji_str, processed_text = await self.process_content(text, url, is_title, instruction)
         topics, geography, events = await generate_tags(text)
         return emoji_str, processed_text, topics, geography, events
 
@@ -254,29 +270,57 @@ TEXT: [processed text]"""
                 await self.key_manager.rotate_key()
                 self._init_client()
 
-            prompt = f"""Analyze this text and provide three metrics:
+            prompt = f"""Analyze this text and provide a detailed sentiment and bias analysis:
 
-1. SENTIMENT SCORE:
-   - Score from -1.0 (extremely negative) to 1.0 (extremely positive)
-   - Consider tone, language, and context
-   - Be objective and consistent
+1. SENTIMENT SCORE (-1.0 to 1.0):
+   Consider these aspects:
+   - Overall emotional tone (negative/positive/neutral)
+   - Language intensity and emotional charge
+   - Impact on reader (concerning/reassuring/neutral)
+   - Presence of crisis/conflict vs cooperation/progress
+   - Economic implications (decline/growth/stable)
+   - Social implications (division/unity/neutral)
+   - Environmental impact (harmful/beneficial/neutral)
+   
+   Scoring guide:
+   -1.0 to -0.7: Highly negative (crisis, conflict, severe problems)
+   -0.6 to -0.3: Moderately negative (challenges, concerns, difficulties)
+   -0.2 to 0.2: Neutral (balanced, factual, objective)
+   0.3 to 0.6: Moderately positive (progress, improvement, cooperation)
+   0.7 to 1.0: Highly positive (breakthrough, success, strong growth)
 
 2. BIAS CATEGORY:
-   Choose the most evident geopolitical perspective:
-   - western
-   - russian
-   - chinese
-   - israeli
-   - turkish
-   - arab
-   - indian
-   - african
-   - (any other geopolitical perspective detected)
-   - neutral
+   Identify the dominant geopolitical perspective:
+   - western (US/EU/NATO aligned)
+   - russian (Russia/CIS aligned)
+   - Ukranian (Heavily ukrainian aligned)
+   - chinese (China/SCO aligned)
+   - israeli (Pro-Israel/Jewish perspective)
+   - Palestinian (Pro-Palestinian)
+   - turkish (Turkey/Neo-Ottoman perspective)
+   - arab (Arab/Gulf states perspective)
+   - indian (India/South Asian perspective)
+   - african (Pan-African/Regional perspective)
+   - iranian (Iran/Shiite aligned)
+   - latin-american (Latin American perspective)
+   - neutral (No clear geopolitical bias)
 
-3. BIAS SCORE:
-   - Score from 0.0 (neutral/balanced) to 1.0 (strongly biased)
-   - Consider language, sources quoted, and narrative framing
+3. BIAS SCORE (0.0 to 1.0):
+   Evaluate these factors:
+   - Source diversity (single vs multiple perspectives)
+   - Language patterns (loaded terms, emotional manipulation)
+   - Fact presentation (selective vs comprehensive)
+   - Quote selection (balanced vs one-sided)
+   - Context provision (complete vs partial)
+   - Historical framing (balanced vs skewed)
+   - Economic framing (fair vs biased)
+   - Cultural sensitivity (present vs absent)
+   
+   Scoring guide:
+   0.0 to 0.2: Minimal bias (multiple perspectives, balanced reporting)
+   0.3 to 0.5: Moderate bias (slight favor to one perspective)
+   0.6 to 0.8: Significant bias (clear favoritism, selective reporting)
+   0.9 to 1.0: Strong bias (propaganda-like, heavily one-sided)
 
 Text to analyze: {text}
 
@@ -318,10 +362,18 @@ BIAS_SCORE: [score]"""
             logger.error(f"Error analyzing sentiment and bias: {e}")
             return 0.0, 'neutral', 0.0
 
-    async def process_content_with_analysis(self, text: str, is_title: bool = False) -> Tuple[str, str, float, str, float]:
+    async def process_content_with_analysis(self, text: str, url: str, is_title: bool = False) -> Tuple[str, str, float, str, float]:
         """Process content and perform sentiment and bias analysis."""
-        emoji_str, processed_text = await self.process_content(text, is_title)
-        sentiment_score, bias_category, bias_score = await self.analyze_sentiment_and_bias(processed_text)
+        # First get the full article content
+        from .scraper import scrape_article
+        article_data = await scrape_article(url)
+        full_article_text = f"{article_data.get('title', '')}\n\n{article_data['text']}" if article_data and article_data.get('text') else text
+        
+        # Get emoji and processed text (summary)
+        emoji_str, processed_text = await self.process_content(text, url, is_title)
+        
+        # Use full article text for sentiment and bias analysis
+        sentiment_score, bias_category, bias_score = await self.analyze_sentiment_and_bias(full_article_text)
         return emoji_str, processed_text, sentiment_score, bias_category, bias_score
 
 # Create singleton instance
