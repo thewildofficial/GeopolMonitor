@@ -47,35 +47,66 @@ export function createNewsElement(newsItem) {
             .join('. ') + '.';
     }
     
+    function getSentimentLabel(score) {
+        if (score >= 0.6) return 'Positive';
+        if (score <= -0.6) return 'Negative';
+        if (score >= 0.2) return 'Somewhat Positive';
+        if (score <= -0.2) return 'Somewhat Negative';
+        return 'Neutral';
+    }
+    
+    function getBiasIcon(score) {
+        if (score >= 0.7) return '⚠️';
+        if (score >= 0.4) return '⚡';
+        return '✓';
+    }
+    
     // Add sentiment indicator
     const titleContainer = article.querySelector('h2');
     titleContainer.textContent = titleWithEmojis;
     
     if (newsItem.sentiment_score !== undefined) {
-        console.log('Adding sentiment indicator with score:', newsItem.sentiment_score);
+        const sentimentWrapper = document.createElement('div');
+        sentimentWrapper.className = 'sentiment-wrapper';
+        
         const sentimentIndicator = document.createElement('span');
         sentimentIndicator.className = 'sentiment-indicator';
         sentimentIndicator.style.backgroundColor = getSentimentColor(newsItem.sentiment_score);
-        sentimentIndicator.title = `Sentiment: ${Math.round(newsItem.sentiment_score * 100)}%`;
-        titleContainer.appendChild(sentimentIndicator);
-    } else {
-        console.log('No sentiment score available for:', newsItem.title);
+        
+        const sentimentLabel = document.createElement('span');
+        sentimentLabel.className = 'sentiment-label';
+        sentimentLabel.textContent = getSentimentLabel(newsItem.sentiment_score);
+        
+        sentimentWrapper.appendChild(sentimentIndicator);
+        sentimentWrapper.appendChild(sentimentLabel);
+        titleContainer.appendChild(sentimentWrapper);
+    }
+    
+    // Add bias indicator if available
+    if (newsItem.bias_score !== undefined) {
+        const biasWrapper = document.createElement('div');
+        biasWrapper.className = 'bias-wrapper';
+        
+        const biasIcon = document.createElement('span');
+        
+        
+        const biasLabel = document.createElement('span');
+        
+        
+        const biasScore = document.createElement('span');
+        biasScore.className = 'bias-score';        
+        biasWrapper.appendChild(biasIcon);
+        biasWrapper.appendChild(biasLabel);
+        biasWrapper.appendChild(biasScore);
+        
+        const meta = article.querySelector('.meta');
+        meta.appendChild(biasWrapper);
     }
 
     const descContainer = article.querySelector('.description');
     descContainer.textContent = description;
 
-    // Add bias indicator if available
-    if (newsItem.bias_score !== undefined) {
-        console.log('Adding bias indicator with score:', newsItem.bias_score);
-        const biasIndicator = document.createElement('div');
-        biasIndicator.className = 'bias-indicator';
-        biasIndicator.textContent = getBiasLabel(newsItem.bias_score);
-        biasIndicator.title = `Bias score: ${Math.round(newsItem.bias_score * 100)}%`;
-        descContainer.appendChild(biasIndicator);
-    } else {
-        console.log('No bias score available for:', newsItem.title);
-    }
+    
 
     const timeElement = article.querySelector('.time');
     timeElement.textContent = formatTimeAgo(newsItem.timestamp);

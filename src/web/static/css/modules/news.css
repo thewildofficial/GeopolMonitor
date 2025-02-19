@@ -134,8 +134,19 @@
 .news-header {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
-    margin-bottom: 0.75rem;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.news-subtitle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+    font-size: 0.85rem;
+    color: var(--meta-color);
+    opacity: 0.65;
 }
 
 .news-item h2 {
@@ -168,10 +179,7 @@
     border-top: 1px solid var(--border-color);
     margin-top: auto;
     padding-top: 1rem;
-    display: flex;
-    justify-content: space-between;
     align-items: center;
-    color: var(--meta-color);
     font-size: 0.85rem;
 }
 
@@ -225,6 +233,110 @@
 
 .news-item:hover .news-image {
     transform: scale(1.05);
+}
+
+/* Sentiment wrapper styles */
+.sentiment-wrapper {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: var(--accent-color-transparent);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    transition: all 0.2s var(--spring-timing);
+    margin-right: 6px;
+}
+
+.sentiment-wrapper:hover {
+    background: var(--accent-color-transparent);
+    transform: translateY(-2px);
+}
+
+.sentiment-indicator {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    transition: all 0.2s var(--spring-timing);
+    box-shadow: 0 1px 2px var(--sentiment-shadow);
+}
+
+.sentiment-wrapper:hover .sentiment-indicator {
+    transform: scale(1.2);
+}
+
+.sentiment-label {
+    font-size: 0.75rem;
+    font-weight: 450;
+    color: var(--meta-color);
+    opacity: 0.9;
+    letter-spacing: -0.01em;
+}
+
+/* Bias wrapper styles */
+.bias-wrapper {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: var(--accent-color-transparent);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    transition: all 0.2s var(--spring-timing);
+}
+
+.bias-wrapper:hover {
+    background: var(--accent-color-transparent);
+    transform: translateY(-2px);
+}
+
+.bias-icon {
+    margin-right: 6px;
+    font-size: 0.9rem;
+}
+
+.bias-label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+}
+
+.bias-score {
+    margin-left: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    opacity: 0.8;
+    padding-left: 6px;
+    border-left: 1px solid rgba(var(--text-color-rgb), 0.2);
+}
+
+/* Mobile responsiveness for sentiment and bias */
+@media (max-width: 768px) {
+    .sentiment-wrapper {
+        padding: 3px 8px;
+    }
+    
+    .sentiment-indicator {
+        width: 5px;
+        height: 5px;
+    }
+    
+    .sentiment-label {
+        font-size: 0.75rem;
+    }
+    
+    .bias-wrapper {
+        padding: 3px 10px;
+    }
+    
+    .bias-label {
+        font-size: 0.8rem;
+    }
+    
+    .bias-score {
+        font-size: 0.7rem;
+    }
 }
 
 /* Mobile responsiveness */
