@@ -27,24 +27,24 @@ This document outlines the planned features and improvements for GeopolMonitor.
 - ✅ Timeline slider for historical view
 - ✅ Popup article previews
 - ✅ Mobile-responsive design
-- 🚧 Link countries with common stories in the UI. (TODO)
+- 🚧 Link countries with common stories in the UI
 
 ### ✅ 4. Enhanced Content Analysis
 - ✅ Sentiment Analysis
   - Implemented -1 to 1 scoring system
-  - Region-based sentiment tracking
+  🚧 Region-based sentiment tracking
   - Topic-based sentiment analysis
-  - Historical sentiment trends
-  - Sentiment shift detection
-  - Interactive visualization dashboard (web interface)
+  🚧 Historical sentiment trends
+  🚧 Sentiment shift detection
+  🚧 Interactive visualization dashboard
 
 - ✅ Source Bias Detection
   - Multi-category bias classification system
   - Source credibility scoring
-  - Bias distribution analytics
-  - Historical bias tracking
+  🚧 Bias distribution analytics
+  🚧 Historical bias tracking
   - Source comparison tools
-  - bias analysed based on geopolitical interests (western,russian,chinese,israeli,turkish,arab etc)
+  - Bias analysis based on geopolitical interests (Western, Russian, Chinese, Israeli, Turkish, Arab etc.)
 
 ## 🚀 Upcoming Features
 
@@ -75,12 +75,12 @@ This document outlines the planned features and improvements for GeopolMonitor.
 - API access for developers
 - Browser extension
 
-
--   **News Source Comparison:** Display headlines from multiple sources side-by-side for the same news event.
--   **Media Bias Ratings:** Implement community-based media bias ratings.
--   **Factuality Ratings:** Integrate with fact-checking APIs and implement AI-powered fact-checking.
--   **Blindspot Feed:** Identify and highlight underreported stories.
--   **My News Bias:** Track user reading habits and provide personalized recommendations.
+### 3. Content Comparison & Quality
+- News source comparison: Side-by-side headlines from multiple sources
+- Media bias ratings: Community-based bias assessment
+- Factuality ratings: Integration with fact-checking APIs
+- Blindspot feed: Highlighting underreported stories
+- Personalized bias awareness: Track and analyze reading habits
 
 ## 🤝 Contributing
 We welcome contributions! If you'd like to help implement any of these features, please check our contributing guidelines and open a pull request.

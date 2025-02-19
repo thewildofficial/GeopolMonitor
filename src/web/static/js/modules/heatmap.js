@@ -11,21 +11,46 @@ let countryData = new Map(); // Store country data for intensity calculations
  * @returns {Promise} - Resolves when the heatmap is initialized
  */
 export async function initHeatmap(map) {
-    console.log('Initializing country heatmap...');
+    console.log('[Heatmap] Starting initialization...');
+    console.log('[Heatmap] Map instance:', map ? 'provided' : 'missing');
     try {
+        // First fetch countries-lite.json for ISO mapping
+        const liteResponse = await fetch('/static/assets/countries-lite.json');
+        if (!liteResponse.ok) {
+            throw new Error(`Failed to fetch lite GeoJSON: ${liteResponse.statusText}`);
+        }
+        
+        const liteData = await liteResponse.json();
+        if (!liteData || !liteData.features) {
+            throw new Error('Invalid lite GeoJSON data format');
+        }
+
+        // Initialize ISO mapping with the lite data
+        console.log('[Heatmap] Initializing ISO mapping with', liteData.features.length, 'features');
+        initializeISOMapping(liteData);
+
+        // Then fetch full countries.json for map rendering
         const response = await fetch('/static/assets/countries.json');
         if (!response.ok) {
-            throw new Error(`Failed to fetch GeoJSON: ${response.statusText}`);
+            throw new Error(`Failed to fetch full GeoJSON: ${response.statusText}`);
         }
         
         const data = await response.json();
         if (!data || !data.features) {
-            throw new Error('Invalid GeoJSON data format');
+            throw new Error('Invalid full GeoJSON data format');
         }
-
-        // Initialize ISO mapping with the GeoJSON data
-        initializeISOMapping(data);
         
+        // Pre-initialize the countryData map
+        console.log('[Heatmap] Pre-initializing country data with', data.features.length, 'features');
+        countryData = new Map();
+        data.features.forEach(feature => {
+            if (feature?.properties) {
+                const countryName = normalizeCountryName(feature.properties.ADMIN || feature.properties.name);
+                countryData.set(countryName, 0);
+            }
+        });
+        
+        console.log('[Heatmap] Creating GeoJSON layer...');
         countryLayer = L.geoJSON(data, {
             style: (feature) => mapStyles.getCountryStyle({ count: 0 }, 1),
             onEachFeature: function(feature, layer) {
@@ -44,7 +69,7 @@ export async function initHeatmap(map) {
             }
         }).addTo(map);
         
-        console.log('Country heatmap initialized successfully');
+        console.log('[Heatmap] Initialization complete - Layer added to map');
         return countryLayer;
     } catch (error) {
         console.error('Error initializing heatmap:', error);
@@ -56,14 +81,15 @@ export async function initHeatmap(map) {
  * Update country colors based on news data
  * @param {Array} newsData - Array of news items
  */
-export function updateHeatmap(newsData) {
+export function updateHeatmap(newsData, retryCount = 0, maxRetries = 5) {
     // Add debug counters
     let totalPosts = 0;
     let totalGeoTags = 0;
     let processedTags = 0;
     let matchedTags = 0;
 
-    console.log('Updating heatmap with new data...', newsData?.length || 0, 'items');
+    console.log('[Heatmap] Starting update with', newsData?.length || 0, 'news items');
+    console.log('[Heatmap] Current country layer status:', countryLayer ? 'active' : 'not initialized');
     try {
         if (!Array.isArray(newsData)) {
             console.error('Invalid news data format:', newsData);
@@ -87,24 +113,6 @@ export function updateHeatmap(newsData) {
             totalGeoTags += geoTags.length;
             
             geoTags.forEach(tag => {
-                tagCounts.set(tag.name, (tagCounts.get(tag.name) || 0) + 1);
-            });
-        });
-
-        // Log initial stats
-        console.log('Initial counts:', {
-            totalPosts,
-            totalGeoTags,
-            uniqueTags: tagCounts.size
-        });
-
-        // Second pass: process with normalized names
-        newsData.forEach(item => {
-            if (!item?.tags?.length) return;
-            
-            const geoTags = item.tags.filter(tag => tag?.category === 'geography' && tag.name);
-            geoTags.forEach(tag => {
-                processedTags++;
                 const originalName = tag.name;
                 const normalizedCountry = normalizeCountry(originalName);
                 
@@ -127,66 +135,11 @@ export function updateHeatmap(newsData) {
                 if (!matched) {
                     unmatchedTags.add(`${originalName} (${tagCounts.get(originalName) || 0}) → ${normalizedCountry.name}`);
                 }
+                
+                tagCounts.set(tag.name, (tagCounts.get(tag.name) || 0) + 1);
             });
         });
 
-        // Log comprehensive stats
-        console.log('Tag processing stats:', {
-            totalPosts,
-            totalGeoTags,
-            processedTags,
-            matchedTags,
-            unmatchedCount: unmatchedTags.size,
-            matchRate: `${((matchedTags / totalGeoTags) * 100).toFixed(1)}%`
-        });
-
-        // Log unmapped tags by frequency
-        const unmappedByFrequency = Array.from(tagCounts.entries())
-            .filter(([tag]) => !Array.from(countryFrequencies.keys())
-                .some(country => normalizeCountryName(tag).toLowerCase() === country.toLowerCase()))
-            .sort((a, b) => b[1] - a[1]);
-            
-        if (unmappedByFrequency.length > 0) {
-            console.warn('Most frequent unmapped tags:', 
-                unmappedByFrequency.slice(0, 10)
-                    .map(([tag, count]) => `${tag}: ${count}`)
-            );
-        }
-
-        // Log comparison between original counts and matched counts
-        console.log('Original tag counts vs Matched counts:');
-        for (const [tag, count] of tagCounts.entries()) {
-            const normalized = normalizeCountry(tag).name;
-            const matched = Array.from(countryFrequencies.entries())
-                .find(([country]) => country.toLowerCase() === normalized.toLowerCase());
-            if (matched) {
-                console.log(`${tag}: ${count} → ${matched[0]}: ${matched[1]}`);
-            } else {
-                console.log(`${tag}: ${count} → UNMATCHED`);
-            }
-        }
-
-        // Log unmatched tags
-        if (unmatchedTags.size > 0) {
-            console.warn('Unmatched geographic tags:', 
-                Array.from(unmatchedTags).sort(),
-                `(${unmatchedTags.size} total unmatched)`
-            );
-        }
-
-        // Log matched countries
-        console.log('Matched countries:', 
-            Array.from(countryFrequencies.entries())
-                .sort((a, b) => b[1] - a[1])
-                .map(([country, count]) => `${country}: ${count}`)
-        );
-
-        // Log top countries for debugging
-        const sortedCountries = Array.from(countryFrequencies.entries())
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 5);
-        console.log('Top 5 countries by news count:', sortedCountries);
-        
         // Update country data using normalized names
         if (countryLayer) {
             countryLayer.eachLayer(layer => {
@@ -204,7 +157,18 @@ export function updateHeatmap(newsData) {
         // Get the maximum count for normalization
         const values = Array.from(countryData.values());
         const maxCount = values.length > 0 ? Math.max(...values) : 1;
-        console.log('Max count across countries:', maxCount);
+        const uniqueCountries = new Set(values.filter(v => v > 0)).size;
+
+        console.log('[Heatmap] Unique countries with data:', uniqueCountries);
+        console.log('[Heatmap] Max count:', maxCount);
+
+        // If we don't have enough country data and haven't exceeded max retries,
+        // schedule another update
+        if (uniqueCountries <= 1 && retryCount < maxRetries) {
+            console.log(`[Heatmap] Not enough country data (${uniqueCountries}), retrying... (${retryCount + 1}/${maxRetries})`);
+            setTimeout(() => updateHeatmap(newsData, retryCount + 1, maxRetries), 1000);
+            return;
+        }
         
         // Update country styles
         if (countryLayer) {
@@ -234,6 +198,20 @@ export function updateHeatmap(newsData) {
                 } else if (layer.getTooltip()) {
                     layer.unbindTooltip();
                 }
+            });
+        }
+
+        // Log final stats if this is the last attempt
+        if (retryCount === maxRetries || uniqueCountries > 1) {
+            console.log('Final heatmap update stats:', {
+                totalPosts,
+                totalGeoTags,
+                uniqueTags: tagCounts.size,
+                matchedTags,
+                unmatchedCount: unmatchedTags.size,
+                matchRate: `${((matchedTags / totalGeoTags) * 100).toFixed(1)}%`,
+                uniqueCountries,
+                maxCount
             });
         }
     } catch (error) {

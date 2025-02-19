@@ -22,9 +22,9 @@ const formatDate = (timestamp) => {
 };
 
 async function initMap() {
+    await loadCountryData();
     setupMap();
     await initWebSocket();
-    await loadCountryData()
 }
 
 function setupMap() {
