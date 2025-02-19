@@ -9,7 +9,7 @@ import feedparser
 
 from ..database.models import get_db, add_tag, tag_article
 from ..utils.text import clean_text, clean_url
-from ..utils.ai import process_with_gemini, process_with_tags
+from ..utils.ai import ContentProcessor
 
 # Configure logging
 logging.basicConfig(
@@ -33,6 +33,9 @@ class ProcessedContent(NamedTuple):
     topic_tags: List[str]
     geography_tags: List[str]
     event_tags: List[str]
+    sentiment_score: float
+    bias_category: str
+    bias_score: float
 
 class ImageExtractor:
     """Handles extraction of images from feed entries."""
@@ -100,6 +103,7 @@ class ArticleProcessor:
     
     def __init__(self):
         self.image_extractor = ImageExtractor()
+        self.content_processor = ContentProcessor()
     
     async def process_article(self, entry: Any) -> Optional[ProcessedContent]:
         """Process an article by extracting and formatting information."""
@@ -112,18 +116,21 @@ class ArticleProcessor:
             description_cleaned = self._clean_html(getattr(entry, 'description', ''))
             
             # Process with AI and get tags
-            emojis, description_processed, topics, geography, events = await process_with_tags(
+            emojis, description_processed, topics, geography, events = await self.content_processor.process_content_with_tags(
                 description_cleaned, 
                 is_title=False,
                 instruction="Summarize in clear English, focusing on key points."
             )
 
             # Process title and get additional tags
-            _, title_processed, title_topics, title_geo, title_events = await process_with_tags(
+            _, title_processed, title_topics, title_geo, title_events = await self.content_processor.process_content_with_tags(
                 title_cleaned,
                 is_title=True,
                 instruction="Translate to clear English title if needed."
             )
+
+            # Get sentiment and bias analysis
+            sentiment_score, bias_category, bias_score = await self.content_processor.analyze_sentiment_and_bias(description_processed)
 
             # Combine and deduplicate tags
             topic_tags = list(set(topics + title_topics))
@@ -160,7 +167,10 @@ class ArticleProcessor:
                 content=content,
                 topic_tags=topic_tags,
                 geography_tags=geography_tags,
-                event_tags=event_tags
+                event_tags=event_tags,
+                sentiment_score=sentiment_score,
+                bias_category=bias_category,
+                bias_score=bias_score
             )
             
         except Exception as e:

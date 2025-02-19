@@ -246,10 +246,89 @@ TEXT: [processed text]"""
         topics, geography, events = await generate_tags(text)
         return emoji_str, processed_text, topics, geography, events
 
+    async def analyze_sentiment_and_bias(self, text: str) -> Tuple[float, str, float]:
+        """Analyze sentiment and bias of content using Gemini API."""
+        try:
+            rotate_needed = await self.key_manager.wait_for_rate_limit()
+            if rotate_needed:
+                await self.key_manager.rotate_key()
+                self._init_client()
+
+            prompt = f"""Analyze this text and provide three metrics:
+
+1. SENTIMENT SCORE:
+   - Score from -1.0 (extremely negative) to 1.0 (extremely positive)
+   - Consider tone, language, and context
+   - Be objective and consistent
+
+2. BIAS CATEGORY:
+   Choose the most evident geopolitical perspective:
+   - western
+   - russian
+   - chinese
+   - israeli
+   - turkish
+   - arab
+   - indian
+   - african
+   - (any other geopolitical perspective detected)
+   - neutral
+
+3. BIAS SCORE:
+   - Score from 0.0 (neutral/balanced) to 1.0 (strongly biased)
+   - Consider language, sources quoted, and narrative framing
+
+Text to analyze: {text}
+
+Respond exactly in this format:
+SENTIMENT: [score]
+BIAS_CATEGORY: [category]
+BIAS_SCORE: [score]"""
+
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents=prompt
+            )
+
+            result = response.text.strip().split('\n')
+            sentiment_score = 0.0
+            bias_category = 'neutral'
+            bias_score = 0.0
+
+            for line in result:
+                line = line.strip()
+                if line.startswith('SENTIMENT:'):
+                    try:
+                        sentiment_score = float(line.split('SENTIMENT:')[1].strip())
+                        sentiment_score = max(-1.0, min(1.0, sentiment_score))  # Clamp between -1 and 1
+                    except ValueError:
+                        pass
+                elif line.startswith('BIAS_CATEGORY:'):
+                    bias_category = line.split('BIAS_CATEGORY:')[1].strip().lower()
+                elif line.startswith('BIAS_SCORE:'):
+                    try:
+                        bias_score = float(line.split('BIAS_SCORE:')[1].strip())
+                        bias_score = max(0.0, min(1.0, bias_score))  # Clamp between 0 and 1
+                    except ValueError:
+                        pass
+
+            return sentiment_score, bias_category, bias_score
+
+        except Exception as e:
+            logger.error(f"Error analyzing sentiment and bias: {e}")
+            return 0.0, 'neutral', 0.0
+
+    async def process_content_with_analysis(self, text: str, is_title: bool = False) -> Tuple[str, str, float, str, float]:
+        """Process content and perform sentiment and bias analysis."""
+        emoji_str, processed_text = await self.process_content(text, is_title)
+        sentiment_score, bias_category, bias_score = await self.analyze_sentiment_and_bias(processed_text)
+        return emoji_str, processed_text, sentiment_score, bias_category, bias_score
+
 # Create singleton instance
 content_processor = ContentProcessor()
-process_with_gemini = content_processor.process_content
-process_with_tags = content_processor.process_content_with_tags
+
+# Update singleton instance methods
+process_with_analysis = content_processor.process_content_with_analysis
 
 async def wait_for_rate_limit():
     """Implements rate limiting according to free tier limits."""
