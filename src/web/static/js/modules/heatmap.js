@@ -177,13 +177,14 @@ export function updateHeatmap(newsData, retryCount = 0, maxRetries = 5) {
                 if (!feature || !feature.properties) return;
                 
                 const countryName = feature.properties.ADMIN || feature.properties.name;
-                const count = countryData.get(countryName) || 0;
+                const normalizedName = normalizeCountryName(countryName);
+                const count = countryData.get(normalizedName) || 0;
                 const style = mapStyles.getCountryStyle({ count }, maxCount);
                 layer.setStyle(style);
                 
                 // Update tooltip
                 if (count > 0) {
-                    const country = getCountryData(countryName);
+                    const country = getCountryData(normalizedName);
                     const tooltipContent = `${count} posts ${country.flag}`;
                     
                     if (layer.getTooltip()) {
