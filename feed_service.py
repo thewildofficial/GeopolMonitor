@@ -1,7 +1,9 @@
 """Stand-alone feed watcher service."""
 import asyncio
 import logging
+import ssl
 from src.core.feed_watcher import FeedWatcher, FeedConfiguration
+from src.core.priority_feed_processor import PriorityFeedProcessor
 from config.settings import (
     FEED_POLL_INTERVAL, MAX_CONCURRENT_FEEDS,
     BATCH_SIZE, MAX_ENTRIES_PER_FEED,
@@ -9,11 +11,25 @@ from config.settings import (
 )
 from src.database.models import init_db
 
-# Configure service-level logging with colored output
+# Configure logging - more selective about what gets logged
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - \x1b[32m%(message)s\x1b[0m'
+    format='%(message)s'  # Simplified format without timestamps and logger names
 )
+
+# Set all loggers to WARNING or higher to minimize noise
+for name in logging.root.manager.loggerDict:
+    if name != "__main__":  # Keep main logger at INFO
+        logging.getLogger(name).setLevel(logging.WARNING)
+
+# Specifically silence noisy loggers
+logging.getLogger('google_genai').setLevel(logging.ERROR)
+logging.getLogger('src.core.feed_watcher').setLevel(logging.ERROR)
+logging.getLogger('src.core.priority_feed_processor').setLevel(logging.WARNING)
+logging.getLogger('src.utils.ai').setLevel(logging.WARNING)
+logging.getLogger('asyncio').setLevel(logging.WARNING)
+logging.getLogger('aiohttp').setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
 def load_feed_urls():
@@ -50,9 +66,24 @@ async def run_feed_watcher():
     - Max entries per feed: {MAX_ENTRIES_PER_FEED}
     - API limits: {API_CALLS_PER_MINUTE}/min, {API_CALLS_PER_DAY}/day""")
     
+    # Configure SSL context with more lenient verification for RSS feeds
+    ssl_context = ssl.create_default_context()
+    ssl_context.check_hostname = False  # Many RSS feeds have mismatched hostnames
+    ssl_context.verify_mode = ssl.CERT_NONE  # Temporarily disable strict cert verification
+    
+    # Note: In production, you should use proper certificate verification
+    # This is a temporary solution to handle feeds with SSL issues
+    logger.warning("⚠️ SSL certificate verification disabled for testing")
+    
+    # Load system root certificates
+    try:
+        ssl_context.load_default_certs()
+    except Exception as e:
+        logger.warning(f"⚠️ Could not load system certificates: {e}")
+    
     for attempt in range(max_retries):
         try:
-            feed_watcher = FeedWatcher(config)
+            feed_watcher = FeedWatcher(config, ssl_context=ssl_context)
             await feed_watcher.init()
             
             feed_urls = load_feed_urls()
@@ -60,15 +91,28 @@ async def run_feed_watcher():
                 logger.error("❌ No feed URLs loaded. Check feeds.txt file.")
                 return
                 
-            tasks = []
+            # Start feed watching tasks
+            feed_tasks = []
             for url in feed_urls:
                 task = asyncio.create_task(feed_watcher.watch_feed(url))
-                tasks.append(task)
+                feed_tasks.append(task)
             
             logger.info(f"✨ Feed watcher initialized with {len(feed_urls)} feeds")
             logger.info("▶️ Starting feed monitoring...")
-            await asyncio.gather(*tasks)
-            return
+            
+            # Create a never-ending task to keep the processor running
+            processor_task = asyncio.create_task(
+                feed_watcher.priority_processor._processing_loop()
+            )
+            
+            # Run both feed watching and processing indefinitely
+            try:
+                await asyncio.gather(processor_task, *feed_tasks)
+            except asyncio.CancelledError:
+                logger.info("Shutting down gracefully...")
+            except Exception as e:
+                logger.error(f"Error in main loop: {e}")
+                raise
             
         except Exception as e:
             logger.error(f"❌ Error initializing feed watcher (attempt {attempt + 1}/{max_retries}): {e}")

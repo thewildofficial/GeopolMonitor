@@ -191,18 +191,18 @@ def get_source_priority(feed_url: str) -> int:
     """Get current priority score for a feed source.
     Lower numbers mean the source has been logged more recently/frequently."""
     with get_db() as conn:
-        # Look at the last 24 hours of entries
+        # Look at the last 6 hours of entries for more responsive priority adjustment
         cursor = conn.execute('''
             SELECT COUNT(*) as entry_count 
             FROM news_entries 
             WHERE feed_url = ? 
-            AND datetime(pub_date) > datetime('now', '-1 day')
+            AND datetime(pub_date) > datetime('now', '-6 hours')
         ''', (feed_url,))
         count = cursor.fetchone()[0]
         
         # Calculate priority - more entries means lower priority
-        # Base priority of 100, subtract 5 for each recent entry, minimum 10
-        priority = max(100 - (count * 5), 10)
+        # Base priority of 100, subtract 10 for each recent entry, minimum 5
+        priority = max(100 - (count * 10), 5)
         
         # Update the cache
         conn.execute('''
@@ -261,6 +261,52 @@ def search_articles_by_tags(tag_names: list[str]) -> list[dict]:
         ''', [name.lower() for name in tag_names])
         return [dict(zip([col[0] for col in cursor.description], row))
                 for row in cursor.fetchall()]
+
+async def store_article(
+    title: str,
+    content: str,
+    link: str,
+    guid: str,
+    feed_url: str,
+    pub_date: datetime,
+    emoji1: str = "📰",
+    emoji2: str = "🌎",
+    sentiment_score: float = 0.0,
+    bias_category: str = "neutral",
+    bias_score: float = 0.0
+) -> bool:
+    """Store a processed article in the database."""
+    # Skip if article already exists
+    if exists_in_db(link):
+        return False
+        
+    with get_db() as conn:
+        try:
+            conn.execute('''
+                INSERT INTO news_entries (
+                    title, content, link, pub_date, processed_date,
+                    feed_url, emoji1, emoji2,
+                    sentiment_score, bias_category, bias_score
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                title, content, link,
+                pub_date.isoformat(),
+                datetime.now().isoformat(),
+                feed_url,
+                emoji1, emoji2,
+                sentiment_score,
+                bias_category,
+                bias_score
+            ))
+            conn.commit()
+            return True
+            
+        except sqlite3.IntegrityError:
+            # Article already exists (unique constraint on link)
+            return False
+        except Exception as e:
+            logger.error(f"Error storing article: {e}")
+            return False
 
 # Initialize database on module import
 init_db()

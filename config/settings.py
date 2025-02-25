@@ -45,10 +45,10 @@ WEB_HOST = "0.0.0.0"
 WEB_PORT = 8000
 
 # Feed Processing
-MAX_CONCURRENT_FEEDS = 10
-FEED_POLL_INTERVAL: Tuple[int, int] = (30, 60)  # Random interval between these values in seconds
-ERROR_BACKOFF_DELAY: int = 60  # Seconds to wait after an error
-BATCH_SIZE: int = 5  # Number of entries to process in one batch
-MAX_ENTRIES_PER_FEED: int = 20  # Maximum number of new entries to process per feed
-API_CALLS_PER_MINUTE: int = 15  # Gemini API rate limit
-API_CALLS_PER_DAY: int = 1500  # Gemini API daily limit
+MAX_CONCURRENT_FEEDS = 5  # Reduced from 10 to prevent overwhelming the API
+FEED_POLL_INTERVAL: Tuple[int, int] = (60, 120)  # Increased interval to reduce API pressure
+ERROR_BACKOFF_DELAY: int = 120  # Increased backoff time for error recovery
+BATCH_SIZE: int = 3  # Reduced batch size for more manageable processing
+MAX_ENTRIES_PER_FEED: int = 10  # Reduced max entries to process per feed
+API_CALLS_PER_MINUTE: int = 15 # Adjusted to stay well within Gemini API limits
+API_CALLS_PER_DAY: int = 1500  # Conservative daily limit to ensure stability

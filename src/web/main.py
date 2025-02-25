@@ -1,6 +1,6 @@
 """FastAPI web interface for GeopolMonitor."""
 from pathlib import Path
-from fastapi import FastAPI, HTTPException, Request, WebSocket
+from fastapi import FastAPI, HTTPException, Request, WebSocket, Query
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -201,14 +201,25 @@ def create_app():
         )
 
     @app.get("/api/news")
-    async def get_news(tags: Optional[str] = None):
+    async def get_news(
+        tags: Optional[str] = None, 
+        page: int = Query(1, ge=1), 
+        page_size: int = Query(20, ge=1, le=100)
+    ):
         try:
+            # Calculate offset for pagination
+            offset = (page - 1) * page_size
+            
             if (tags):
                 # Split tags string into list and search by tags
                 tag_list = [t.strip() for t in tags.split(',')]
-                news_items = search_articles_by_tags(tag_list)
+                news_items = search_articles_by_tags(
+                    tag_list, 
+                    limit=page_size, 
+                    offset=offset
+                )
             else:
-                # Get all news items
+                # Get paginated news items
                 with get_db() as conn:
                     cursor = conn.execute('''
                         SELECT 
@@ -217,12 +228,29 @@ def create_app():
                             sentiment_score, bias_category, bias_score
                         FROM news_entries
                         ORDER BY pub_date DESC
-                    ''')
+                        LIMIT ? OFFSET ?
+                    ''', (page_size, offset))
                     columns = [column[0] for column in cursor.description]
                     news_items = [dict(zip(columns, row)) for row in cursor]
+                    
+                    # Get total count for pagination metadata
+                    count_cursor = conn.execute('SELECT COUNT(*) FROM news_entries')
+                    total_count = count_cursor.fetchone()[0]
             
             formatted_news = [format_news_item(item) for item in news_items]
-            return {"news": formatted_news}
+            
+            # Include pagination metadata
+            return {
+                "news": formatted_news,
+                "pagination": {
+                    "page": page,
+                    "page_size": page_size,
+                    "total_count": total_count if 'total_count' in locals() else None,
+                    "total_pages": (total_count + page_size - 1) // page_size if 'total_count' in locals() else None,
+                    "has_next": page * page_size < total_count if 'total_count' in locals() else None,
+                    "has_prev": page > 1
+                }
+            }
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 

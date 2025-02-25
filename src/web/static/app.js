@@ -1,5 +1,5 @@
 import { initWebSocket } from './js/modules/websocket.js';
-import { createNewsElement, formatTimeAgo } from './js/modules/news.js';
+import { createNewsElement, formatTimeAgo, initInfiniteScroll, loadInitialNews, setActiveTagFilter } from './js/modules/news.js';
 import { initTheme } from './js/modules/theme.js';
 import { loadTags, toggleTagFilters, getActiveTags } from './js/modules/tags.js';
 import { createScrollToTopButton, updateScrollToTopButtonVisibility, setView, setLoading, addLoadingItem } from './js/modules/ui-utils.js';
@@ -8,219 +8,88 @@ import { loadCountryData } from './js/modules/countries.js';
 let lastUpdate = new Date();
 const updateInterval = 30000; // 30 seconds
 
-
 // Make functions globally available for WebSocket handler
 window.handleNewsUpdate = handleNewsUpdate;
 window.updateNews = updateNews;
+window.toggleTag = toggleTag;
+
+// Function to toggle tag filtering
+function toggleTag(tag) {
+    // Store current scroll position
+    const scrollPosition = window.scrollY;
+    
+    // Toggle the tag in the UI
+    const tagElements = document.querySelectorAll(`.tag[data-tag="${tag}"]`);
+    const isActive = [...tagElements].some(el => el.classList.contains('active'));
+    
+    tagElements.forEach(element => {
+        element.classList.toggle('active', !isActive);
+    });
+    
+    // Update the active tags filter
+    const activeTags = getActiveTags();
+    const tagParam = activeTags.length > 0 ? `?tags=${activeTags.join(',')}` : '';
+    
+    // Reset and load news with the updated tag filter
+    setActiveTagFilter(tagParam);
+    
+    // Restore scroll position after a slight delay
+    setTimeout(() => {
+        window.scrollTo({
+            top: 0,
+            behavior: 'smooth'
+        });
+    }, 100);
+}
 
 async function handleNewsUpdate(newItem) {
- 
-    const container = document.getElementById('newsContainer');
-    
-    const currentElements = Array.from(container.children);
-    const currentNews = currentElements.map(el => ({
-        timestamp: el.querySelector('.time').getAttribute('data-timestamp'),
-        element: el
-    }));
-    
-    currentNews.push({
-        timestamp: newItem.timestamp,
-        element: createNewsElement(newItem)
-    });
-    
-    currentNews.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    
-    container.innerHTML = '';
-    currentNews.forEach(item => {
-        if (item.element === currentNews[0].element) {
-            item.element.classList.add('news-item-new');
-            item.element.style.opacity = '0';
-            item.element.style.transform = 'translateY(-20px)';
-        }
-        container.appendChild(item.element);
-    });
-    
-    if (currentNews[0].timestamp === newItem.timestamp) {
-        await new Promise(resolve => requestAnimationFrame(resolve));
-        const newestElement = container.firstElementChild;
-        newestElement.style.transition = 'all 0.5s cubic-bezier(0.4, 0.0, 0.2, 1)';
-        newestElement.style.opacity = '1';
-        newestElement.style.transform = 'translateY(0)';
-        
-        setTimeout(() => {
-            newestElement.classList.remove('news-item-new');
-            newestElement.style.transition = '';
-        }, 500);
-    }
-}
-
-async function fetchNews() {
-    try {
-        addLoadingItem('Fetching latest news articles...');
-        const activeTags = getActiveTags();
-        const tagParam = activeTags.length > 0 ? `?tags=${activeTags.join(',')}` : '';
-        const response = await fetch(`/api/news${tagParam}`);
-        if (!response.ok) throw new Error('Network response was not ok');
-        const data = await response.json();
-        addLoadingItem('Processing news data...');
-        return data.news || [];
-    } catch (error) {
-        console.error('Error fetching news:', error);
-        return [];
-    }
-}
-
-async function filterNews(news) {
-    const searchTerm = searchInput.value.toLowerCase();
-    const timeValue = timeFilter.value;
-    const activeTags = getActiveTags();
-    
-    let filtered = news;
-
-    if (searchTerm) {
-        filtered = filtered.filter(item => 
-            item.title.toLowerCase().includes(searchTerm) ||
-            item.description.toLowerCase().includes(searchTerm)
-        );
-    }
-
-    if (timeValue !== 'all') {
-        const now = new Date();
-        const cutoff = new Date();
-        switch (timeValue) {
-            case '1h':
-                cutoff.setHours(now.getHours() - 1);
-                break;
-            case '24h':
-                cutoff.setDate(now.getDate() - 1);
-                break;
-            case '7d':
-                cutoff.setDate(now.getDate() - 7);
-                break;
-        }
-        filtered = filtered.filter(item => new Date(item.timestamp) > cutoff);
-    }
-
-    // Filter by active tags
-    if (activeTags.length > 0) {
-        filtered = filtered.filter(item => {
-            if (!item.tags) return false;
-            return activeTags.some(activeTag => 
-                item.tags.some(itemTag => 
-                    itemTag.name === activeTag || 
-                    (itemTag.category === 'geography' && 
-                     itemTag.name.toLowerCase().split(' ').map(word => 
-                         word.charAt(0).toUpperCase() + word.slice(1)
-                     ).join(' ') === activeTag)
-                )
-            );
-        });
-    }
-
-    return filtered;
-}
-
-async function updateNewsList(news) {
     const container = document.getElementById('newsContainer');
     if (!container) return;
     
-    addLoadingItem('Creating news elements...');
-    const fragment = document.createDocumentFragment();
-    news.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    const currentElements = Array.from(container.children);
+    const currentNews = currentElements.map(el => ({
+        timestamp: el.querySelector('.time')?.getAttribute('data-timestamp'),
+        element: el
+    })).filter(item => item.timestamp); // Filter out items without timestamps
     
-    let loadedImages = 0;
-    const totalImages = news.length;
-    const IMAGE_LOAD_TIMEOUT = 3000; // 3 seconds timeout for each image
-    
-    const imageLoadPromises = news.map((item, index) => {
-        return new Promise((resolve) => {
-            if (!item.image_url) {
-                resolve();
-                return;
-            }
-
-            const img = new Image();
-            let timeoutId;
-
-            const cleanup = () => {
-                clearTimeout(timeoutId);
-                img.onload = null;
-                img.onerror = null;
-            };
-
-            const handleLoad = () => {
-                loadedImages++;
-                addLoadingItem(`Loading images (${loadedImages}/${totalImages})...`);
-                cleanup();
-                resolve();
-            };
-
-            const handleError = () => {
-                console.warn('Failed to load image:', item.image_url);
-                cleanup();
-                resolve();
-            };
-
-            timeoutId = setTimeout(() => {
-                console.warn('Image load timeout:', item.image_url);
-                handleError();
-            }, IMAGE_LOAD_TIMEOUT);
-
-            img.onload = handleLoad;
-            img.onerror = handleError;
-            img.src = item.image_url;
-        });
-    });
-
-    // Wait for all images to either load or timeout
-    await Promise.all(imageLoadPromises);
-    addLoadingItem('Rendering news feed...');
-    
-    news.forEach((item, index) => {
-        try {
-            // Ensure sentiment and bias data is properly formatted
-            if (item.sentiment) {
-                item.sentiment = parseFloat(item.sentiment);
-            }
-            if (item.bias) {
-                item.bias = parseFloat(item.bias);
-            }
+    // Create new element for the incoming item
+    const newItemWrapper = document.createElement('div');
+    newItemWrapper.className = 'news-item';
+    const newElement = createNewsElement(newItem);
+    if (newElement) {
+        newItemWrapper.appendChild(newElement);
+        
+        // Add new item to the beginning of the list
+        container.insertBefore(newItemWrapper, container.firstChild);
+        
+        // Apply animation
+        newItemWrapper.classList.add('news-item-new');
+        newItemWrapper.style.opacity = '0';
+        newItemWrapper.style.transform = 'translateY(-20px)';
+        
+        // Trigger animation after DOM update
+        requestAnimationFrame(() => {
+            newItemWrapper.style.transition = 'all 0.5s cubic-bezier(0.4, 0.0, 0.2, 1)';
+            newItemWrapper.style.opacity = '1';
+            newItemWrapper.style.transform = 'translateY(0)';
             
-            const element = createNewsElement(item);
-            if (element && element.firstElementChild) {
-                element.firstElementChild.classList.add('news-item-initial');
-                element.firstElementChild.style.animationDelay = `${index * 0.1}s`;
-                fragment.appendChild(element);
-            }
-        } catch (error) {
-            console.error('Error creating news element:', error);
-        }
-    });
-
-    container.innerHTML = '';
-    container.appendChild(fragment);
-    
-    // Show "no results" message if no valid news items
-    if (!fragment.children.length) {
-        const noResults = document.createElement('div');
-        noResults.className = 'no-results';
-        noResults.innerHTML = `
-            <i class="fas fa-newspaper"></i>
-            <p>No news articles available</p>
-        `;
-        container.appendChild(noResults);
+            setTimeout(() => {
+                newItemWrapper.classList.remove('news-item-new');
+                newItemWrapper.style.transition = '';
+            }, 500);
+        });
     }
 }
 
 async function updateNews() {
     try {
-        const news = await fetchNews();
-        if (!news || news.length === 0) return;
+        // Get active tags
+        const activeTags = getActiveTags();
+        const tagParam = activeTags.length > 0 ? `?tags=${activeTags.join(',')}` : '';
         
-        const filtered = await filterNews(news);
-        filtered.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        // Reset infinite scroll and load initial news
+        await loadInitialNews(tagParam);
         
-        await updateNewsList(filtered);
         lastUpdate = new Date();
     } catch (error) {
         console.error('Error updating news:', error);
@@ -232,7 +101,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     initWebSocket();
     initTheme();
     await loadCountryData();
-
+    
     const scrollToTopBtn = createScrollToTopButton();
     window.addEventListener('scroll', updateScrollToTopButtonVisibility);
     
@@ -241,26 +110,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     const gridViewBtn = document.getElementById('gridViewBtn');
     const searchInput = document.getElementById('searchInput');
     const timeFilter = document.getElementById('timeFilter');
-
+    
+    // View switching logic
     listViewBtn.addEventListener('click', () => {
         localStorage.setItem('preferredView', 'list');
         setView('list-view');
         listViewBtn.classList.add('active');
         gridViewBtn.classList.remove('active');
     });
-
+    
     gridViewBtn.addEventListener('click', () => {
         localStorage.setItem('preferredView', 'grid');
         setView('grid-view');
         gridViewBtn.classList.add('active');
         listViewBtn.classList.remove('active');
     });
-
+    
     const preferredView = localStorage.getItem('preferredView') || 'list';
     if (preferredView === 'grid') {
         gridViewBtn.click();
     }
-
+    
+    // Search handling with debounce
     let searchTimeout;
     searchInput.addEventListener('input', () => {
         clearTimeout(searchTimeout);
@@ -269,30 +140,35 @@ document.addEventListener('DOMContentLoaded', async () => {
             updateNews().finally(() => setLoading(false));
         }, 300);
     });
-
+    
+    // Time filter handling
     timeFilter.addEventListener('change', () => {
         setLoading(true);
         updateNews().finally(() => setLoading(false));
     });
-
+    
+    // Tag filter toggle
     const filterToggle = document.getElementById('filterToggle');
     filterToggle.addEventListener('click', toggleTagFilters);
     
+    // Close tag filters when clicking outside
     document.addEventListener('click', (e) => {
         const tagFilters = document.querySelector('.tag-filters');
         const filterToggle = document.getElementById('filterToggle');
         
-        if (!tagFilters.contains(e.target) && !filterToggle.contains(e.target)) {
+        if (tagFilters && !tagFilters.contains(e.target) && !filterToggle.contains(e.target)) {
             tagFilters.classList.add('collapsed');
         }
     });
-
+    
     // Initial setup
     await loadTags();
     setLoading(true);
+    
+    // Initialize infinite scroll
+    initInfiniteScroll();
+    
+    // Load initial data
     await updateNews();
     setLoading(false);
-    
-    // Set up periodic updates
-    setInterval(() => updateNews(), updateInterval);
 });

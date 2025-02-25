@@ -116,11 +116,26 @@ export function createNewsElement(newsItem) {
     timeElement.textContent = formatTimeAgo(newsItem.timestamp);
     timeElement.setAttribute('data-timestamp', newsItem.timestamp);
 
-    // Handle image
+    // Implement lazy loading for images
     const imageUrl = newsItem.image_url || null;
     if (imageUrl) {
-        image.src = imageUrl;
+        // Use a data attribute to store the image URL instead of loading immediately
+        image.setAttribute('data-src', imageUrl);
         image.alt = titleText;
+        
+        // Create and use IntersectionObserver for lazy loading
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    // Only load the image when it comes into view
+                    const lazyImage = entry.target;
+                    lazyImage.src = lazyImage.dataset.src;
+                    observer.unobserve(lazyImage);
+                }
+            });
+        }, { rootMargin: '200px' }); // Load images when they're within 200px of viewport
+        
+        observer.observe(image);
         imageContainer.style.display = 'block';
     } else {
         imageContainer.style.display = 'none';
@@ -199,7 +214,7 @@ export function formatTimeAgo(timestamp) {
 
 // Filter news by country with flexible matching
 function filterNewsByCountry(countryData) {
-    return allNews.filter(item => {
+    return allLoadedNews.filter(item => {
         const geoTags = item.tags.filter(tag => tag.category === 'geography');
         return geoTags.some(tag => {
             const tagCountryData = normalizeCountry(tag.name);
@@ -275,14 +290,38 @@ function renderTag(name, category) {
     return span;
 }
 
-export async function fetchNews(tagParam = '') {
+// Global variables for tracking loading state and pagination
+let isLoading = false;
+let hasMorePages = true;
+let allLoadedNews = [];
+
+export async function fetchNews(tagParam = '', page = 1, pageSize = 20) {
+    if (isLoading || (!hasMorePages && page > 1)) return null;
+    
+    isLoading = true;
+    
     try {
-        const response = await fetch(`/api/news${tagParam}`);
+        // Build query params for pagination
+        const params = new URLSearchParams();
+        if (tagParam) {
+            params.append('tags', tagParam.replace('?tags=', ''));
+        }
+        params.append('page', page);
+        params.append('page_size', pageSize);
+        
+        const url = `/api/news?${params.toString()}`;
+        const response = await fetch(url);
         const data = await response.json();
-        return data.news;
+        
+        // Update pagination state
+        hasMorePages = data.pagination.has_next;
+        
+        isLoading = false;
+        return data;
     } catch (error) {
         console.error('Error fetching news:', error);
-        return [];
+        isLoading = false;
+        return null;
     }
 }
 
@@ -290,10 +329,20 @@ export async function filterNews(news) {
     return news.filter(item => item.title && item.description);
 }
 
-export async function updateNewsList(newsItems) {
+// Update to append news items instead of replacing
+export async function updateNewsList(newsItems, append = false) {
     const container = document.getElementById('newsContainer');
-    container.innerHTML = '';
     
+    // Only clear the container if we're not appending
+    if (!append) {
+        container.innerHTML = '';
+        allLoadedNews = [];
+    }
+    
+    // Add new items to our global store
+    allLoadedNews = [...allLoadedNews, ...newsItems];
+    
+    // Create and append news elements
     newsItems.forEach(item => {
         const element = createNewsElement(item);
         if (element) {
@@ -303,4 +352,67 @@ export async function updateNewsList(newsItems) {
             container.appendChild(wrapper);
         }
     });
+}
+
+export function initInfiniteScroll() {
+    const container = document.getElementById('newsContainer');
+    let page = 1;
+    
+    async function loadMoreNews() {
+        if (isLoading || !hasMorePages) return;
+        isLoading = true;
+
+        const tagParam = window.currentTagParam || '';
+        const newsData = await fetchNews(tagParam, page);
+        if (newsData && newsData.news) {
+            await updateNewsList(newsData.news, true);
+            page += 1;
+            hasMorePages = newsData.pagination.has_next;
+        }
+
+        isLoading = false;
+    }
+
+    // Create scroll anchor element if it doesn't exist
+    let scrollAnchor = document.querySelector('.scroll-anchor');
+    if (!scrollAnchor) {
+        scrollAnchor = document.createElement('div');
+        scrollAnchor.className = 'scroll-anchor';
+        document.body.appendChild(scrollAnchor);
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting) {
+            loadMoreNews();
+        }
+    }, { rootMargin: '200px' });
+
+    observer.observe(scrollAnchor);
+}
+
+// Add loadInitialNews function for initial news loading
+export async function loadInitialNews(tagParam = '') {
+    // Reset pagination
+    let page = 1;
+    hasMorePages = true;
+    
+    try {
+        const newsData = await fetchNews(tagParam, page);
+        if (newsData && newsData.news) {
+            await updateNewsList(newsData.news, false);
+            page += 1;
+            hasMorePages = newsData.pagination.has_next;
+        }
+        return newsData;
+    } catch (error) {
+        console.error('Error loading initial news:', error);
+        return null;
+    }
+}
+
+// Add function to set active tag filter
+export function setActiveTagFilter(tagParam = '') {
+    // This function can be expanded later if needed
+    // For now it just updates the current tag parameter
+    window.currentTagParam = tagParam;
 }

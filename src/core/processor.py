@@ -111,7 +111,7 @@ class ArticleProcessor:
             # Extract images with improved method
             images = self.image_extractor.extract_images(entry)
             
-           # Get article link
+            # Get article link
             link = clean_url(getattr(entry, 'link', ''))
             if not link:
                 logger.error("No valid link found in entry")
@@ -121,29 +121,24 @@ class ArticleProcessor:
             title_cleaned = self._clean_html(getattr(entry, 'title', 'Untitled'))
             description_cleaned = self._clean_html(getattr(entry, 'description', ''))
             
-            # Process with AI and get tags
-            emojis, description_processed, topics, geography, events = await self.content_processor.process_content_with_tags(
-                description_cleaned, 
+            # Combine title and description for single API call
+            combined_text = f"Title: {title_cleaned}\n\nContent: {description_cleaned}"
+            
+            # Process combined content with AI and get tags
+            emojis, processed_text, topics, geography, events = await self.content_processor.process_content_with_tags(
+                combined_text,
                 url=link,
                 is_title=False,
-                instruction="Summarize in clear English, focusing on key points."
+                instruction="Process title and content: Extract a clear title from the 'Title:' section and summarize the content in three paragraphs."
             )
 
-            # Process title and get additional tags
-            _, title_processed, title_topics, title_geo, title_events = await self.content_processor.process_content_with_tags(
-                title_cleaned,
-                url=link,
-                is_title=True,
-                instruction="Translate to clear English title if needed."
-            )
+            # Split processed text into title and description
+            processed_parts = processed_text.split('\n\n', 1)
+            title_processed = processed_parts[0] if len(processed_parts) > 0 else title_cleaned
+            description_processed = processed_parts[1] if len(processed_parts) > 1 else description_cleaned
 
             # Get sentiment and bias analysis
             sentiment_score, bias_category, bias_score = await self.content_processor.analyze_sentiment_and_bias(description_processed)
-
-            # Combine and deduplicate tags
-            topic_tags = list(set(topics + title_topics))
-            geography_tags = list(set(geography + title_geo))
-            event_tags = list(set(events + title_events))
 
             # Process emojis and content
             content = getattr(entry, 'description', '')
@@ -172,9 +167,9 @@ class ArticleProcessor:
                 emoji2=emoji2,
                 image_url=images[0] if images else None,
                 content=content,
-                topic_tags=topic_tags,
-                geography_tags=geography_tags,
-                event_tags=event_tags,
+                topic_tags=topics,
+                geography_tags=geography,
+                event_tags=events,
                 sentiment_score=sentiment_score,
                 bias_category=bias_category,
                 bias_score=bias_score

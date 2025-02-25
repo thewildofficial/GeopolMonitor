@@ -11,7 +11,7 @@ from config.settings import GEMINI_API_KEYS
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,  # Changed from INFO to WARNING to filter out AFC messages
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
@@ -102,7 +102,7 @@ class ContentProcessor:
     def __init__(self):
         self.key_manager = APIKeyManager(GEMINI_API_KEYS)
         self._init_client()
-        self.model = "gemini-2.0-flash-thinking-exp-01-21"
+        self.model = "gemini-2.0-flash-lite-preview-02-05"
     
     def _init_client(self):
         """Initialize or reinitialize the Gemini client with current API key."""
@@ -121,19 +121,15 @@ class ContentProcessor:
                 logger.error(f"Invalid URL provided: {url}")
                 raise ValueError(f"Invalid URL format: {url}")
 
-            # Always scrape full article content from URL
-            from .scraper import scrape_article
-            logger.info(f"Attempting to scrape article content from: {url}")
-            article_data = await scrape_article(url)
-            if article_data and article_data.get('text'):
-                logger.info(f"Successfully scraped article content from: {url}")
-                text = f"{article_data.get('title', '')}\n\n{article_data['text']}"
-            else:
-                logger.error(f"Failed to scrape required article content from: {url}")
-                raise ValueError(f"Could not scrape content from {url}")
+            # Only scrape article content if text is too short
+            if len(text.strip()) < 100:
+                from .scraper import scrape_article
+                logger.info(f"Content too short, attempting to scrape article from: {url}")
+                article_data = await scrape_article(url)
+                if article_data and article_data.get('text'):
+                    logger.info(f"Successfully scraped article content from: {url}")
+                    text = f"{article_data.get('title', '')}\n\n{article_data['text']}"
 
-            await wait_for_rate_limit()
-            
             prompt = f"""Analyze this text and provide three things:
 
 1. TRANSLATION & FORMATTING:
@@ -289,21 +285,20 @@ TEXT: [processed text]"""
    0.3 to 0.6: Moderately positive (progress, improvement, cooperation)
    0.7 to 1.0: Highly positive (breakthrough, success, strong growth)
 
-2. BIAS CATEGORY:
-   Identify the dominant geopolitical perspective:
-   - western (US/EU/NATO aligned)
-   - russian (Russia/CIS aligned)
-   - Ukranian (Heavily ukrainian aligned)
-   - chinese (China/SCO aligned)
-   - israeli (Pro-Israel/Jewish perspective)
-   - Palestinian (Pro-Palestinian)
-   - turkish (Turkey/Neo-Ottoman perspective)
-   - arab (Arab/Gulf states perspective)
-   - indian (India/South Asian perspective)
-   - african (Pan-African/Regional perspective)
-   - iranian (Iran/Shiite aligned)
-   - latin-american (Latin American perspective)
-   - neutral (No clear geopolitical bias)
+2. BIAS ADVISORY:
+   Provide a brief (1-2 sentences)  note summarizing why you considered the above score in the article. Consider:
+   - Dominant geopolitical perspectives (Western, Eastern, Regional)
+   - Source credibility and diversity of viewpoints
+   - Use of loaded language or emotional manipulation
+   - Selective presentation of facts or context
+   - Historical or cultural framing
+   - Economic or political agenda
+   - Favours certain viewpoints as opposed to other view points, identifying the benefactor and the detracted
+   
+   Example advisories:
+   - "This article presents events primarily from a Western perspective, with limited coverage of regional viewpoints."
+   - "The reporting shows a pro-government bias with selective use of economic data to support policy positions."
+   - "Coverage appears balanced with multiple perspectives represented, though slightly favoring regional interests."
 
 3. BIAS SCORE (0.0 to 1.0):
    Evaluate these factors:
