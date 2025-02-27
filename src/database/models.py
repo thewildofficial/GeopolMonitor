@@ -230,11 +230,19 @@ def add_tag(name: str, category: str) -> int:
 def tag_article(article_id: int, tag_ids: list[int]):
     """Tag an article with multiple tags."""
     with get_db() as conn:
-        conn.executemany(
-            'INSERT OR IGNORE INTO article_tags (article_id, tag_id) VALUES (?, ?)',
-            [(article_id, tag_id) for tag_id in tag_ids]
-        )
-        conn.commit()
+        try:
+            # First, remove any existing tags for this article to prevent duplicates
+            conn.execute('DELETE FROM article_tags WHERE article_id = ?', (article_id,))
+            
+            # Then add the new tags
+            conn.executemany(
+                'INSERT OR IGNORE INTO article_tags (article_id, tag_id) VALUES (?, ?)',
+                [(article_id, tag_id) for tag_id in tag_ids]
+            )
+            conn.commit()
+        except Exception as e:
+            logger.error(f"Error tagging article {article_id}: {str(e)}")
+            conn.rollback()
 
 def get_article_tags(article_id: int) -> list[dict]:
     """Get all tags for an article."""
@@ -274,15 +282,15 @@ async def store_article(
     sentiment_score: float = 0.0,
     bias_category: str = "neutral",
     bias_score: float = 0.0
-) -> bool:
-    """Store a processed article in the database."""
+) -> int:
+    """Store a processed article in the database and return the article ID."""
     # Skip if article already exists
     if exists_in_db(link):
-        return False
+        return 0
         
     with get_db() as conn:
         try:
-            conn.execute('''
+            cursor = conn.execute('''
                 INSERT INTO news_entries (
                     title, content, link, pub_date, processed_date,
                     feed_url, emoji1, emoji2,
@@ -299,14 +307,14 @@ async def store_article(
                 bias_score
             ))
             conn.commit()
-            return True
+            return cursor.lastrowid or 0
             
         except sqlite3.IntegrityError:
             # Article already exists (unique constraint on link)
-            return False
+            return 0
         except Exception as e:
             logger.error(f"Error storing article: {e}")
-            return False
+            return 0
 
 # Initialize database on module import
 init_db()

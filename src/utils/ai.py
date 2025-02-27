@@ -126,7 +126,7 @@ class ContentProcessor:
                 from .scraper import scrape_article
                 logger.info(f"Content too short, attempting to scrape article from: {url}")
                 article_data = await scrape_article(url)
-                if article_data and article_data.get('text'):
+                if (article_data and article_data.get('text')):
                     logger.info(f"Successfully scraped article content from: {url}")
                     text = f"{article_data.get('title', '')}\n\n{article_data['text']}"
 
@@ -254,9 +254,29 @@ TEXT: [processed text]"""
 
     async def process_content_with_tags(self, text: str, url: str, is_title: bool = False, instruction: Optional[str] = None) -> Tuple[str, str, list[str], list[str], list[str]]:
         """Process content and generate tags with Gemini API."""
-        emoji_str, processed_text = await self.process_content(text, url, is_title, instruction)
-        topics, geography, events = await generate_tags(text)
-        return emoji_str, processed_text, topics, geography, events
+        try:
+            # First get emojis and processed text
+            emoji_str, processed_text = await self.process_content(text, url, is_title, instruction)
+            
+            # Then get tags from the full text for better context
+            if not is_title and len(text.strip()) < 100:
+                from .scraper import scrape_article
+                article_data = await scrape_article(url)
+                if article_data and article_data.get('text'):
+                    text = f"{article_data.get('title', '')}\n\n{article_data['text']}"
+            
+            # Generate and clean tags
+            topics, geography, events = await generate_tags(text)
+            
+            # Ensure unique tags per category
+            topics = list(dict.fromkeys(topics))
+            geography = list(dict.fromkeys(geography))
+            events = list(dict.fromkeys(events))
+            
+            return emoji_str, processed_text, topics, geography, events
+        except Exception as e:
+            logger.error(f"Error in process_content_with_tags: {str(e)}")
+            return emoji_str, processed_text, [], [], []
 
     async def analyze_sentiment_and_bias(self, text: str) -> Tuple[float, str, float]:
         """Analyze sentiment and bias of content using Gemini API."""
@@ -427,41 +447,37 @@ async def generate_tags(text: str) -> Tuple[list[str], list[str], list[str]]:
     try:
         await wait_for_rate_limit()
         
-        prompt = """Analyze this text and generate three precise sets of clean tags:
+        # Clean and shorten text if needed
+        text = text[:4000] if len(text) > 4000 else text
+        
+        prompt = """Analyze this text and generate only relevant tags in three categories:
 
-1. TOPICS (e.g., Politics, Economy, Technology, etc.)
-2. GEOGRAPHY (Countries, Regions, Cities mentioned)
-3. EVENT TYPES (e.g., Election, Conflict, Treaty, Summit, etc.)
+1. TOPICS: Generate 2-3 specific topic tags that represent the main subjects
+2. GEOGRAPHY: List only countries, regions, or cities that are directly mentioned or central to the story
+3. EVENTS: Create 1-2 specific event-type tags that describe what's happening
 
-STRICT FORMAT RULES (IMPORTANT):
-- Each tag must be a SIMPLE, CLEAN, lowercase word or hyphenated phrase
-- NO special characters, NO brackets, NO placeholders
-- NO "tags like this" or [tags like this] or <tags>
-- NEVER include the words "tag", "tags", "etc", "placeholder", or similar meta-terms
-- CONVERT multi-word concepts into hyphenated form (e.g., "artificial intelligence" → "artificial-intelligence")
-- USE LOWERCASE ONLY for all tags
-- INCLUDE ONLY specific tags that are EXPLICITLY mentioned or strongly implied in the text
-- MAXIMUM 5 tags per category - fewer is better than poor quality
-- For geography, use ISO country names when possible
-- For cities, include country as context (e.g., "paris-france" not just "paris")
-- OMIT generic/vague terms like "news", "update", "development", "situation"
+STRICT FORMAT RULES:
+- Each tag must be lowercase, hyphenated if multiple words
+- NO special characters or brackets
+- NO generic terms like "news", "update", "development"
+- Each tag must be directly relevant to the article content
+- DO NOT repeat tags across categories
+- Keep tags concise and specific
+- Use ISO country names for geography tags
+- Add country context for cities (e.g., "paris-france")
+- Maximum 5 tags per category, fewer is better
 
-BAD OUTPUT (DO NOT DO THIS):
-TOPICS: [economy], <technology>, "politics", etc., some-tag
-GEOGRAPHY: [united states], <europe>, etc.
-EVENTS: [meeting], <conflict>, etc.
+Example of good tags:
+TOPICS: economic-policy, defense-spending
+GEOGRAPHY: united-states, south-korea
+EVENTS: budget-cut, diplomatic-visit
 
-GOOD OUTPUT:
-TOPICS: economy, technology, cybersecurity
-GEOGRAPHY: united-states, france, japan
-EVENTS: trade-agreement, diplomatic-summit
+Analyze this text: {text}
 
-Analyze the following text: {text}
-
-Respond EXACTLY in this format without explanations:
-TOPICS: tag1, tag2, tag3
-GEOGRAPHY: tag1, tag2, tag3
-EVENTS: tag1, tag2, tag3"""
+Respond EXACTLY in this format:
+TOPICS: tag1, tag2
+GEOGRAPHY: tag1, tag2
+EVENTS: tag1, tag2"""
 
         response = content_processor.client.models.generate_content(
             model=content_processor.model,
@@ -483,20 +499,47 @@ EVENTS: tag1, tag2, tag3"""
             elif line.startswith('EVENTS:'):
                 events = [t.strip() for t in line.split('EVENTS:')[1].strip().split(',') if t.strip()]
         
-        # Clean tags: remove any with brackets, special characters, or meta-terms
         def clean_tag_list(tags):
             cleaned = []
-            for tag in tags:
-                # Skip tags with brackets or other problematic patterns
-                if any(char in tag for char in '[]()<>"\''): 
-                    continue
-                # Skip meta-terms
-                if any(term in tag for term in ['tag', 'etc', 'placeholder']):
-                    continue
-                cleaned.append(tag)
-            return cleaned
+            seen = set()  # Track seen tags to avoid duplicates
             
-        return clean_tag_list(topics), clean_tag_list(geography), clean_tag_list(events)
+            for tag in tags:
+                # Skip if empty or already seen
+                if not tag or tag in seen:
+                    continue
+                
+                # Normalize and clean the tag
+                tag = tag.strip().lower()
+                tag = tag.replace(' ', '-')  # Convert spaces to hyphens
+                
+                # Skip invalid tags
+                if (len(tag) < 2 or len(tag) > 50 or
+                    any(char in tag for char in '[]()<>"\',') or
+                    any(term in tag for term in ['tag', 'etc', 'other', 'news', 'update'])):
+                    continue
+                
+                seen.add(tag)
+                cleaned.append(tag)
+            
+            # Limit number of tags per category
+            return cleaned[:5]
+
+        # Clean and deduplicate tags
+        topics = clean_tag_list(topics)
+        geography = clean_tag_list(geography)
+        events = clean_tag_list(events)
+        
+        # Ensure no tag appears in multiple categories
+        all_tags = set()
+        for tag_list in [topics, geography, events]:
+            new_tags = []
+            for tag in tag_list:
+                if tag not in all_tags:
+                    all_tags.add(tag)
+                    new_tags.append(tag)
+            tag_list[:] = new_tags
+
+        return topics, geography, events
 
     except Exception as e:
         logger.error(f"Error generating tags: {e}")

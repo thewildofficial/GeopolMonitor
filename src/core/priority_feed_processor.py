@@ -177,24 +177,36 @@ class PriorityFeedProcessor:
                 bias_score=bias_score
             )
 
-            # Store tags if article was successfully stored
-            if article_id:
-                # Process and store tags
+            # Store tags if article was successfully stored and we got a valid article ID
+            if article_id > 0:
+                # Create a list to store tag IDs for this article
+                article_tag_ids = []
+                
+                # Process tags by category
                 for tag_list, tag_type in [
                     (topic_tags, 'topic'),
                     (geography_tags, 'geography'),
                     (event_tags, 'event')
                 ]:
+                    # Clean and deduplicate tags
+                    unique_tags = set()
                     for tag_name in tag_list:
                         if tag_name and len(tag_name) > 1:
-                            try:
-                                # Add tag if it doesn't exist and associate it with the article
-                                tag_id = add_tag(tag_name, tag_type)
-                                if tag_id:
-                                    tag_article(article_id, [tag_id])
-                                    
-                            except Exception as tag_error:
-                                logger.error(f"Error processing tag {tag_name}: {str(tag_error)}")
+                            # Normalize tag name to prevent duplicates
+                            normalized_tag = tag_name.strip().lower()
+                            if normalized_tag not in unique_tags:
+                                unique_tags.add(normalized_tag)
+                                try:
+                                    # Add tag if it doesn't exist and get its ID
+                                    tag_id = add_tag(tag_name, tag_type)
+                                    if tag_id:
+                                        article_tag_ids.append(tag_id)
+                                except Exception as tag_error:
+                                    logger.error(f"Error processing tag {tag_name}: {str(tag_error)}")
+                
+                # Associate all tags with the article in a single operation
+                if article_tag_ids:
+                    tag_article(article_id, article_tag_ids)
 
                 self.processing_stats['processed_articles'] += 1
                 self.processing_stats['queued_articles'] -= 1
@@ -204,9 +216,7 @@ class PriorityFeedProcessor:
                 
                 # Update feed cache less frequently
                 if self.processing_stats['processed_articles'] % 20 == 0:
-                    # Fixed: Removed await from synchronous get_source_priority function
                     source_priority = get_source_priority(article.feed_url)
-                    # Fixed: Removed await from synchronous update_feed_cache function
                     update_feed_cache(article.feed_url, {
                         'last_success_time': datetime.now(),
                         'source_priority': source_priority
