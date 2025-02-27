@@ -5,7 +5,7 @@ from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 from queue import PriorityQueue
-from ..database.models import update_feed_cache, get_source_priority
+from ..database.models import update_feed_cache, get_source_priority, add_tag, tag_article
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +62,7 @@ class PriorityFeedProcessor:
         """Continuous loop to process articles from the queue."""
         logger.info("✨ Processing loop started")
         last_status_update = time.time()
-        status_update_interval = 5  # Update status every 5 seconds
+        status_update_interval = 1  # Update status every 1 second (decreased from 5)
         
         while self._running:
             try:
@@ -131,18 +131,22 @@ class PriorityFeedProcessor:
             from ..utils.ai import content_processor
             
             try:
+                # Process title
                 title_emoji_str, processed_title = await content_processor.process_content(
                     cleaned_title, 
                     cleaned_url, 
                     is_title=True
                 )
                 
-                content_result = await content_processor.process_content_with_analysis(
+                # Process content with tags
+                emoji_str, processed_text, topic_tags, geography_tags, event_tags = await content_processor.process_content_with_tags(
                     cleaned_content,
                     cleaned_url,
                     is_title=False
                 )
-                emoji_str, processed_text, sentiment_score, bias_category, bias_score = content_result
+                
+                # Get sentiment and bias analysis
+                sentiment_score, bias_category, bias_score = await content_processor.analyze_sentiment_and_bias(processed_text)
                 
                 if emoji_str == "📰🌐":
                     emoji_str = title_emoji_str
@@ -154,10 +158,12 @@ class PriorityFeedProcessor:
                 sentiment_score = 0.0
                 bias_category = "ai_error"
                 bias_score = 0.0
+                topic_tags, geography_tags, event_tags = [], [], []
+                logger.error(f"AI processing error: {str(ai_error)}")
             
             # Store processed article
             from ..database.models import store_article
-            stored = await store_article(
+            article_id = await store_article(
                 title=processed_title or cleaned_title,
                 content=processed_text or cleaned_content,
                 link=cleaned_url,
@@ -171,7 +177,25 @@ class PriorityFeedProcessor:
                 bias_score=bias_score
             )
 
-            if stored:
+            # Store tags if article was successfully stored
+            if article_id:
+                # Process and store tags
+                for tag_list, tag_type in [
+                    (topic_tags, 'topic'),
+                    (geography_tags, 'geography'),
+                    (event_tags, 'event')
+                ]:
+                    for tag_name in tag_list:
+                        if tag_name and len(tag_name) > 1:
+                            try:
+                                # Add tag if it doesn't exist and associate it with the article
+                                tag_id = add_tag(tag_name, tag_type)
+                                if tag_id:
+                                    tag_article(article_id, [tag_id])
+                                    
+                            except Exception as tag_error:
+                                logger.error(f"Error processing tag {tag_name}: {str(tag_error)}")
+
                 self.processing_stats['processed_articles'] += 1
                 self.processing_stats['queued_articles'] -= 1
                 self.processing_stats['api_calls'] += 1
@@ -180,19 +204,24 @@ class PriorityFeedProcessor:
                 
                 # Update feed cache less frequently
                 if self.processing_stats['processed_articles'] % 20 == 0:
-                    await update_feed_cache(article.feed_url, {
+                    # Fixed: Removed await from synchronous get_source_priority function
+                    source_priority = get_source_priority(article.feed_url)
+                    # Fixed: Removed await from synchronous update_feed_cache function
+                    update_feed_cache(article.feed_url, {
                         'last_success_time': datetime.now(),
-                        'source_priority': await get_source_priority(article.feed_url)
+                        'source_priority': source_priority
                     })
 
             return article
 
         except Exception as e:
             self.processing_stats['error_count'] = self.processing_stats.get('error_count', 0) + 1
+            logger.error(f"Error processing article: {str(e)}")
             return None
 
     def get_processing_status(self) -> dict:
         """Get current processing status and metrics."""
+        # Calculate runtime in real-time to ensure it's always current
         runtime = time.time() - self.processing_stats['start_time']
         processing_rate = self.processing_stats['processed_articles'] / runtime if runtime > 0 else 0
         

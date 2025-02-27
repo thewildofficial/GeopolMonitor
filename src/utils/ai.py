@@ -102,7 +102,7 @@ class ContentProcessor:
     def __init__(self):
         self.key_manager = APIKeyManager(GEMINI_API_KEYS)
         self._init_client()
-        self.model = "gemini-2.0-flash-lite-preview-02-05"
+        self.model = "gemini-2.0-flash-thinking-exp-01-21"
     
     def _init_client(self):
         """Initialize or reinitialize the Gemini client with current API key."""
@@ -285,20 +285,27 @@ TEXT: [processed text]"""
    0.3 to 0.6: Moderately positive (progress, improvement, cooperation)
    0.7 to 1.0: Highly positive (breakthrough, success, strong growth)
 
-2. BIAS ADVISORY:
-   Provide a brief (1-2 sentences)  note summarizing why you considered the above score in the article. Consider:
-   - Dominant geopolitical perspectives (Western, Eastern, Regional)
-   - Source credibility and diversity of viewpoints
-   - Use of loaded language or emotional manipulation
-   - Selective presentation of facts or context
-   - Historical or cultural framing
-   - Economic or political agenda
-   - Favours certain viewpoints as opposed to other view points, identifying the benefactor and the detracted
+2. BIAS PERSPECTIVE:
+   Provide 2-3 thoughtful, neutral sentences that highlight specific framing choices or perspective biases in the text. Your analysis should:
+   - Identify specific examples of language, quotes, or narrative structures that reveal potential bias
+   - Point to particular sentences or word choices that may subtly direct readers toward a viewpoint
+   - Use strictly neutral language that does not favor any political position
+   - Avoid making judgment calls about whether the bias is "good" or "bad"
+   - Frame observations as helpful context for critical reading, not accusations
    
-   Example advisories:
-   - "This article presents events primarily from a Western perspective, with limited coverage of regional viewpoints."
-   - "The reporting shows a pro-government bias with selective use of economic data to support policy positions."
-   - "Coverage appears balanced with multiple perspectives represented, though slightly favoring regional interests."
+   Consider these aspects:
+   - Dominant geopolitical perspectives (Western, Eastern, Regional)
+   - Source diversity and representation of different viewpoints
+   - Use of emotionally charged language or persuasive techniques
+   - Selective presentation of facts or absence of key context
+   - Historical or cultural framing choices
+   - Economic or political perspectives that may influence the narrative
+   - Which viewpoints benefit from the framing and which may be minimized
+   
+   Example analyses:
+   - "This text frames economic policies using terms like 'reckless spending' rather than neutral alternatives like 'increased expenditure,' potentially directing readers toward a specific fiscal perspective. The article primarily quotes business leaders while government officials' perspectives appear briefly in the final paragraph."
+   - "The reporting presents regional tensions primarily through a Western security framework, using terms like 'aggression' for one side while describing similar actions by allied nations as 'defensive positioning.' Consider how this framing might influence interpretation of the events described."
+   - "While covering the diplomatic negotiations, the article dedicates significantly more space to one party's concerns (8 paragraphs) compared to the other's perspective (2 paragraphs). This structural choice, though subtle, may shape how readers understand the relative importance of each position."
 
 3. BIAS SCORE (0.0 to 1.0):
    Evaluate these factors:
@@ -321,7 +328,7 @@ Text to analyze: {text}
 
 Respond exactly in this format:
 SENTIMENT: [score]
-BIAS_CATEGORY: [category]
+BIAS_CATEGORY: [2-3 sentence analysis of specific bias elements in the text, using neutral language]
 BIAS_SCORE: [score]"""
 
             response = self.client.models.generate_content(
@@ -420,31 +427,41 @@ async def generate_tags(text: str) -> Tuple[list[str], list[str], list[str]]:
     try:
         await wait_for_rate_limit()
         
-        prompt = """Analyze this text and generate three sets of tags:
+        prompt = """Analyze this text and generate three precise sets of clean tags:
 
 1. TOPICS (e.g., Politics, Economy, Technology, etc.)
 2. GEOGRAPHY (Countries, Regions, Cities mentioned)
 3. EVENT TYPES (e.g., Election, Conflict, Treaty, Summit, etc.)
 
-Rules for tag generation:
-- Each tag should be a single word or hyphenated phrase
-- Convert multi-word concepts into hyphenated form (e.g., "artificial intelligence" → "artificial-intelligence")
-- Use lowercase for all tags
-- Include only tags that are explicitly or strongly implied in the text
-- Maximum 5 tags per category
-- For geography, prefer country names over city names unless the city is the main focus
+STRICT FORMAT RULES (IMPORTANT):
+- Each tag must be a SIMPLE, CLEAN, lowercase word or hyphenated phrase
+- NO special characters, NO brackets, NO placeholders
+- NO "tags like this" or [tags like this] or <tags>
+- NEVER include the words "tag", "tags", "etc", "placeholder", or similar meta-terms
+- CONVERT multi-word concepts into hyphenated form (e.g., "artificial intelligence" → "artificial-intelligence")
+- USE LOWERCASE ONLY for all tags
+- INCLUDE ONLY specific tags that are EXPLICITLY mentioned or strongly implied in the text
+- MAXIMUM 5 tags per category - fewer is better than poor quality
+- For geography, use ISO country names when possible
+- For cities, include country as context (e.g., "paris-france" not just "paris")
+- OMIT generic/vague terms like "news", "update", "development", "situation"
 
-Example response format:
+BAD OUTPUT (DO NOT DO THIS):
+TOPICS: [economy], <technology>, "politics", etc., some-tag
+GEOGRAPHY: [united states], <europe>, etc.
+EVENTS: [meeting], <conflict>, etc.
+
+GOOD OUTPUT:
 TOPICS: economy, technology, cybersecurity
-GEOGRAPHY: united-states, china, european-union
+GEOGRAPHY: united-states, france, japan
 EVENTS: trade-agreement, diplomatic-summit
 
-Text to analyze: {text}
+Analyze the following text: {text}
 
-Respond exactly in this format:
-TOPICS: [comma-separated tags]
-GEOGRAPHY: [comma-separated tags]
-EVENTS: [comma-separated tags]"""
+Respond EXACTLY in this format without explanations:
+TOPICS: tag1, tag2, tag3
+GEOGRAPHY: tag1, tag2, tag3
+EVENTS: tag1, tag2, tag3"""
 
         response = content_processor.client.models.generate_content(
             model=content_processor.model,
@@ -460,13 +477,26 @@ EVENTS: [comma-separated tags]"""
         for line in result:
             line = line.strip()
             if line.startswith('TOPICS:'):
-                topics = [t.strip() for t in line.split('TOPICS:')[1].strip().split(',')]
+                topics = [t.strip() for t in line.split('TOPICS:')[1].strip().split(',') if t.strip()]
             elif line.startswith('GEOGRAPHY:'):
-                geography = [t.strip() for t in line.split('GEOGRAPHY:')[1].strip().split(',')]
+                geography = [t.strip() for t in line.split('GEOGRAPHY:')[1].strip().split(',') if t.strip()]
             elif line.startswith('EVENTS:'):
-                events = [t.strip() for t in line.split('EVENTS:')[1].strip().split(',')]
+                events = [t.strip() for t in line.split('EVENTS:')[1].strip().split(',') if t.strip()]
         
-        return topics, geography, events
+        # Clean tags: remove any with brackets, special characters, or meta-terms
+        def clean_tag_list(tags):
+            cleaned = []
+            for tag in tags:
+                # Skip tags with brackets or other problematic patterns
+                if any(char in tag for char in '[]()<>"\''): 
+                    continue
+                # Skip meta-terms
+                if any(term in tag for term in ['tag', 'etc', 'placeholder']):
+                    continue
+                cleaned.append(tag)
+            return cleaned
+            
+        return clean_tag_list(topics), clean_tag_list(geography), clean_tag_list(events)
 
     except Exception as e:
         logger.error(f"Error generating tags: {e}")
