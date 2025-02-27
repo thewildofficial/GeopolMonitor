@@ -7,7 +7,7 @@ import math
 import re
 from urllib.parse import urlparse
 from collections import Counter
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 from queue import PriorityQueue
@@ -47,7 +47,16 @@ def format_relative_time(dt: Optional[datetime]) -> str:
     if not dt:
         return "Never"
     
-    now = datetime.now()
+    # Ensure both datetimes have timezone information
+    now = datetime.now(timezone.utc)
+    
+    # If dt doesn't have timezone info, assume UTC for backward compatibility
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    elif dt.tzinfo != timezone.utc:
+        # Convert to UTC for consistent comparison
+        dt = dt.astimezone(timezone.utc)
+    
     diff = now - dt
     
     # Handle future dates (clock skew case)
@@ -109,16 +118,24 @@ class ArticleEntry:
     content: str = field(compare=False)
     link: str = field(compare=False)
     guid: str = field(compare=False)
-    added_time: datetime = field(default_factory=datetime.now, compare=False)
+    added_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc), compare=False)
 
     def __post_init__(self):
+        # Ensure pub_date is timezone aware, convert to UTC if needed
+        if not self.pub_date.tzinfo:
+            raise ValueError("pub_date must be timezone-aware")
+        
+        # Convert to UTC for consistent comparisons
+        if self.pub_date.tzinfo != timezone.utc:
+            self.pub_date = self.pub_date.astimezone(timezone.utc)
+            
         # Convert to timestamp priority (newer articles = negative numbers = higher priority)
-        # This ensures newest articles have highest priority (lowest number)
         self.priority = -self.pub_date.timestamp()
 
     def get_age_minutes(self) -> float:
         """Get article age in minutes"""
-        return (datetime.now() - self.pub_date).total_seconds() / 60
+        now = datetime.now(timezone.utc)
+        return (now - self.pub_date).total_seconds() / 60
         
 class PriorityFeedProcessor:
     def __init__(self, api_rate_limit: int = 60):
@@ -773,7 +790,7 @@ def extract_domain(url: str) -> str:
         domain = parsed_url.netloc
         
         # Remove www. prefix if present
-        if domain.startswith('www.'):
+        if (domain.startswith('www.')):
             domain = domain[4:]
             
         return domain

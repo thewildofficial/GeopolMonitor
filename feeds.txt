@@ -65,7 +65,6 @@ https://astanatimes.com/feed/
 https://techcrunch.com/feed/
 https://www.wired.com/feed/rss
 https://www.theverge.com/rss/index.xml
-http://feeds.arstechnica.com/arstechnica/index
 https://techcabal.com/feed
 https://latinamericareports.com/feed
 https://en.mercopress.com/rss/latin-america

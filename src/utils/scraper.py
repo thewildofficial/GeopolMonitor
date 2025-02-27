@@ -2,7 +2,7 @@
 import asyncio
 import logging
 from typing import Optional, Dict, Any
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 import aiohttp
 from bs4 import BeautifulSoup
 from newspaper import Article, Config
@@ -22,42 +22,43 @@ user_agent = UserAgent()
 config = Config()
 config.browser_user_agent = user_agent.random
 config.request_timeout = 15
-config.fetch_images = False
+config.fetch_images = True  # Enable image fetching
 config.memoize_articles = False
 
 class ArticleScraper:
     """Handles article scraping with fallback methods and content cleaning."""
     
     def __init__(self):
-        self.session = None
-        self._rate_limits: Dict[str, float] = {}
-        self._domain_delays: Dict[str, float] = {}
+        self.session: Optional[aiohttp.ClientSession] = None
+        self._rate_limits = {}
+        self._last_requests = {}
+        self.image_patterns = [
+            r'https?://[^\s<>"]+?\.(?:jpg|jpeg|png|gif|webp)',
+            r'data:image/[^;]+;base64,[a-zA-Z0-9+/]+'
+        ]
     
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create aiohttp session."""
-        if self.session is None or self.session.closed:
+        if not self.session:
             self.session = aiohttp.ClientSession()
         return self.session
     
     async def _respect_rate_limits(self, domain: str):
         """Implement rate limiting per domain."""
-        import time
-        
-        current_time = time.time()
-        if domain in self._rate_limits:
-            time_since_last = current_time - self._rate_limits[domain]
-            delay = self._domain_delays.get(domain, 3)  # Default 3 second delay
-            
-            if time_since_last < delay:
-                wait_time = delay - time_since_last
-                logger.debug(f"Rate limiting for {domain}, waiting {wait_time:.2f}s")
-                await asyncio.sleep(wait_time)
-        
-        self._rate_limits[domain] = current_time
+        if domain in self._last_requests:
+            time_since_last = asyncio.get_event_loop().time() - self._last_requests[domain]
+            if time_since_last < self._rate_limits.get(domain, 1.0):
+                await asyncio.sleep(self._rate_limits.get(domain, 1.0) - time_since_last)
+        self._last_requests[domain] = asyncio.get_event_loop().time()
     
     def _extract_domain(self, url: str) -> str:
         """Extract domain from URL."""
-        return urlparse(url).netloc
+        try:
+            parsed = urlparse(url)
+            domain = parsed.netloc.lower()
+            return domain.replace('www.', '')
+        except:
+            return ""
     
     async def _fetch_with_newspaper(self, url: str) -> Optional[Dict[str, Any]]:
         """Fetch article using newspaper3k library."""
@@ -66,12 +67,22 @@ class ArticleScraper:
             await asyncio.to_thread(article.download)
             await asyncio.to_thread(article.parse)
             
+            # Get top image and any additional images
+            images = []
+            if article.top_image:
+                images.append(article.top_image)
+            
+            # Add any additional images from the article object
+            if hasattr(article, 'images'):
+                images.extend([img for img in article.images if img not in images])
+            
             return {
                 'title': article.title,
                 'text': article.text,
                 'authors': article.authors,
                 'publish_date': article.publish_date,
                 'top_image': article.top_image,
+                'images': images,
                 'meta_description': article.meta_description
             }
         except Exception as e:
@@ -101,6 +112,30 @@ class ArticleScraper:
                 if title_tag:
                     title = title_tag.get('content', None) or title_tag.string
                 
+                # Extract images
+                images = []
+                # Try Open Graph image first
+                og_image = soup.find('meta', property='og:image')
+                if og_image:
+                    image_url = og_image.get('content')
+                    if image_url:
+                        images.append(urljoin(url, image_url))
+                
+                # Look for article images
+                article_tag = soup.find('article') or soup.find(class_=['article', 'post', 'content', 'main'])
+                if article_tag:
+                    img_tags = article_tag.find_all('img')
+                else:
+                    img_tags = soup.find_all('img')
+                
+                for img in img_tags:
+                    src = img.get('src') or img.get('data-src')
+                    if src:
+                        # Convert relative URLs to absolute
+                        absolute_url = urljoin(url, src)
+                        if any(absolute_url.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp']):
+                            images.append(absolute_url)
+                
                 # Extract main content
                 content = ''
                 article_tag = soup.find('article') or soup.find(class_=['article', 'post', 'content', 'main'])
@@ -120,7 +155,8 @@ class ArticleScraper:
                     'text': content,
                     'authors': None,
                     'publish_date': None,
-                    'top_image': None,
+                    'top_image': images[0] if images else None,
+                    'images': images,
                     'meta_description': None
                 }
                 
@@ -145,6 +181,13 @@ class ArticleScraper:
         # Clean title
         if content.get('title'):
             content['title'] = ' '.join(content['title'].split())
+        
+        # Clean image URLs
+        if content.get('images'):
+            content['images'] = [
+                url for url in content['images']
+                if url and any(url.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp'])
+            ]
         
         return content
     

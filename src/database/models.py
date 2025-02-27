@@ -1,7 +1,7 @@
 """Database models and initialization."""
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 from pathlib import Path
 from typing import Optional, List, Dict
@@ -49,12 +49,14 @@ def init_db(connection=None):
         )
     ''')
 
+    # Create news entries table with guid column
     conn.execute('''
         CREATE TABLE IF NOT EXISTS news_entries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
             content TEXT,
             link TEXT UNIQUE NOT NULL,
+            guid TEXT NOT NULL,
             pub_date TEXT NOT NULL,
             processed_date TEXT NOT NULL,
             feed_url TEXT NOT NULL,
@@ -67,9 +69,17 @@ def init_db(connection=None):
         )
     ''')
     
+    # For existing databases, add guid column if it doesn't exist
+    try:
+        conn.execute('ALTER TABLE news_entries ADD COLUMN guid TEXT')
+    except sqlite3.OperationalError:
+        # Column already exists, ignore
+        pass
+    
     conn.execute('CREATE INDEX IF NOT EXISTS idx_link ON news_entries(link)')
     conn.execute('CREATE INDEX IF NOT EXISTS idx_feed_url ON news_entries(feed_url)')
     conn.execute('CREATE INDEX IF NOT EXISTS idx_pub_date ON news_entries(pub_date)')
+    conn.execute('CREATE INDEX IF NOT EXISTS idx_guid ON news_entries(guid)')
     
     conn.execute('''
         CREATE TABLE IF NOT EXISTS feed_cache (
@@ -295,44 +305,47 @@ async def store_article(
     feed_url: str,
     pub_date: datetime,
     emoji1: str = "📰",
-    emoji2: str = "🌎",
+    emoji2: str = "🌐",
     image_url: Optional[str] = None,
     sentiment_score: float = 0.0,
     bias_category: str = "neutral",
     bias_score: float = 0.0
 ) -> int:
-    """Store a processed article in the database and return the article ID."""
-    # Skip if article already exists
-    if exists_in_db(link):
-        return 0
-        
+    """Store a processed article in the database."""
+    # Ensure we have a timezone-aware datetime in UTC
+    if not pub_date.tzinfo:
+        pub_date = pub_date.replace(tzinfo=timezone.utc)
+    elif pub_date.tzinfo != timezone.utc:
+        pub_date = pub_date.astimezone(timezone.utc)
+    
+    # Store the time as ISO format which preserves timezone info
+    pub_date_str = pub_date.isoformat()
+    
     with get_db() as conn:
+        cursor = conn.cursor()
         try:
-            cursor = conn.execute('''
-                INSERT INTO news_entries (
-                    title, content, link, pub_date, processed_date,
-                    feed_url, emoji1, emoji2, image_url,
-                    sentiment_score, bias_category, bias_score
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                title, content, link,
-                pub_date.isoformat(),
-                datetime.now().isoformat(),
-                feed_url,
-                emoji1, emoji2, image_url,
-                sentiment_score,
-                bias_category,
-                bias_score
-            ))
-            conn.commit()
-            return cursor.lastrowid or 0
+            # Check if URL already exists
+            cursor.execute('SELECT id FROM news_entries WHERE link = ?', (link,))
+            existing = cursor.fetchone()
+            if existing:
+                return existing[0]  # Return existing ID, no need to reprocess
             
-        except sqlite3.IntegrityError:
-            # Article already exists (unique constraint on link)
-            return 0
+            # Store article with timestamp
+            current_time = datetime.now(timezone.utc).isoformat()
+            cursor.execute('''
+                INSERT INTO news_entries (title, content, link, guid, feed_url, pub_date, 
+                                    processed_date, emoji1, emoji2, image_url, 
+                                    sentiment_score, bias_category, bias_score)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (title, content, link, guid, feed_url, pub_date_str, 
+                current_time, emoji1, emoji2, image_url, 
+                sentiment_score, bias_category, bias_score))
+            
+            conn.commit()
+            return cursor.lastrowid
         except Exception as e:
-            logger.error(f"Error storing article: {e}")
-            return 0
+            logger.error(f"Error storing article: {str(e)}")
+            return -1
 
 # Initialize database on module import
 init_db()

@@ -3,9 +3,11 @@ import logging
 import aiohttp
 import ssl
 import time
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from dataclasses import dataclass
-from typing import Dict, Set, Optional
+from typing import Dict, Set, Optional, Tuple
+from email.utils import parsedate_to_datetime
+from time import mktime
 from .priority_feed_processor import PriorityFeedProcessor, ArticleEntry
 
 logger = logging.getLogger(__name__)
@@ -114,6 +116,42 @@ class FeedWatcher:
                 self._update_feed_metrics(feed_url, had_updates=False, error=True)
                 return ""
 
+    def _parse_date_with_timezone(self, entry) -> Tuple[Optional[datetime], bool]:
+        """
+        Parse the date from a feed entry with timezone awareness.
+        Returns (datetime, is_timezone_aware) tuple.
+        """
+        # Try parsing published_parsed first (struct_time format)
+        if hasattr(entry, 'published_parsed') and entry.published_parsed:
+            try:
+                # Convert time tuple to UTC timestamp then to datetime
+                timestamp = mktime(entry.published_parsed)
+                dt = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+                return dt, True
+            except Exception:
+                pass
+
+        # Try parsing published (string format)
+        if hasattr(entry, 'published') and entry.published:
+            try:
+                # Try parsing with email.utils which handles RFC format dates
+                dt = parsedate_to_datetime(entry.published)
+                return dt, dt.tzinfo is not None
+            except Exception:
+                pass
+
+        # Try updated fields as fallback
+        if hasattr(entry, 'updated_parsed') and entry.updated_parsed:
+            try:
+                timestamp = mktime(entry.updated_parsed)
+                dt = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+                return dt, True
+            except Exception:
+                pass
+
+        # Last resort - use current time but mark as naive
+        return datetime.now(timezone.utc), False
+
     async def process_feed_content(self, feed_url: str, content: str):
         """Process the feed content and extract entries."""
         try:
@@ -127,10 +165,12 @@ class FeedWatcher:
                 return
 
             new_entries = 0
+            skipped_naive = 0
             feed_articles = self.feed_metrics['articles_by_feed'].get(feed_url, {
                 'total': 0,
                 'new': 0,
                 'duplicates': 0,
+                'naive_skipped': 0,
                 'last_article_time': None
             })
 
@@ -140,12 +180,14 @@ class FeedWatcher:
                     feed_articles['duplicates'] += 1
                     continue
                 
-                pub_date = datetime.now()
-                if hasattr(entry, 'published_parsed') and entry.published_parsed:
-                    try:
-                        pub_date = datetime(*entry.published_parsed[:6])
-                    except:
-                        pass
+                pub_date, is_timezone_aware = self._parse_date_with_timezone(entry)
+                
+                # Skip entries without timezone information
+                if not is_timezone_aware:
+                    skipped_naive += 1
+                    feed_articles['naive_skipped'] += 1
+                    logger.debug(f"Skipping entry from {feed_url} due to naive timezone: {entry.get('title', '')}")
+                    continue
 
                 # Track newest article for this feed
                 if not feed_articles['last_article_time'] or pub_date > feed_articles['last_article_time']:
@@ -168,10 +210,10 @@ class FeedWatcher:
             
             # Update feed metrics
             self.feed_metrics['articles_by_feed'][feed_url] = feed_articles
-            self.feed_metrics['last_update_time'] = datetime.now()
+            self.feed_metrics['last_update_time'] = datetime.now(timezone.utc)
             
             if new_entries > 0:
-                logger.debug(f"📥 Added {new_entries} entries from {feed_url}")
+                logger.debug(f"📥 Added {new_entries} entries from {feed_url} (skipped {skipped_naive} naive timezone entries)")
                 
             processing_time = time.time() - start_time
             self._update_feed_metrics(feed_url, had_updates=new_entries > 0, processing_time=processing_time)
