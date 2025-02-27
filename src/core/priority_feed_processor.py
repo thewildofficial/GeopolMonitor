@@ -3,9 +3,13 @@ import logging
 import time
 import os
 import sys
+import math
+import re
+from urllib.parse import urlparse
+from collections import Counter
 from datetime import datetime, timedelta
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from queue import PriorityQueue
 from ..database.models import update_feed_cache, get_source_priority, add_tag, tag_article
 
@@ -46,10 +50,17 @@ def format_relative_time(dt: Optional[datetime]) -> str:
     now = datetime.now()
     diff = now - dt
     
+    # Handle future dates (clock skew case)
+    if diff.total_seconds() < 0:
+        diff = abs(diff)
+        prefix = "in "
+    else:
+        prefix = ""
+    
     if diff.total_seconds() < 60:
-        return f"{int(diff.total_seconds())}s ago"
+        return f"{prefix}{int(diff.total_seconds())}s ago"
     elif diff.total_seconds() < 3600:
-        return f"{int(diff.total_seconds() / 60)}m ago"
+        return f"{prefix}{int(diff.total_seconds() / 60)}m ago"
     elif diff.total_seconds() < 86400:
         return f"{int(diff.total_seconds() / 3600)}h ago"
     else:
@@ -62,6 +73,31 @@ def colorize_rate(value: float, warning: float = 70.0, critical: float = 90.0) -
     elif value >= warning:
         return f"{Colors.YELLOW}{value:.1f}%{Colors.END}"
     return f"{Colors.GREEN}{value:.1f}%{Colors.END}"
+
+def format_time_elapsed(seconds: float) -> str:
+    """Format seconds into a human-readable time string."""
+    if seconds < 60:
+        return f"{int(seconds)}s"
+    elif seconds < 3600:
+        mins = int(seconds / 60)
+        secs = int(seconds % 60)
+        return f"{mins}m {secs}s"
+    elif seconds < 86400:
+        hours = int(seconds / 3600)
+        mins = int((seconds % 3600) / 60)
+        return f"{hours}h {mins}m"
+    else:
+        days = int(seconds / 86400)
+        hours = int((seconds % 86400) / 3600)
+        return f"{days}d {hours}h"
+
+def estimate_completion_time(queue_size: int, rate: float) -> str:
+    """Estimate time to process the queue at the current rate."""
+    if rate <= 0 or queue_size <= 0:
+        return "Unknown"
+    
+    seconds = queue_size / (rate / 60)
+    return format_time_elapsed(seconds)
 
 @dataclass(order=True)
 class ArticleEntry:
@@ -119,6 +155,20 @@ class PriorityFeedProcessor:
         self.feed_stats: Dict[str, dict] = {}
         self._running = False
         self._processing_task = None
+        self.recently_processed = []  # Store recent articles with details
+        self.currently_processing = None
+        self.processing_times = []  # Keep last 50 processing times
+        self.processing_start_time = None
+        self.feed_activity_history = {}  # Track feed activity over time
+        self.performance_metrics = {
+            'hourly_rates': [0] * 24,  # Last 24 hours
+            'last_hour_rate': 0,
+            'last_hour_processed': 0,
+            'last_hour_timestamp': time.time(),
+            'last_minute_processed': 0,
+            'last_minute_timestamp': time.time(),
+        }
+        self.error_history = {}  # Track error types
 
     async def start(self):
         """Start the continuous processing loop."""
@@ -226,7 +276,20 @@ class PriorityFeedProcessor:
 
         try:
             start_time = time.time()
+            self.processing_start_time = start_time
             article = self.article_queue.get()
+            
+            # Track the domain (source) of the article for analytics
+            domain = extract_domain(article.link)
+            
+            self.currently_processing = {
+                'title': article.title[:50] + ('...' if len(article.title) > 50 else ''),
+                'link': article.link,
+                'date': article.pub_date,
+                'feed_url': article.feed_url,
+                'domain': domain,
+                'start_time': start_time
+            }
             
             # Basic cleanup first
             from ..utils.text import clean_text, clean_url
@@ -342,6 +405,10 @@ class PriorityFeedProcessor:
 
             # Update processing stats
             processing_time = time.time() - start_time
+            self.processing_times.append(processing_time)
+            if len(self.processing_times) > 50:  # Keep only last 50 times
+                self.processing_times.pop(0)
+                
             self.processing_stats['total_processing_time'] += processing_time
             self.processing_stats['min_processing_time'] = min(self.processing_stats['min_processing_time'], processing_time)
             self.processing_stats['max_processing_time'] = max(self.processing_stats['max_processing_time'], processing_time)
@@ -350,12 +417,78 @@ class PriorityFeedProcessor:
             self.processing_stats['success_streak'] += 1
             self.processing_stats['consecutive_errors'] = 0
             
+            # Update feed activity tracking
+            feed_url = article.feed_url
+            if feed_url not in self.feed_activity_history:
+                self.feed_activity_history[feed_url] = {
+                    'last_activity': datetime.now(),
+                    'processed_count': 0,
+                    'error_count': 0,
+                    'avg_processing_time': 0,
+                    'domains': Counter()
+                }
+            
+            feed_activity = self.feed_activity_history[feed_url]
+            feed_activity['last_activity'] = datetime.now()
+            feed_activity['processed_count'] += 1
+            feed_activity['avg_processing_time'] = ((feed_activity['avg_processing_time'] * 
+                                                    (feed_activity['processed_count'] - 1) + 
+                                                    processing_time) / feed_activity['processed_count'])
+            feed_activity['domains'][domain] = feed_activity['domains'].get(domain, 0) + 1
+            
+            # Update rate metrics
+            current_hour = datetime.now().hour
+            self.performance_metrics['hourly_rates'][current_hour] += 1
+            
+            # Update minute-based metrics
+            if time.time() - self.performance_metrics['last_minute_timestamp'] >= 60:
+                self.performance_metrics['last_minute_timestamp'] = time.time()
+                self.performance_metrics['last_minute_processed'] = 1
+            else:
+                self.performance_metrics['last_minute_processed'] += 1
+                
+            # Update hour-based metrics
+            if time.time() - self.performance_metrics['last_hour_timestamp'] >= 3600:
+                self.performance_metrics['last_hour_timestamp'] = time.time()
+                self.performance_metrics['last_hour_processed'] = 1
+                self.performance_metrics['last_hour_rate'] = 1
+            else:
+                self.performance_metrics['last_hour_processed'] += 1
+                elapsed_hour_fraction = (time.time() - self.performance_metrics['last_hour_timestamp']) / 3600
+                if elapsed_hour_fraction > 0:
+                    self.performance_metrics['last_hour_rate'] = self.performance_metrics['last_hour_processed'] / elapsed_hour_fraction
+            
+            # Store details of recently processed article
+            self.recently_processed.append({
+                'title': article.title[:50] + ('...' if len(article.title) > 50 else ''),
+                'link': article.link,
+                'date': article.pub_date,
+                'feed_url': article.feed_url,
+                'domain': domain,
+                'processing_time': processing_time
+            })
+            # Keep only the 5 most recent articles
+            if len(self.recently_processed) > 5:
+                self.recently_processed.pop(0)
+                
+            self.currently_processing = None
+            self.processing_start_time = None
             return article
 
         except Exception as e:
+            self.currently_processing = None
+            self.processing_start_time = None
             self.processing_stats['errors'] += 1
             self.processing_stats['consecutive_errors'] += 1
             self.processing_stats['success_streak'] = 0
+            
+            # Track error types
+            error_type = type(e).__name__
+            if error_type not in self.error_history:
+                self.error_history[error_type] = 1
+            else:
+                self.error_history[error_type] += 1
+                
             logger.error(f"Error processing article: {str(e)}")
             return None
 
@@ -367,9 +500,79 @@ class PriorityFeedProcessor:
                    self.processing_stats['processed_articles'] 
                    if self.processing_stats['processed_articles'] > 0 else 0)
         
+        # Calculate median processing time
+        median_time = 0
+        if self.processing_times:
+            sorted_times = sorted(self.processing_times)
+            if len(sorted_times) % 2 == 0:
+                median_time = (sorted_times[len(sorted_times)//2] + sorted_times[len(sorted_times)//2 - 1]) / 2
+            else:
+                median_time = sorted_times[len(sorted_times)//2]
+        
         api_utilization = (self.processing_stats['api_calls'] / runtime * 60)
         error_rate = (self.processing_stats['errors'] / self.processing_stats['total_articles'] * 100 
                      if self.processing_stats['total_articles'] > 0 else 0)
+        
+        # Calculate estimated queue completion time
+        est_completion = estimate_completion_time(self.processing_stats['queued_articles'], processing_rate)
+        
+        # Calculate most active feeds
+        active_feeds = sorted(self.feed_activity_history.items(), 
+                             key=lambda x: x[1]['processed_count'], 
+                             reverse=True)[:5]
+        
+        # Calculate most recent errors
+        top_errors = sorted(self.error_history.items(), 
+                           key=lambda x: x[1], 
+                           reverse=True)[:3]
+        
+        # Calculate current processing duration if an article is being processed
+        current_processing_duration = 0
+        if self.processing_start_time:
+            current_processing_duration = time.time() - self.processing_start_time
+        
+        # Find the actual article objects for newest and oldest
+        newest_article_info = None
+        oldest_article_info = None
+        
+        # Look through the queue for details (non-destructive peek)
+        if not self.article_queue.empty():
+            # We can't peek at a PriorityQueue directly, so we'll need to use a workaround
+            # This is just for the status display, not for actual processing
+            try:
+                # Create a temporary queue with references to the same articles
+                temp_queue = PriorityQueue()
+                items = []
+                
+                # Empty the queue temporarily
+                while not self.article_queue.empty():
+                    item = self.article_queue.get()
+                    items.append(item)
+                
+                # Process the items to find newest and oldest
+                for item in items:
+                    if self.processing_stats['newest_queued_article'] == item.pub_date:
+                        newest_article_info = {
+                            'title': item.title[:50] + ('...' if len(item.title) > 50 else ''),
+                            'link': item.link,
+                        }
+                    if self.processing_stats['oldest_queued_article'] == item.pub_date:
+                        oldest_article_info = {
+                            'title': item.title[:50] + ('...' if len(item.title) > 50 else ''),
+                            'link': item.link,
+                        }
+                    
+                    # Put the item back in the original queue
+                    self.article_queue.put(item)
+            except Exception as e:
+                # If anything goes wrong, we don't want to lose the queue
+                for item in items:
+                    if item not in self.article_queue.queue:
+                        self.article_queue.put(item)
+        
+        # Get latest processed article info
+        latest_processed_info = self.recently_processed[-1] if self.recently_processed else None
+        currently_processing_info = self.currently_processing
         
         return {
             'queue_size': self.processing_stats['queued_articles'],
@@ -380,6 +583,7 @@ class PriorityFeedProcessor:
             'avg_processing_time': f"{avg_time:.2f}s",
             'min_processing_time': f"{self.processing_stats['min_processing_time']:.2f}s" if self.processing_stats['min_processing_time'] != float('inf') else "N/A",
             'max_processing_time': f"{self.processing_stats['max_processing_time']:.2f}s",
+            'median_processing_time': f"{median_time:.2f}s",
             'api_utilization': api_utilization,
             'api_utilization_str': colorize_rate(api_utilization),
             'runtime': f"{int(runtime // 3600)}h {int((runtime % 3600) // 60)}m {int(runtime % 60)}s",
@@ -399,8 +603,32 @@ class PriorityFeedProcessor:
             'success_streak': self.processing_stats['success_streak'],
             'consecutive_errors': self.processing_stats['consecutive_errors'],
             'active_feeds': len(self.feed_stats),
-            'feed_stats': self.feed_stats
+            'feed_stats': self.feed_stats,
+            'newest_article_info': newest_article_info,
+            'oldest_article_info': oldest_article_info,
+            'latest_processed_info': latest_processed_info,
+            'currently_processing_info': currently_processing_info,
+            'recently_processed': self.recently_processed,
+            'est_completion': est_completion,
+            'current_processing_duration': current_processing_duration,
+            'active_feeds_list': active_feeds,
+            'top_errors': top_errors,
+            'trending_domains': self._get_trending_domains(),
+            'performance_trend': {
+                'last_minute_rate': self.performance_metrics['last_minute_processed'],
+                'last_hour_rate': self.performance_metrics['last_hour_rate'],
+                'hourly_rates': self.performance_metrics['hourly_rates']
+            }
         }
+        
+    def _get_trending_domains(self) -> List[Tuple[str, int]]:
+        """Get the most frequent domains from recent articles."""
+        domain_counter = Counter()
+        for article in self.recently_processed:
+            if 'domain' in article:
+                domain_counter[article['domain']] += 1
+        
+        return domain_counter.most_common(5)
 
     def print_status(self):
         """Print current processing status in a clean format."""
@@ -419,6 +647,7 @@ class PriorityFeedProcessor:
         print(f"\n{Colors.BOLD}⚡ Performance Metrics:{Colors.END}")
         print(f"   Processing Rate: {Colors.GREEN}{status['processing_rate']}{Colors.END}")
         print(f"   Average Time: {Colors.CYAN}{status['avg_processing_time']}{Colors.END}")
+        print(f"   Median Time: {Colors.CYAN}{status['median_processing_time']}{Colors.END}")
         print(f"   Peak Time: {Colors.YELLOW}{status['max_processing_time']}{Colors.END}")
         print(f"   Best Time: {Colors.GREEN}{status['min_processing_time']}{Colors.END}")
         
@@ -453,20 +682,73 @@ class PriorityFeedProcessor:
         # Clear screen thoroughly
         clear_terminal()
         
+        # Format article info with title and link if available
+        latest_str = f"{status['last_processed_str']} ({status['last_processed_age']})"
+        if status['latest_processed_info']:
+            info = status['latest_processed_info']
+            latest_str = f"{Colors.BOLD}{info['title']}{Colors.END}\n" + \
+                         f"      {Colors.CYAN}{info['link']}{Colors.END}\n" + \
+                         f"      {status['last_processed_str']} ({status['last_processed_age']})"
+        
+        newest_str = f"{status['newest_article_str']} ({status['newest_article_age']})"
+        if status['newest_article_info']:
+            info = status['newest_article_info']
+            newest_str = f"{Colors.BOLD}{info['title']}{Colors.END}\n" + \
+                         f"      {Colors.CYAN}{info['link']}{Colors.END}\n" + \
+                         f"      {status['newest_article_str']} ({status['newest_article_age']})"
+            
+        oldest_str = f"{status['oldest_article_str']} ({status['oldest_article_age']})"
+        if status['oldest_article_info']:
+            info = status['oldest_article_info']
+            oldest_str = f"{Colors.BOLD}{info['title']}{Colors.END}\n" + \
+                         f"      {Colors.CYAN}{info['link']}{Colors.END}\n" + \
+                         f"      {status['oldest_article_str']} ({status['oldest_article_age']})"
+        
+        # Now processing section with duration
+        now_processing = ""
+        if status['currently_processing_info']:
+            info = status['currently_processing_info']
+            duration = format_time_elapsed(status['current_processing_duration'])
+            now_processing = (
+                f"\n{Colors.BOLD}⚙️ Now Processing ({duration}):{Colors.END}\n"
+                f"   {Colors.BOLD}{info['title']}{Colors.END}\n"
+                f"   {Colors.CYAN}{info['link']}{Colors.END}\n"
+                f"   {info['date'].strftime('%Y-%m-%d %H:%M:%S')}"
+            )
+        
+        # Format trending domains
+        trending_domains = ""
+        if status['trending_domains']:
+            trending_domains = f"\n{Colors.BOLD}🔍 Trending Domains:{Colors.END}\n"
+            for domain, count in status['trending_domains']:
+                trending_domains += f"   {Colors.YELLOW}{domain}{Colors.END}: {count}\n"
+        
+        # Add performance trend
+        performance_trend = (
+            f"\n{Colors.BOLD}📊 Performance Trend:{Colors.END}\n"
+            f"   Last minute: {Colors.CYAN}{status['performance_trend']['last_minute_rate']}{Colors.END} articles\n"
+            f"   Last hour: {Colors.GREEN}{status['performance_trend']['last_hour_rate']:.1f}{Colors.END} articles/hour\n"
+            f"   Est. completion: {Colors.YELLOW}{status['est_completion']}{Colors.END}"
+        )
+        
         # Build status string
         status_str = (
             f"{Colors.HEADER}{'='*20} Feed Processing Status {'='*20}{Colors.END}\n"
             f"\n{Colors.BOLD}📊 Queue Status:{Colors.END}\n"
             f"   Queue Size: {Colors.CYAN}{status['queue_size']}/{status['peak_queue_size']}{Colors.END} (current/peak)\n"
             f"   Processed: {Colors.GREEN}{status['processed_articles']}/{status['total_articles']}{Colors.END}\n"
+            f"{performance_trend}\n"
             f"\n{Colors.BOLD}⚡ Processing:{Colors.END}\n"
             f"   Rate: {Colors.GREEN}{status['processing_rate']}{Colors.END}\n"
+            f"   Avg/Med Time: {Colors.CYAN}{status['avg_processing_time']}{Colors.END} / {Colors.CYAN}{status['median_processing_time']}{Colors.END}\n"
             f"   API Load: {status['api_utilization_str']}\n"
             f"   Errors: {status['error_rate_str']}\n"
+            f"{now_processing}\n"
             f"\n{Colors.BOLD}🕒 Timeline:{Colors.END}\n"
-            f"   Latest: {Colors.GREEN}{status['last_processed_str']}{Colors.END} ({status['last_processed_age']})\n"
-            f"   Newest: {Colors.CYAN}{status['newest_article_str']}{Colors.END} ({status['newest_article_age']})\n"
-            f"   Oldest: {Colors.YELLOW}{status['oldest_article_str']}{Colors.END} ({status['oldest_article_age']})\n"
+            f"   Latest: {Colors.GREEN}{latest_str}{Colors.END}\n"
+            f"   Newest: {Colors.CYAN}{newest_str}{Colors.END}\n"
+            f"   Oldest: {Colors.YELLOW}{oldest_str}{Colors.END}\n"
+            f"{trending_domains}"
             f"\n{Colors.BOLD}📈 Article Age:{Colors.END}\n"
             f"   ≤5min : {Colors.GREEN}{status['articles_by_age']['5min']}{Colors.END}\n"
             f"   ≤15min: {Colors.CYAN}{status['articles_by_age']['15min']}{Colors.END}\n"
@@ -483,3 +765,17 @@ class PriorityFeedProcessor:
         # Print status and ensure output is flushed
         sys.stdout.write(status_str)
         sys.stdout.flush()
+
+def extract_domain(url: str) -> str:
+    """Extract the domain name from a URL."""
+    try:
+        parsed_url = urlparse(url)
+        domain = parsed_url.netloc
+        
+        # Remove www. prefix if present
+        if domain.startswith('www.'):
+            domain = domain[4:]
+            
+        return domain
+    except:
+        return "unknown"

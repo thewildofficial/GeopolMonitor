@@ -103,7 +103,6 @@ https://elcomercio.pe/arcio/rss/
 https://www.ft.com/rss/
 https://www.ogj.com/__rss/website-scheduled-content.xml?input=%7B%22sectionAlias%22%3A%22home%22%7D
 https://services.tradewindsnews.com/api/feed/rss
-https://www.infrastructureinvestor.com/rss
 https://www.globalpolicy.org/rss.xml
 https://www.dawn.com/feed
 https://www.swp-berlin.org/rss.xml
