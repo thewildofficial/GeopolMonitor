@@ -207,8 +207,11 @@ def create_app():
         page_size: int = Query(20, ge=1, le=100)
     ):
         try:
+            print(f"Fetching news with params: tags={tags}, page={page}, page_size={page_size}")
+            
             # Calculate offset for pagination
             offset = (page - 1) * page_size
+            print(f"Calculated offset: {offset}")
             
             if (tags):
                 # Split tags string into list and search by tags
@@ -218,6 +221,7 @@ def create_app():
                     limit=page_size, 
                     offset=offset
                 )
+                print(f"Found {len(news_items)} items with tags: {tag_list}")
             else:
                 # Get paginated news items
                 with get_db() as conn:
@@ -232,15 +236,22 @@ def create_app():
                     ''', (page_size, offset))
                     columns = [column[0] for column in cursor.description]
                     news_items = [dict(zip(columns, row)) for row in cursor]
+                    print(f"Raw query returned {len(news_items)} items")
                     
                     # Get total count for pagination metadata
                     count_cursor = conn.execute('SELECT COUNT(*) FROM news_entries')
                     total_count = count_cursor.fetchone()[0]
+                    print(f"Total items in database: {total_count}")
             
+            # Format news items and log the first one for debugging
             formatted_news = [format_news_item(item) for item in news_items]
+            if formatted_news:
+                print("First formatted news item:", formatted_news[0])
+            else:
+                print("No news items were formatted")
             
             # Include pagination metadata
-            return {
+            response = {
                 "news": formatted_news,
                 "pagination": {
                     "page": page,
@@ -251,7 +262,10 @@ def create_app():
                     "has_prev": page > 1
                 }
             }
+            print("Response metadata:", response["pagination"])
+            return response
         except Exception as e:
+            print(f"Error in get_news: {str(e)}")
             raise HTTPException(status_code=500, detail=str(e))
 
     @app.get("/api/tags")

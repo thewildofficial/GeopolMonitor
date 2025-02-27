@@ -4,6 +4,32 @@ import { fetchNews, filterNews, updateNewsList } from './news.js';
 let activeTags = new Set();
 let relatedTags = new Map();
 
+// Export the toggleTag function
+export function toggleTag(tagName) {
+    const countryData = normalizeCountry(tagName);
+    const normalizedTagName = countryData.name;
+    
+    if (activeTags.has(normalizedTagName)) {
+        activeTags.delete(normalizedTagName);
+    } else {
+        activeTags.add(normalizedTagName);
+    }
+    updateFilterCount();
+    
+    // Update tag visual states
+    document.querySelectorAll('.tag').forEach(tag => {
+        if (tag.dataset.tagName === normalizedTagName) {
+            tag.classList.toggle('active');
+        }
+    });
+    
+    // Update news list with new filter
+    window.updateNews();
+}
+
+// Also make it available globally for legacy support
+window.toggleTag = toggleTag;
+
 export async function loadTags() {
     try {
         const response = await fetch('/api/tags');
@@ -268,29 +294,6 @@ function renderTags(searchTerm = '') {
         }
     });
 }
-
-// Make toggleTag available globally
-window.toggleTag = (tagName) => {
-    const countryData = normalizeCountry(tagName);
-    const normalizedTagName = countryData.name;
-    
-    if (activeTags.has(normalizedTagName)) {
-        activeTags.delete(normalizedTagName);
-    } else {
-        activeTags.add(normalizedTagName);
-    }
-    updateFilterCount();
-    
-    // Update tag visual states
-    document.querySelectorAll('.tag').forEach(tag => {
-        if (tag.dataset.tagName === normalizedTagName) {
-            tag.classList.toggle('active');
-        }
-    });
-    
-    // Update news list with new filter
-    window.updateNews();
-};
 
 export async function updateNews() {
     try {
