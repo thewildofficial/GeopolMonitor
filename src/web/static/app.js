@@ -32,9 +32,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadTags();
         debugLog('Tags initialized');
         
-        // Initialize infinite scroll
+        // Load initial news before setting up infinite scroll
+        debugLog('Loading initial news...');
+        setLoading(true);
+        await loadInitialNews();
+        setLoading(false);
+        debugLog('Initial news loaded successfully');
+
+        // Initialize infinite scroll after initial news load
         debugLog('Initializing infinite scroll...');
         await initInfiniteScroll();
+        debugLog('Infinite scroll initialized');
         
         // Set up UI controls
         const scrollToTopBtn = createScrollToTopButton();
@@ -95,13 +103,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             });
         }
-        
-        // Load initial news
-        debugLog('Loading initial news...');
-        setLoading(true);
-        await loadInitialNews();
-        setLoading(false);
-        debugLog('Initial news loaded successfully');
         
         // Remove loading screen
         const loadingScreen = document.querySelector('.loading-screen');

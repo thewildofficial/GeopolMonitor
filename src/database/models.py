@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from datetime import datetime
 import os
 from pathlib import Path
+from typing import Optional, List, Dict
 from .backup import backup_database
 import atexit
 import logging
@@ -48,7 +49,23 @@ def init_db(connection=None):
         )
     ''')
 
-    conn.execute('''\n        CREATE TABLE IF NOT EXISTS news_entries (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            message TEXT,\n            pub_date TEXT,\n            processed_date TEXT,\n            feed_url TEXT,\n            title TEXT,\n            description TEXT,\n            link TEXT UNIQUE,\n            image_url TEXT,\n            content TEXT,\n            emoji1 TEXT,\n            emoji2 TEXT,\n            source_priority INTEGER DEFAULT 100,\n            sentiment_score REAL,\n            bias_category TEXT,\n            bias_score REAL\n        )\n    ''')
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS news_entries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            content TEXT,
+            link TEXT UNIQUE NOT NULL,
+            pub_date TEXT NOT NULL,
+            processed_date TEXT NOT NULL,
+            feed_url TEXT NOT NULL,
+            emoji1 TEXT,
+            emoji2 TEXT,
+            image_url TEXT,
+            sentiment_score REAL DEFAULT 0.0,
+            bias_category TEXT DEFAULT 'neutral',
+            bias_score REAL DEFAULT 0.0
+        )
+    ''')
     
     conn.execute('CREATE INDEX IF NOT EXISTS idx_link ON news_entries(link)')
     conn.execute('CREATE INDEX IF NOT EXISTS idx_feed_url ON news_entries(feed_url)')
@@ -279,6 +296,7 @@ async def store_article(
     pub_date: datetime,
     emoji1: str = "📰",
     emoji2: str = "🌎",
+    image_url: Optional[str] = None,
     sentiment_score: float = 0.0,
     bias_category: str = "neutral",
     bias_score: float = 0.0
@@ -293,15 +311,15 @@ async def store_article(
             cursor = conn.execute('''
                 INSERT INTO news_entries (
                     title, content, link, pub_date, processed_date,
-                    feed_url, emoji1, emoji2,
+                    feed_url, emoji1, emoji2, image_url,
                     sentiment_score, bias_category, bias_score
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 title, content, link,
                 pub_date.isoformat(),
                 datetime.now().isoformat(),
                 feed_url,
-                emoji1, emoji2,
+                emoji1, emoji2, image_url,
                 sentiment_score,
                 bias_category,
                 bias_score

@@ -211,20 +211,32 @@ def create_app():
             
             # Calculate offset for pagination
             offset = (page - 1) * page_size
-            print(f"Calculated offset: {offset}")
             
-            if (tags):
-                # Split tags string into list and search by tags
-                tag_list = [t.strip() for t in tags.split(',')]
-                news_items = search_articles_by_tags(
-                    tag_list, 
-                    limit=page_size, 
-                    offset=offset
-                )
-                print(f"Found {len(news_items)} items with tags: {tag_list}")
-            else:
-                # Get paginated news items
-                with get_db() as conn:
+            with get_db() as conn:
+                # Get total count first
+                if tags:
+                    tag_list = [t.strip() for t in tags.split(',')]
+                    count_cursor = conn.execute('''
+                        SELECT COUNT(DISTINCT ne.id)
+                        FROM news_entries ne
+                        JOIN article_tags at ON ne.id = at.article_id
+                        JOIN tags t ON at.tag_id = t.id
+                        WHERE t.name IN ({})
+                    '''.format(','.join('?' * len(tag_list))), tag_list)
+                else:
+                    count_cursor = conn.execute('SELECT COUNT(*) FROM news_entries')
+                
+                total_count = count_cursor.fetchone()[0]
+
+                # Then get the paginated results
+                if tags:
+                    tag_list = [t.strip() for t in tags.split(',')]
+                    news_items = search_articles_by_tags(
+                        tag_list, 
+                        limit=page_size, 
+                        offset=offset
+                    )
+                else:
                     cursor = conn.execute('''
                         SELECT 
                             id, title, description, content, link, pub_date,
@@ -236,33 +248,23 @@ def create_app():
                     ''', (page_size, offset))
                     columns = [column[0] for column in cursor.description]
                     news_items = [dict(zip(columns, row)) for row in cursor]
-                    print(f"Raw query returned {len(news_items)} items")
-                    
-                    # Get total count for pagination metadata
-                    count_cursor = conn.execute('SELECT COUNT(*) FROM news_entries')
-                    total_count = count_cursor.fetchone()[0]
-                    print(f"Total items in database: {total_count}")
-            
-            # Format news items and log the first one for debugging
+
+            # Format news items
             formatted_news = [format_news_item(item) for item in news_items]
-            if formatted_news:
-                print("First formatted news item:", formatted_news[0])
-            else:
-                print("No news items were formatted")
             
-            # Include pagination metadata
+            # Always include pagination metadata
+            total_pages = (total_count + page_size - 1) // page_size
             response = {
                 "news": formatted_news,
                 "pagination": {
                     "page": page,
                     "page_size": page_size,
-                    "total_count": total_count if 'total_count' in locals() else None,
-                    "total_pages": (total_count + page_size - 1) // page_size if 'total_count' in locals() else None,
-                    "has_next": page * page_size < total_count if 'total_count' in locals() else None,
+                    "total_count": total_count,
+                    "total_pages": total_pages,
+                    "has_next": page * page_size < total_count,
                     "has_prev": page > 1
                 }
             }
-            print("Response metadata:", response["pagination"])
             return response
         except Exception as e:
             print(f"Error in get_news: {str(e)}")

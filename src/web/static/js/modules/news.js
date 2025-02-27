@@ -614,6 +614,7 @@ export async function updateNewsList(newsItems, append = false) {
             timestamp: newsItems[0].timestamp,
             tags: newsItems[0].tags
         });
+        console.log(`📰 Updating news list with ${newsItems.length} items, append=${append}`);
     } else {
         console.log('No news items to display');
         if (!append) {
@@ -635,6 +636,7 @@ export async function updateNewsList(newsItems, append = false) {
     
     // Add to global store
     allLoadedNews = [...allLoadedNews, ...newsItems];
+    console.log(`🗄️ Total news items in memory: ${allLoadedNews.length}`);
     
     // Create document fragment for better performance
     const fragment = document.createDocumentFragment();
@@ -736,20 +738,32 @@ export async function updateNewsList(newsItems, append = false) {
         }
     });
     
+    // Remove existing sentinel if it exists
+    const existingSentinel = container.querySelector('#scroll-sentinel');
+    if (existingSentinel) {
+        console.log('🗑️ Removing existing sentinel');
+        existingSentinel.remove();
+    }
+    
     container.appendChild(fragment);
+    
+    // Always add the sentinel at the end
+    const sentinel = document.createElement('div');
+    sentinel.id = 'scroll-sentinel';
+    sentinel.style.height = '20px';
+    sentinel.style.marginTop = '20px';
+    sentinel.style.width = '100%';
+    sentinel.style.opacity = '0.5';
+    sentinel.textContent = 'Loading more...';
+    sentinel.style.textAlign = 'center';
+    container.appendChild(sentinel);
+    console.log('✨ Added new scroll sentinel to container');
     
     // Let the browser render the items before removing the loading state
     requestAnimationFrame(() => {
         document.body.classList.remove('loading');
         setLoading(false);
     });
-    
-    // Add scroll sentinel for infinite scroll if this is the first load
-    if (!append) {
-        const sentinel = document.createElement('div');
-        sentinel.id = 'scroll-sentinel';
-        container.appendChild(sentinel);
-    }
 }
 
 let currentPage = 1;
@@ -757,53 +771,129 @@ let isLoading = false;
 let hasMorePages = true;
 let allLoadedNews = [];
 let activeTagFilter = '';
+let scrollObserver = null;
 
 export function setActiveTagFilter(tagParam) {
     activeTagFilter = tagParam;
+    currentPage = 1;
+    hasMorePages = true;
     loadInitialNews(tagParam);
 }
 
 export async function initInfiniteScroll() {
-    const sentinel = document.createElement('div');
-    sentinel.id = 'scroll-sentinel';
-    document.getElementById('newsContainer').appendChild(sentinel);
+    console.log('🔄 Setting up infinite scroll with sentinel');
+    
+    // Clean up existing observer if it exists
+    if (scrollObserver) {
+        console.log('🧹 Cleaning up existing scroll observer');
+        scrollObserver.disconnect();
+        scrollObserver = null;
+    }
 
-    const observer = new IntersectionObserver(async (entries) => {
-        entries.forEach(async (entry) => {
-            if (entry.isIntersecting && !isLoading && hasMorePages) {
-                currentPage++;
-                const activeTags = window.getActiveTags?.() || [];
-                const tagParam = activeTags.length > 0 ? `?tags=${activeTags.join(',')}` : '';
+    // Create a new observer
+    scrollObserver = new IntersectionObserver(async (entries) => {
+        const entry = entries[0];
+        console.log(`👁️ Sentinel visibility: ${entry.isIntersecting ? 'VISIBLE' : 'HIDDEN'}, isLoading: ${isLoading}, hasMorePages: ${hasMorePages}`);
+        
+        if (entry.isIntersecting && !isLoading && hasMorePages) {
+            // Temporarily unobserve to prevent multiple triggers
+            scrollObserver.unobserve(entry.target);
+            
+            const nextPage = currentPage + 1;
+            const activeTags = window.getActiveTags?.() || [];
+            const tagParam = activeTags.length > 0 ? `?tags=${activeTags.join(',')}` : '';
+            
+            console.log(`📑 Attempting to load page ${nextPage} (current page: ${currentPage})`);
+            
+            try {
+                const data = await fetchNews(tagParam, nextPage);
+                console.log(`📊 Received data for page ${nextPage}:`, {
+                    itemsCount: data?.news?.length || 0,
+                    pagination: data?.pagination,
+                    hasNext: data?.pagination?.has_next
+                });
                 
-                try {
-                    const data = await fetchNews(tagParam, currentPage);
-                    if (data && data.news) {
-                        const filteredNews = await filterNews(data.news);
-                        await updateNewsList(filteredNews, true); // true for append mode
+                if (data && data.news.length > 0) {
+                    const filteredNews = await filterNews(data.news);
+                    console.log(`🗃️ Filtered news items: ${filteredNews.length}`);
+                    
+                    if (filteredNews.length > 0) {
+                        console.log(`✅ Updating news list with ${filteredNews.length} new items`);
+                        await updateNewsList(filteredNews, true);
+                        currentPage = nextPage;
+                        hasMorePages = data.pagination?.has_next || false;
+                        console.log(`📈 Updated pagination state: page=${currentPage}, hasMorePages=${hasMorePages}`);
+                    } else {
+                        console.log('⚠️ No items after filtering, stopping pagination');
+                        hasMorePages = false;
                     }
-                } catch (error) {
-                    console.error('Error loading more news:', error);
+                } else {
+                    console.log('⚠️ No news items received, stopping pagination');
+                    hasMorePages = false;
                 }
+            } catch (error) {
+                console.error('❌ Error loading more news:', error);
+                hasMorePages = false;
+            } finally {
+                // Now get the new sentinel and observe it
+                setTimeout(() => {
+                    const newSentinel = document.querySelector('#scroll-sentinel');
+                    if (newSentinel && scrollObserver) {
+                        console.log('🔍 Re-observing new scroll sentinel after page load');
+                        scrollObserver.observe(newSentinel);
+                    } else {
+                        console.warn('❌ Could not find sentinel after loading more items');
+                    }
+                }, 100);
             }
-        });
+        }
     }, {
         root: null,
-        rootMargin: '100px',
+        rootMargin: '500px', // Increased margin to trigger earlier
         threshold: 0.1
     });
 
-    observer.observe(sentinel);
+    // Force create a sentinel if it doesn't exist
+    const container = document.getElementById('newsContainer');
+    let sentinel = document.querySelector('#scroll-sentinel');
+    
+    if (!sentinel && container) {
+        console.log('🚨 No sentinel found, creating one');
+        sentinel = document.createElement('div');
+        sentinel.id = 'scroll-sentinel';
+        sentinel.style.height = '20px';
+        sentinel.style.marginTop = '20px';
+        sentinel.style.width = '100%';
+        sentinel.style.background = 'rgba(255, 0, 0, 0.1)'; // Slightly visible for debugging
+        sentinel.textContent = 'Loading more...';
+        sentinel.style.textAlign = 'center';
+        container.appendChild(sentinel);
+    }
+
+    // Observe the sentinel
+    if (sentinel && scrollObserver) {
+        console.log('🔍 Observing initial scroll sentinel');
+        scrollObserver.observe(sentinel);
+    } else {
+        console.warn('❌ No sentinel element found for initial observation');
+    }
 }
 
 export async function loadInitialNews(tagParam = '') {
     currentPage = 1;
     hasMorePages = true;
+    const activeTags = window.getActiveTags?.() || [];
+    const queryParam = activeTags.length > 0 ? `?tags=${activeTags.join(',')}` : tagParam;
     
     try {
-        const data = await fetchNews(tagParam, currentPage);
-        if (data && data.news) {
+        const data = await fetchNews(queryParam);
+        if (data) {
             const filteredNews = await filterNews(data.news);
-            await updateNewsList(filteredNews, false); // false for replace mode
+            await updateNewsList(filteredNews);
+            
+            // Update pagination state
+            hasMorePages = data.pagination?.has_next || false;
+            currentPage = data.pagination?.page || 1;
         }
     } catch (error) {
         console.error('Error loading initial news:', error);

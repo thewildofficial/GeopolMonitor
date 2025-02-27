@@ -2,6 +2,8 @@ import asyncio
 import logging
 import aiohttp
 import ssl
+import time
+from datetime import datetime
 from dataclasses import dataclass
 from typing import Dict, Set, Optional
 from .priority_feed_processor import PriorityFeedProcessor, ArticleEntry
@@ -27,6 +29,18 @@ class FeedWatcher:
         self.rate_limiter = RateLimiter()
         self.ssl_context = ssl_context or ssl.create_default_context()
         self.priority_processor = PriorityFeedProcessor()
+        self.feed_metrics = {
+            'total_feeds': 0,
+            'active_feeds': 0,
+            'failed_feeds': 0,
+            'feed_stats': {},
+            'start_time': time.time(),
+            'last_update_time': None,
+            'total_bytes_received': 0,
+            'articles_by_feed': {},
+            'connection_errors': 0,
+            'parse_errors': 0
+        }
 
     async def init(self):
         """Initialize the feed watcher with an aiohttp session."""
@@ -104,16 +118,26 @@ class FeedWatcher:
         """Process the feed content and extract entries."""
         try:
             import feedparser
-            from datetime import datetime
+            
+            start_time = time.time()
+            self.feed_metrics['total_bytes_received'] += len(content)
             
             feed = feedparser.parse(content)
             if not feed.entries:
                 return
 
             new_entries = 0
+            feed_articles = self.feed_metrics['articles_by_feed'].get(feed_url, {
+                'total': 0,
+                'new': 0,
+                'duplicates': 0,
+                'last_article_time': None
+            })
+
             for entry in feed.entries[:self.config.max_entries_per_feed]:
                 guid = entry.get('id', entry.get('guid', entry.get('link', '')))
                 if guid in self.logged_entries:
+                    feed_articles['duplicates'] += 1
                     continue
                 
                 pub_date = datetime.now()
@@ -122,6 +146,10 @@ class FeedWatcher:
                         pub_date = datetime(*entry.published_parsed[:6])
                     except:
                         pass
+
+                # Track newest article for this feed
+                if not feed_articles['last_article_time'] or pub_date > feed_articles['last_article_time']:
+                    feed_articles['last_article_time'] = pub_date
                 
                 article = ArticleEntry(
                     pub_date=pub_date,
@@ -135,13 +163,22 @@ class FeedWatcher:
                 self.priority_processor.add_article(article)
                 self.logged_entries.add(guid)
                 new_entries += 1
+                feed_articles['new'] += 1
+                feed_articles['total'] += 1
+            
+            # Update feed metrics
+            self.feed_metrics['articles_by_feed'][feed_url] = feed_articles
+            self.feed_metrics['last_update_time'] = datetime.now()
             
             if new_entries > 0:
-                logger.debug(f"Added {new_entries} entries from {feed_url}")
-            self._update_feed_metrics(feed_url, had_updates=new_entries > 0)
+                logger.debug(f"📥 Added {new_entries} entries from {feed_url}")
+                
+            processing_time = time.time() - start_time
+            self._update_feed_metrics(feed_url, had_updates=new_entries > 0, processing_time=processing_time)
             
         except Exception as e:
-            logger.error(f"Error processing feed {feed_url}: {str(e)}")
+            logger.error(f"❌ Error processing feed {feed_url}: {str(e)}")
+            self.feed_metrics['parse_errors'] += 1
             self._update_feed_metrics(feed_url, had_updates=False, error=True)
 
     async def watch_feed(self, feed_url: str):
@@ -156,10 +193,104 @@ class FeedWatcher:
                 logger.error(f"Error watching feed {feed_url}: {e}")
                 await asyncio.sleep(self.config.min_poll_interval)
 
-    def _update_feed_metrics(self, feed_url: str, had_updates: bool, error: bool = False):
+    def _update_feed_metrics(self, feed_url: str, had_updates: bool, error: bool = False, processing_time: float = 0.0):
         """Update feed metrics for monitoring."""
-        # Metrics update implementation
-        pass
+        if feed_url not in self.feed_metrics['feed_stats']:
+            self.feed_metrics['feed_stats'][feed_url] = {
+                'updates': 0,
+                'errors': 0,
+                'last_update': None,
+                'last_error': None,
+                'avg_processing_time': 0.0,
+                'total_processing_time': 0.0,
+                'success_rate': 100.0,
+                'total_attempts': 0
+            }
+        
+        stats = self.feed_metrics['feed_stats'][feed_url]
+        stats['total_attempts'] += 1
+        
+        if had_updates:
+            stats['updates'] += 1
+            stats['last_update'] = datetime.now()
+        
+        if error:
+            stats['errors'] += 1
+            stats['last_error'] = datetime.now()
+            
+        stats['success_rate'] = ((stats['total_attempts'] - stats['errors']) / 
+                               stats['total_attempts'] * 100 if stats['total_attempts'] > 0 else 100.0)
+        
+        if processing_time > 0:
+            stats['total_processing_time'] += processing_time
+            stats['avg_processing_time'] = stats['total_processing_time'] / stats['total_attempts']
+
+    def get_watcher_status(self) -> dict:
+        """Get current status of the feed watcher."""
+        now = datetime.now()
+        uptime = time.time() - self.feed_metrics['start_time']
+        
+        return {
+            'uptime': f"{uptime:.2f} seconds",
+            'active_feeds': len(self.feeds),
+            'failed_feeds': self.feed_metrics['failed_feeds'],
+            'total_bytes': self.feed_metrics['total_bytes_received'],
+            'connection_errors': self.feed_metrics['connection_errors'],
+            'parse_errors': self.feed_metrics['parse_errors'],
+            'last_update': (self.feed_metrics['last_update_time'].strftime('%Y-%m-%d %H:%M:%S') 
+                          if self.feed_metrics['last_update_time'] else "Never"),
+            'feed_stats': {
+                url: {
+                    'success_rate': f"{stats['success_rate']:.1f}%",
+                    'updates': stats['updates'],
+                    'errors': stats['errors'],
+                    'avg_processing_time': f"{stats['avg_processing_time']:.2f}s",
+                    'last_update': (stats['last_update'].strftime('%Y-%m-%d %H:%M:%S') 
+                                  if stats['last_update'] else "Never"),
+                    'last_error': (stats['last_error'].strftime('%Y-%m-%d %H:%M:%S') 
+                                 if stats['last_error'] else "Never"),
+                    'articles': self.feed_metrics['articles_by_feed'].get(url, {
+                        'total': 0,
+                        'new': 0,
+                        'duplicates': 0,
+                        'last_article_time': None
+                    })
+                }
+                for url, stats in self.feed_metrics['feed_stats'].items()
+            }
+        }
+
+    def print_status(self):
+        """Print current watcher status in a clean format."""
+        status = self.get_watcher_status()
+        queue_status = self.priority_processor.get_processing_status()
+        
+        logger.info("\n=== Feed Watcher Status ===")
+        logger.info(f"⏱️  Uptime: {status['uptime']}")
+        logger.info(f"📡 Active Feeds: {status['active_feeds']}")
+        logger.info(f"❌ Failed Feeds: {status['failed_feeds']}")
+        logger.info(f"📊 Data Received: {status['total_bytes'] / 1024:.1f}KB")
+        logger.info(f"🔄 Last Update: {status['last_update']}")
+        logger.info(f"\n🚦 Error Stats:")
+        logger.info(f"   Connection Errors: {status['connection_errors']}")
+        logger.info(f"   Parse Errors: {status['parse_errors']}")
+        logger.info(f"\n📈 Processing Queue:")
+        logger.info(f"   Articles Queued: {queue_status['queue_size']}")
+        logger.info(f"   Processing Rate: {queue_status['processing_rate']}")
+        logger.info(f"   Newest Article: {queue_status['newest_article']}")
+        logger.info(f"   Oldest Article: {queue_status['oldest_article']}")
+        
+        if status['feed_stats']:
+            logger.info("\n📊 Feed Statistics:")
+            for url, feed_stat in status['feed_stats'].items():
+                logger.info(f"\n   {url}:")
+                logger.info(f"   ├─ Success Rate: {feed_stat['success_rate']}")
+                logger.info(f"   ├─ Updates: {feed_stat['updates']}")
+                logger.info(f"   ├─ Errors: {feed_stat['errors']}")
+                logger.info(f"   ├─ Avg Processing: {feed_stat['avg_processing_time']}")
+                logger.info(f"   ├─ Last Update: {feed_stat['last_update']}")
+                logger.info(f"   └─ Articles: {feed_stat['articles']['new']} new, "
+                          f"{feed_stat['articles']['duplicates']} duplicates")
 
 class RateLimiter:
     def __init__(self):

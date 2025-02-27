@@ -468,7 +468,7 @@ STRICT FORMAT RULES:
 - Maximum 5 tags per category, fewer is better
 
 Example of good tags:
-TOPICS: economic-policy, defense-spending
+TOPICS: economy,defense,trade,politics,technology 
 GEOGRAPHY: united-states, south-korea
 EVENTS: budget-cut, diplomatic-visit
 
