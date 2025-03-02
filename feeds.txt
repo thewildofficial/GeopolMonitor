@@ -22,7 +22,6 @@ https://www.stratfor.com/rss.xml
 https://www.longwarjournal.org/feed
 https://www.c4isrnet.com/arc/outboundfeeds/rss/?outputType=xml
 https://www.scmp.com/rss/91/feed
-https://www.koreatimes.co.kr/www/rss/rss.xml
 https://www.kyivpost.com/feed
 https://jamestown.org/feed/
 https://www.asiatimes.com/feed/
@@ -63,7 +62,6 @@ https://www.dawn.com/feed
 https://astanatimes.com/feed/
 https://techcrunch.com/feed/
 https://www.wired.com/feed/rss
-https://www.theverge.com/rss/index.xml
 https://techcabal.com/feed
 https://latinamericareports.com/feed
 https://en.mercopress.com/rss/latin-america

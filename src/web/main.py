@@ -95,7 +95,17 @@ def create_app():
 
     def format_news_item(item):
         """Format news item for API response"""
-        image_url = item.get('image_url') or ImageExtractor.extract_first_image_from_content(item.get('content', ''))
+        from ..utils.date_utils import format_iso_date, ensure_utc
+        from datetime import datetime, timezone
+        
+        # Extract image from content if no image_url is present
+        image_url = item.get('image_url')
+        if not image_url and item.get('content'):
+            try:
+                image_url = ImageExtractor.extract_first_image_from_content(item.get('content', ''))
+            except Exception as e:
+                print(f"Error extracting image from content: {str(e)}")
+                image_url = None
         
         # Get tags for the article
         tags = get_article_tags(item.get('id')) if item.get('id') else []
@@ -103,6 +113,27 @@ def create_app():
         # Handle emojis
         emoji1 = item.get('emoji1', '')
         emoji2 = item.get('emoji2', '')
+        
+        # Format publication date consistently in UTC ISO format
+        timestamp = item.get('pub_date', '')
+        if timestamp:
+            try:
+                # Parse the date if it's a string
+                if isinstance(timestamp, str):
+                    try:
+                        timestamp = datetime.fromisoformat(timestamp)
+                    except ValueError:
+                        # If not ISO format, try a more flexible parser
+                        from dateparser import parse
+                        timestamp = parse(timestamp)
+                        
+                # Ensure the date is in UTC timezone
+                if timestamp:
+                    timestamp = ensure_utc(timestamp)
+                    # Format as ISO string with Z timezone indicator for consistency
+                    timestamp = format_iso_date(timestamp)
+            except Exception as e:
+                print(f"Error processing timestamp: {e}")
         
         # Extract source from feed_url and add as a tag if not already present
         feed_url = item.get('feed_url', '')
@@ -143,7 +174,7 @@ def create_app():
             'description': clean_text(item.get('description', '')),
             'content': item.get('content', ''),
             'link': item.get('link', ''),
-            'timestamp': item.get('pub_date', ''),
+            'timestamp': timestamp,
             'image_url': image_url,
             'feed_url': feed_url,
             'emoji1': emoji1,
@@ -211,64 +242,110 @@ def create_app():
             
             # Calculate offset for pagination
             offset = (page - 1) * page_size
+            total_count = 0
+            news_items = []
             
             with get_db() as conn:
-                # Get total count first
-                if tags:
-                    tag_list = [t.strip() for t in tags.split(',')]
-                    count_cursor = conn.execute('''
-                        SELECT COUNT(DISTINCT ne.id)
-                        FROM news_entries ne
-                        JOIN article_tags at ON ne.id = at.article_id
-                        JOIN tags t ON at.tag_id = t.id
-                        WHERE t.name IN ({})
-                    '''.format(','.join('?' * len(tag_list))), tag_list)
-                else:
-                    count_cursor = conn.execute('SELECT COUNT(*) FROM news_entries')
-                
-                total_count = count_cursor.fetchone()[0]
+                try:
+                    # Get total count first
+                    if tags:
+                        tag_list = [t.strip() for t in tags.split(',')]
+                        placeholders = ','.join('?' * len(tag_list))
+                        count_sql = f'''
+                            SELECT COUNT(DISTINCT ne.id)
+                            FROM news_entries ne
+                            JOIN article_tags at ON ne.id = at.article_id
+                            JOIN tags t ON at.tag_id = t.id
+                            WHERE t.name IN ({placeholders})
+                        '''
+                        print(f"Executing count query: {count_sql} with params {tag_list}")
+                        count_cursor = conn.execute(count_sql, tag_list)
+                    else:
+                        print("Executing simple count query")
+                        count_cursor = conn.execute('SELECT COUNT(*) FROM news_entries')
+                    
+                    total_count = count_cursor.fetchone()[0] or 0
+                    print(f"Total count: {total_count}")
 
-                # Then get the paginated results
-                if tags:
-                    tag_list = [t.strip() for t in tags.split(',')]
-                    news_items = search_articles_by_tags(
-                        tag_list, 
-                        limit=page_size, 
-                        offset=offset
+                    # Then get the paginated results
+                    if tags:
+                        tag_list = [t.strip() for t in tags.split(',')]
+                        print(f"Fetching news items with tags: {tag_list}")
+                        news_items = search_articles_by_tags(
+                            tag_list, 
+                            limit=page_size, 
+                            offset=offset
+                        )
+                    else:
+                        select_sql = '''
+                            SELECT 
+                                id, title, description, content, link, pub_date,
+                                feed_url, image_url, message, emoji1, emoji2,
+                                sentiment_score, bias_category, bias_score
+                            FROM news_entries
+                            ORDER BY pub_date DESC
+                            LIMIT ? OFFSET ?
+                        '''
+                        print(f"Executing select query: {select_sql} with params {(page_size, offset)}")
+                        cursor = conn.execute(select_sql, (page_size, offset))
+                        columns = [column[0] for column in cursor.description]
+                        news_items = [dict(zip(columns, row)) for row in cursor]
+
+                    print(f"Found {len(news_items)} news items")
+
+                except Exception as db_error:
+                    print(f"Database error in get_news: {str(db_error)}")
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Database error: {str(db_error)}"
                     )
-                else:
-                    cursor = conn.execute('''
-                        SELECT 
-                            id, title, description, content, link, pub_date,
-                            feed_url, image_url, message, emoji1, emoji2,
-                            sentiment_score, bias_category, bias_score
-                        FROM news_entries
-                        ORDER BY pub_date DESC
-                        LIMIT ? OFFSET ?
-                    ''', (page_size, offset))
-                    columns = [column[0] for column in cursor.description]
-                    news_items = [dict(zip(columns, row)) for row in cursor]
 
-            # Format news items
-            formatted_news = [format_news_item(item) for item in news_items]
-            
-            # Always include pagination metadata
-            total_pages = (total_count + page_size - 1) // page_size
-            response = {
-                "news": formatted_news,
-                "pagination": {
-                    "page": page,
-                    "page_size": page_size,
-                    "total_count": total_count,
-                    "total_pages": total_pages,
-                    "has_next": page * page_size < total_count,
-                    "has_prev": page > 1
+                # Format news items
+                formatted_news = []
+                for item in news_items:
+                    if item:
+                        try:
+                            formatted = format_news_item(item)
+                            if formatted:
+                                formatted_news.append(formatted)
+                        except Exception as format_error:
+                            print(f"Error formatting news item {item.get('id')}: {str(format_error)}")
+                            continue
+
+                # Always include pagination metadata
+                total_pages = max(1, (total_count + page_size - 1) // page_size)
+                response = {
+                    "news": formatted_news,
+                    "pagination": {
+                        "page": page,
+                        "page_size": page_size,
+                        "total_count": total_count,
+                        "total_pages": total_pages,
+                        "has_next": page * page_size < total_count,
+                        "has_prev": page > 1
+                    }
                 }
-            }
-            return response
+                return response
+
+        except HTTPException:
+            raise
         except Exception as e:
-            print(f"Error in get_news: {str(e)}")
-            raise HTTPException(status_code=500, detail=str(e))
+            print(f"Unexpected error in get_news: {str(e)}")
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "detail": f"Unexpected error: {str(e)}",
+                    "news": [],
+                    "pagination": {
+                        "page": page,
+                        "page_size": page_size,
+                        "total_count": 0,
+                        "total_pages": 1,
+                        "has_next": False,
+                        "has_prev": False
+                    }
+                }
+            )
 
     @app.get("/api/tags")
     async def get_tags(limit: int = 100, offset: int = 0):
@@ -283,18 +360,35 @@ def create_app():
                     ORDER BY usage_count DESC, name ASC
                     LIMIT ? OFFSET ?
                 ''', (limit, offset))
-                tags = {}
+                
+                tags = {
+                    'source': [],
+                    'topic': [],
+                    'geography': [],
+                    'events': []
+                }
+                
                 for row in cursor.fetchall():
                     category = row[1]
-                    if category not in tags:
-                        tags[category] = []
-                    tags[category].append({
-                        'name': row[0],
-                        'count': row[2]
-                    })
+                    if category in tags:
+                        tags[category].append({
+                            'name': row[0],
+                            'count': row[2]
+                        })
+                
                 return tags
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            print(f"Error in get_tags: {str(e)}")
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "detail": str(e),
+                    "source": [],
+                    "topic": [],
+                    "geography": [],
+                    "events": []
+                }
+            )
 
     @app.get("/api/countries-lite")
     async def get_countries_lite():

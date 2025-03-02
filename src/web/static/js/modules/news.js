@@ -1,6 +1,6 @@
 import { normalizeCountry, isCountryMatch } from './countries.js';
 import { SentimentPanel } from './sentiment-panel.js';
-import { setLoading } from './ui-utils.js';
+import { setLoading, formatRelativeTime } from './ui-utils.js';
 
 // Add this function at the beginning of news.js
 function updateDebugInfo(message, data = null) {
@@ -356,6 +356,7 @@ export function createNewsElement(newsItem) {
     // Handle image
     if (image && imageContainer) {
         const imageUrl = newsItem.image_url || null;
+        
         if (imageUrl) {
             // Use data-src for lazy loading
             image.setAttribute('data-src', imageUrl);
@@ -431,26 +432,8 @@ export function createNewsElement(newsItem) {
 }
 
 export function formatTimeAgo(timestamp) {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const seconds = Math.floor((now - date) / 1000);
-
-    const intervals = {
-        year: 31536000,
-        month: 2592000,
-        week: 604800,
-        day: 86400,
-        hour: 3600,
-        minute: 60
-    };
-
-    for (const [unit, secondsInUnit] of Object.entries(intervals)) {
-        const interval = Math.floor(seconds / secondsInUnit);
-        if (interval >= 1) {
-            return `${interval} ${unit}${interval === 1 ? '' : 's'} ago`;
-        }
-    }
-    return 'Just now';
+    // Use the new utility function for consistent date formatting
+    return formatRelativeTime(timestamp);
 }
 
 export function formatDate(timestamp) {
@@ -587,9 +570,14 @@ export async function fetchNews(tagParam = '', page = 1, pageSize = 20) {
 }
 
 export async function filterNews(news) {
+    if (!Array.isArray(news)) {
+        console.warn('Expected news to be an array, got:', typeof news);
+        return [];
+    }
+    
     return news.filter(item => {
         // Only require title, use content as fallback for description
-        if (!item.title) return false;
+        if (!item?.title) return false;
         if (!item.description && item.content) {
             item.description = item.content.split('.')[0] + '.'; // Use first sentence of content
         }
@@ -643,96 +631,19 @@ export async function updateNewsList(newsItems, append = false) {
     
     newsItems.forEach((item, index) => {
         try {
-            if (!item.title || !item.description) {
+            if (!item?.title || !item?.description) {
                 console.warn('Skipping item - missing required fields:', item);
                 return;
             }
             
-            const newsItem = document.createElement('div');
-            newsItem.className = 'news-item fade-in';
-            newsItem.style.animationDelay = `${index * 0.1}s`; // Add staggered delay
-            
-            const article = document.createElement('article');
-            article.style.backgroundColor = 'var(--card-background)';
-            article.style.color = 'var(--text-color)';
-            
-            // Format title with emojis
-            const emoji1 = item.emoji1 || '📰';
-            const emoji2 = item.emoji2 || '🌐';
-            
-            article.innerHTML = `
-                <div class="news-content">
-                    ${item.image_url ? `
-                        <div class="news-image-container">
-                            <img class="news-image" src="${item.image_url}" alt="${item.title}" loading="lazy">
-                        </div>
-                    ` : ''}
-                    <div class="news-text">
-                        <div class="news-header">
-                            <h2>
-                                ${emoji1}${emoji2} ${item.title}
-                                ${item.sentiment_score !== undefined ? `
-                                    <span class="sentiment-wrapper" 
-                                          title="Sentiment score: ${Math.round(item.sentiment_score * 100)}%">
-                                        <span class="sentiment-indicator" 
-                                              style="background-color: ${getSentimentColor(item.sentiment_score)}">
-                                        </span>
-                                        <span class="sentiment-label">${getSentimentLabel(item.sentiment_score)}</span>
-                                    </span>
-                                ` : ''}
-                            </h2>
-                            <div class="tags">
-                                ${item.tags?.filter(tag => tag.category !== 'source')
-                                    .map(tag => `
-                                        <span class="tag-in-article" 
-                                              data-category="${tag.category}"
-                                              data-tag="${tag.name}">
-                                            ${tag.category === 'geography' 
-                                                ? `${normalizeCountry(tag.name).flag || ''} ${tag.name}`
-                                                : tag.name}
-                                        </span>
-                                    `).join('') || ''}
-                            </div>
-                        </div>
-                        <p class="description">${item.description}</p>
-                        <div class="meta">
-                            <span class="time" data-timestamp="${item.timestamp}">
-                                ${formatTimeAgo(item.timestamp)}
-                            </span>
-                            ${item.tags?.find(t => t.category === 'source')?.name 
-                                ? `<span class="source">${item.tags.find(t => t.category === 'source').name}</span>` 
-                                : ''}
-                            
-                            ${item.bias_score !== undefined ? `
-                                <span class="bias-wrapper" title="Bias score: ${Math.round(item.bias_score * 100)}%">
-                                    <span class="bias-icon">${getBiasIcon(item.bias_score)}</span>
-                                    <span class="bias-label">${getBiasLabel(item.bias_score)}</span>
-                                </span>
-                            ` : ''}
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            // Add click handlers
-            article.style.cursor = 'pointer';
-            article.addEventListener('click', () => {
-                window.open(item.link, '_blank', 'noopener');
-            });
-            
-            // Add tag click handlers
-            article.querySelectorAll('.tag-in-article').forEach(tagEl => {
-                tagEl.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    if (window.toggleTag) {
-                        window.toggleTag(tagEl.dataset.tag);
-                    }
-                });
-            });
-            
-            newsItem.appendChild(article);
-            fragment.appendChild(newsItem);
-            
+            const newsElement = createNewsElement(item);
+            if (newsElement) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'news-item fade-in';
+                wrapper.style.animationDelay = `${index * 0.1}s`;
+                wrapper.appendChild(newsElement);
+                fragment.appendChild(wrapper);
+            }
         } catch (err) {
             console.error('Error rendering news item:', err, item);
         }
@@ -888,7 +799,7 @@ export async function loadInitialNews(tagParam = '') {
     try {
         const data = await fetchNews(queryParam);
         if (data) {
-            const filteredNews = await filterNews(data.news);
+            const filteredNews = await filterNews(data.news || []);
             await updateNewsList(filteredNews);
             
             // Update pagination state
@@ -897,6 +808,7 @@ export async function loadInitialNews(tagParam = '') {
         }
     } catch (error) {
         console.error('Error loading initial news:', error);
+        await updateNewsList([]); // Show empty state
     }
 }
 
