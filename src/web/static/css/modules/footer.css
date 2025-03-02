@@ -1,0 +1,135 @@
+/* Footer Styles - Refined & Accessible */
+.site-footer {
+    background-color: var(--card-background, #111);
+    color: var(--text-color, #fff);
+    padding: 15px 0;
+    text-align: center;
+    width: 100%;
+    margin-top: 20px;
+    border-top: 1px solid rgba(125, 125, 125, 0.2);
+}
+
+.palestine-link-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 10px 0;
+}
+
+/* Button base with solid background for text visibility */
+.palestine-link {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 16px 10px 45px; /* Extra padding on left for flag */
+    border-radius: 18px;
+    font-weight: 600;
+    font-size: 1rem;
+    text-decoration: none;
+    background-color: var(--card-background, #1a1a1a);
+    color: var(--text-color, #ffffff);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    transition: all 0.2s ease;
+    overflow: hidden;
+}
+
+/* Palestinian flag as a separate element for better text visibility */
+.palestine-link::before {
+    content: '';
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 24px;
+    height: 16px;
+    background: linear-gradient(
+        to bottom,
+        #000000 33.3%,
+        #ffffff 33.3%,
+        #ffffff 66.6%,
+        #007a3d 66.6%
+    );
+    border-radius: 2px;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+}
+
+/* Red triangle part of flag */
+.palestine-link::after {
+    content: '';
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0;
+    height: 0;
+    border-top: 8px solid transparent;
+    border-bottom: 8px solid transparent;
+    border-left: 12px solid #e4312b;
+    z-index: 1;
+}
+
+.palestine-link:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+    background-color: var(--accent-color, #3498db);
+}
+
+.palestine-link:active {
+    transform: translateY(1px);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+}
+
+/* Cute subtle animation */
+@keyframes gentle-float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-3px); }
+}
+
+.palestine-link {
+    animation: gentle-float 3s ease-in-out infinite;
+}
+
+/* High-visibility glow effect on hover */
+@keyframes gentle-glow {
+    0% { box-shadow: 0 0 5px rgba(228, 49, 43, 0.4), 0 0 0 rgba(0, 122, 61, 0); }
+    50% { box-shadow: 0 0 10px rgba(228, 49, 43, 0.6), 0 0 15px rgba(0, 122, 61, 0.3); }
+    100% { box-shadow: 0 0 5px rgba(228, 49, 43, 0.4), 0 0 0 rgba(0, 122, 61, 0); }
+}
+
+.palestine-link:hover {
+    animation: gentle-glow 2s infinite;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .site-footer {
+        padding: 10px 0;
+    }
+    
+    .palestine-link {
+        font-size: 0.9rem;
+        padding: 8px 12px 8px 40px;
+    }
+    
+    .palestine-link::before {
+        left: 10px;
+        width: 20px;
+        height: 14px;
+    }
+    
+    .palestine-link::after {
+        left: 10px;
+        border-top-width: 7px;
+        border-bottom-width: 7px;
+        border-left-width: 10px;
+    }
+}
+
+/* Dark/Light theme adaptations */
+[data-theme="light"] .palestine-link {
+    background-color: #f0f0f0;
+    color: #333;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+}

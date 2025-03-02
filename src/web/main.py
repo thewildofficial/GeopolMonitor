@@ -55,7 +55,20 @@ def create_app():
     )
     # Mount static files normally without compression
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+    
+    # Create templates with footer context for all pages
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+    
+    # Remove the middleware that's causing the error
+    # @app.middleware("http")
+    # async def add_footer_context(request: Request, call_next):
+    #     response = await call_next(request)
+    #     if isinstance(response, templates.TemplateResponse):
+    #         response.context["free_palestine_link"] = {
+    #             "url": "https://www.pcrf.net/", 
+    #             "text": "Free Palestine"
+    #         }
+    #     return response
 
     # Add request middleware to ensure proper URL scheme
     @app.middleware("http")
@@ -214,21 +227,21 @@ def create_app():
     async def root(request: Request):
         return templates.TemplateResponse(
             "index.html",
-            {"request": request}
+            {"request": request, "free_palestine_link": {"url": "https://www.pcrf.net/", "text": "Free Palestine"}}
         )
 
     @app.get("/map", response_class=HTMLResponse)
     async def map_page(request: Request):
         return templates.TemplateResponse(
             "map.html",
-            {"request": request}
+            {"request": request, "free_palestine_link": {"url": "https://www.pcrf.net/", "text": "Free Palestine"}}
         )
 
     @app.get("/about", response_class=HTMLResponse)
     async def about(request: Request):
         return templates.TemplateResponse(
             "about.html",
-            {"request": request}
+            {"request": request, "free_palestine_link": {"url": "https://www.pcrf.net/", "text": "Free Palestine"}}
         )
 
     @app.get("/api/news")
