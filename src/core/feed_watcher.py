@@ -209,8 +209,6 @@ class FeedWatcher:
                     continue
                 
                 pub_date, is_timezone_aware = self._parse_date_with_timezone(entry)
-                
-                # Skip entries without timezone information
                 if not is_timezone_aware:
                     skipped_naive += 1
                     feed_articles['naive_skipped'] += 1
@@ -221,14 +219,25 @@ class FeedWatcher:
                 if not feed_articles['last_article_time'] or pub_date > feed_articles['last_article_time']:
                     feed_articles['last_article_time'] = pub_date
                 
+                # Get all possible content fields
+                content = entry.get('content', [{}])[0].get('value', '')  # Full content if available
+                if not content:
+                    content = entry.get('summary', entry.get('description', ''))
+
                 article = ArticleEntry(
                     pub_date=pub_date,
                     feed_url=feed_url,
                     title=entry.get('title', ''),
-                    content=entry.get('summary', entry.get('description', '')),
+                    content=content,
                     link=entry.get('link', ''),
                     guid=guid
                 )
+                
+                # Add media content if available
+                if hasattr(entry, 'media_content'):
+                    setattr(article, 'media_content', entry.media_content)
+                if hasattr(entry, 'enclosures'):
+                    setattr(article, 'enclosures', entry.enclosures)
                 
                 self.priority_processor.add_article(article)
                 self.logged_entries.add(guid)

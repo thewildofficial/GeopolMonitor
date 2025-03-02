@@ -48,56 +48,80 @@ class ImageExtractor:
     """Extract images from article content."""
     
     def __init__(self):
-        # Common content image patterns
+        # Enhanced image patterns
         self.image_patterns = [
-            r'https?://\S+?(?:jpg|jpeg|png|gif)',
-            r'data:image/\S+?;base64,\S+'
+            r'https?://\S+?(?:jpg|jpeg|png|gif|webp|svg)',  # Added svg and webp
+            r'data:image/\S+?;base64,\S+',
+            r'https?://[^\s<>"\']+?/(?:media|images|img)/[^\s<>"\']+'  # Generic media paths
         ]
-    
+        self.logger = logging.getLogger(__name__)
+
     def extract_images(self, article) -> List[str]:
         """Extract image URLs from an article entry."""
         images = []
         
-        # Try to get image from media content
-        if hasattr(article, 'media_content'):
-            for media in article.media_content:
-                if 'url' in media and self._is_valid_image_url(media['url']):
-                    images.append(media['url'])
-        
-        # Try enclosures
-        if hasattr(article, 'enclosures'):
-            for enclosure in article.enclosures:
-                if hasattr(enclosure, 'href') and self._is_valid_image_url(enclosure.href):
-                    images.append(enclosure.href)
-        
-        # Try to find image in content
-        if not images:
-            content_images = self.extract_first_image_from_content(getattr(article, 'content', ''))
-            if content_images:
-                images.append(content_images)
-        
+        try:
+            # Try to get image from media content
+            if hasattr(article, 'media_content'):
+                for media in article.media_content:
+                    if 'url' in media and self._is_valid_image_url(media['url']):
+                        self.logger.info(f"Found media content image: {media['url']}")
+                        images.append(media['url'])
+            
+            # Try enclosures
+            if hasattr(article, 'enclosures'):
+                for enclosure in article.enclosures:
+                    if hasattr(enclosure, 'href') and self._is_valid_image_url(enclosure.href):
+                        self.logger.info(f"Found enclosure image: {enclosure.href}")
+                        images.append(enclosure.href)
+            
+            # Try to find image in content
+            if not images and hasattr(article, 'content'):
+                content_image = self.extract_first_image_from_content(article.content)
+                if content_image:
+                    self.logger.info(f"Found content image: {content_image}")
+                    images.append(content_image)
+
+        except Exception as e:
+            self.logger.error(f"Error extracting images: {str(e)}")
+            
         return images
 
-    def extract_first_image_from_content(self, content: str) -> Optional[str]:
+    def extract_first_image_from_content(self, content: Optional[str]) -> Optional[str]:
         """Extract the first valid image URL from HTML content."""
         if not content:
+            self.logger.debug("No content provided for image extraction")
             return None
             
-        # First try to parse as HTML
-        soup = BeautifulSoup(content, 'html.parser')
-        
-        # Look for img tags
-        for img in soup.find_all('img'):
-            src = img.get('src')
-            if src and self._is_valid_image_url(src):
-                return src
-        
-        # If no img tags found, try regex patterns
-        for pattern in self.image_patterns:
-            matches = re.findall(pattern, content)
-            if matches:
-                return matches[0]
-        
+        try:
+            # First try to parse as HTML
+            soup = BeautifulSoup(content, 'html.parser')
+            
+            # Look for img tags
+            for img in soup.find_all('img'):
+                src = img.get('src')
+                if src:
+                    # Handle relative URLs by checking common base URL patterns
+                    if not urlparse(src).scheme:
+                        # Try to find base URL in HTML
+                        base_tag = soup.find('base', href=True)
+                        if base_tag:
+                            src = urljoin(base_tag['href'], src)
+                    
+                    if self._is_valid_image_url(src):
+                        self.logger.info(f"Found valid image in HTML: {src}")
+                        return src
+            
+            # If no img tags found, try regex patterns
+            for pattern in self.image_patterns:
+                matches = re.findall(pattern, content)
+                if matches:
+                    self.logger.info(f"Found image using pattern: {matches[0]}")
+                    return matches[0]
+            
+        except Exception as e:
+            self.logger.error(f"Error extracting image from content: {str(e)}")
+            
         return None
 
     def _is_valid_image_url(self, url: str) -> bool:
@@ -105,14 +129,19 @@ class ImageExtractor:
         if not url:
             return False
             
-        # Check if URL is absolute
-        parsed = urlparse(url)
-        if not parsed.scheme:
-            return False
+        try:
+            # Check if URL is absolute
+            parsed = urlparse(url)
+            if not parsed.scheme:
+                return False
+                
+            # Check file extension
+            path = parsed.path.lower()
+            return any(path.endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'])
             
-        # Check file extension
-        path = parsed.path.lower()
-        return any(path.endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp'])
+        except Exception as e:
+            self.logger.error(f"Error validating image URL {url}: {str(e)}")
+            return False
 
 class ArticleProcessor:
     """Processes articles from feed entries."""

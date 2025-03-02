@@ -311,7 +311,7 @@ class PriorityFeedProcessor:
             # Basic cleanup first
             from ..utils.text import clean_text, clean_url
             cleaned_title = clean_text(article.title)
-            cleaned_content = clean_text(article.content)
+            cleaned_content = clean_text(getattr(article, 'content', ''))
             cleaned_url = clean_url(article.link)
 
             # Process with AI
@@ -348,15 +348,23 @@ class PriorityFeedProcessor:
                 topic_tags, geography_tags, event_tags = [], [], []
                 logger.error(f"AI processing error: {str(ai_error)}")
             
-            # Extract image URL from the article
-            from ..core.processor import ImageExtractor
-            image_extractor = ImageExtractor()
-            images = image_extractor.extract_images(article)
-            image_url = images[0] if images else None
-            
-            if not image_url and hasattr(article, 'content'):
-                # Try to extract from content as fallback
-                image_url = image_extractor.extract_first_image_from_content(article.content)
+            # Extract image URL from the article with proper error handling
+            image_url = None
+            try:
+                from ..core.processor import ImageExtractor
+                image_extractor = ImageExtractor()
+                
+                # Only attempt image extraction if we have content
+                if hasattr(article, 'content') and article.content:
+                    images = image_extractor.extract_images(article)
+                    if images:
+                        image_url = images[0]
+                    else:
+                        # Only try content extraction if explicit image extraction failed
+                        image_url = image_extractor.extract_first_image_from_content(article.content)
+            except Exception as img_error:
+                logger.warning(f"Image extraction failed: {str(img_error)}")
+                image_url = None
             
             # Store processed article
             from ..database.models import store_article

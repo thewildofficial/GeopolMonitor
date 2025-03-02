@@ -353,37 +353,51 @@ export function createNewsElement(newsItem) {
         timeElement.setAttribute('data-timestamp', newsItem.timestamp);
     }
     
-    // Handle image
+    // Enhanced image handling
     if (image && imageContainer) {
         const imageUrl = newsItem.image_url || null;
         
         if (imageUrl) {
-            // Use data-src for lazy loading
+            // Set placeholder while loading
+            image.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjBmMGYwIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udQtzaXplPSIyNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPkxvYWRpbmcuLi48L3RleHQ+PC9zdmc+';
             image.setAttribute('data-src', imageUrl);
             image.alt = titleText;
             
-            // Create and use IntersectionObserver for lazy loading
+            // Add loading class for animation
+            image.classList.add('loading');
+            
+            // Enhanced lazy loading with error handling
             const observer = new IntersectionObserver((entries) => {
                 entries.forEach(entry => {
                     if (entry.isIntersecting) {
-                        // Only load the image when it comes into view
                         const lazyImage = entry.target;
-                        lazyImage.src = lazyImage.dataset.src;
-                        observer.unobserve(lazyImage);
+                        const newImage = new Image();
+                        
+                        newImage.onload = () => {
+                            lazyImage.src = lazyImage.dataset.src;
+                            lazyImage.classList.remove('loading');
+                            lazyImage.classList.add('loaded');
+                            observer.unobserve(lazyImage);
+                        };
+                        
+                        newImage.onerror = () => {
+                            handleImageError(lazyImage, imageContainer, titleText);
+                            observer.unobserve(lazyImage);
+                        };
+                        
+                        newImage.src = lazyImage.dataset.src;
                     }
                 });
-            }, { rootMargin: '200px' });
+            }, { 
+                rootMargin: '200px',
+                threshold: 0.1 
+            });
             
             observer.observe(image);
             imageContainer.style.display = 'block';
         } else {
-            imageContainer.style.display = 'none';
+            handleImageError(image, imageContainer, titleText);
         }
-        
-        // Handle image errors
-        image.onerror = () => {
-            imageContainer.style.display = 'none';
-        };
     }
     
     // Add source to meta section
@@ -430,6 +444,84 @@ export function createNewsElement(newsItem) {
     
     return element;
 }
+
+function handleImageError(image, container, title) {
+    // Create fallback content with first letter of title
+    const letter = title.replace(/[^a-zA-Z]/g, '').charAt(0).toUpperCase() || 'N';
+    const color = getColorFromString(title);
+    
+    container.style.backgroundColor = color;
+    container.style.display = 'flex';
+    container.style.alignItems = 'center';
+    container.style.justifyContent = 'center';
+    container.style.minHeight = '200px';
+    
+    // Remove the image
+    image.style.display = 'none';
+    
+    // Add fallback content
+    const fallback = document.createElement('div');
+    fallback.className = 'image-fallback';
+    fallback.style.fontSize = '48px';
+    fallback.style.color = 'white';
+    fallback.textContent = letter;
+    
+    container.appendChild(fallback);
+}
+
+function getColorFromString(str) {
+    // Generate a consistent color based on string input
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    
+    // Use hue rotation for better colors (avoid too light/dark)
+    const hue = Math.abs(hash % 360);
+    return `hsl(${hue}, 65%, 55%)`;
+}
+
+// Add CSS for image states
+const style = document.createElement('style');
+style.textContent = `
+    .news-image-container {
+        position: relative;
+        overflow: hidden;
+        border-radius: 8px;
+        background: #f0f0f0;
+    }
+    
+    .news-image {
+        width: 100%;
+        height: auto;
+        transition: opacity 0.3s ease;
+    }
+    
+    .news-image.loading {
+        opacity: 0.5;
+        filter: blur(5px);
+    }
+    
+    .news-image.loaded {
+        opacity: 1;
+        filter: none;
+    }
+    
+    .image-fallback {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 200px;
+        background: var(--fallback-bg, #f0f0f0);
+        color: white;
+        font-size: 48px;
+        font-weight: bold;
+        text-transform: uppercase;
+    }
+`;
+
+document.head.appendChild(style);
 
 export function formatTimeAgo(timestamp) {
     // Use the new utility function for consistent date formatting
