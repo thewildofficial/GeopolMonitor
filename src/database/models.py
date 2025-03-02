@@ -49,7 +49,7 @@ def init_db(connection=None):
         )
     ''')
 
-    # Create news entries table with guid column
+    # Create news entries table with all required columns
     conn.execute('''
         CREATE TABLE IF NOT EXISTS news_entries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,34 +65,17 @@ def init_db(connection=None):
             image_url TEXT,
             sentiment_score REAL DEFAULT 0.0,
             bias_category TEXT DEFAULT 'neutral',
-            bias_score REAL DEFAULT 0.0
+            bias_score REAL DEFAULT 0.0,
+            description TEXT,
+            message TEXT
         )
     ''')
-    
-    # For existing databases, add guid column if it doesn't exist
-    try:
-        conn.execute('ALTER TABLE news_entries ADD COLUMN guid TEXT')
-    except sqlite3.OperationalError:
-        # Column already exists, ignore
-        pass
-    
+
+    # Create indices for better performance
     conn.execute('CREATE INDEX IF NOT EXISTS idx_link ON news_entries(link)')
     conn.execute('CREATE INDEX IF NOT EXISTS idx_feed_url ON news_entries(feed_url)')
     conn.execute('CREATE INDEX IF NOT EXISTS idx_pub_date ON news_entries(pub_date)')
     conn.execute('CREATE INDEX IF NOT EXISTS idx_guid ON news_entries(guid)')
-    
-    conn.execute('''
-        CREATE TABLE IF NOT EXISTS feed_cache (
-            url TEXT PRIMARY KEY,
-            last_check TEXT,
-            etag TEXT,
-            last_modified TEXT,
-            update_frequency INTEGER DEFAULT 3600,
-            last_success_time TEXT,
-            consecutive_failures INTEGER DEFAULT 0,
-            source_priority INTEGER DEFAULT 100
-        )
-    ''')
 
     # Create indices for tag tables
     conn.execute('CREATE INDEX IF NOT EXISTS idx_tag_name ON tags(name)')
@@ -282,8 +265,8 @@ def get_article_tags(article_id: int) -> list[dict]:
         ''', (article_id,))
         return [{'name': row[0], 'category': row[1]} for row in cursor.fetchall()]
 
-def search_articles_by_tags(tag_names: list[str]) -> list[dict]:
-    """Search articles by tags."""
+def search_articles_by_tags(tag_names: list[str], limit: int = 20, offset: int = 0) -> list[dict]:
+    """Search articles by tags with pagination support."""
     with get_db() as conn:
         placeholders = ','.join('?' * len(tag_names))
         cursor = conn.execute(f'''
@@ -293,7 +276,8 @@ def search_articles_by_tags(tag_names: list[str]) -> list[dict]:
             JOIN tags t ON at.tag_id = t.id
             WHERE t.name IN ({placeholders})
             ORDER BY ne.pub_date DESC
-        ''', [name.lower() for name in tag_names])
+            LIMIT ? OFFSET ?
+        ''', [*[name.lower() for name in tag_names], limit, offset])
         return [dict(zip([col[0] for col in cursor.description], row))
                 for row in cursor.fetchall()]
 
@@ -307,6 +291,8 @@ async def store_article(
     emoji1: str = "📰",
     emoji2: str = "🌐",
     image_url: Optional[str] = None,
+    description: Optional[str] = None,
+    message: Optional[str] = None,
     sentiment_score: float = 0.0,
     bias_category: str = "neutral",
     bias_score: float = 0.0
@@ -333,13 +319,17 @@ async def store_article(
             # Store article with timestamp
             current_time = datetime.now(timezone.utc).isoformat()
             cursor.execute('''
-                INSERT INTO news_entries (title, content, link, guid, feed_url, pub_date, 
-                                    processed_date, emoji1, emoji2, image_url, 
-                                    sentiment_score, bias_category, bias_score)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (title, content, link, guid, feed_url, pub_date_str, 
-                current_time, emoji1, emoji2, image_url, 
-                sentiment_score, bias_category, bias_score))
+                INSERT INTO news_entries (
+                    title, description, content, link, guid, feed_url, pub_date,
+                    processed_date, emoji1, emoji2, image_url, message,
+                    sentiment_score, bias_category, bias_score
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                title, description, content, link, guid, feed_url, pub_date_str,
+                current_time, emoji1, emoji2, image_url, message,
+                sentiment_score, bias_category, bias_score
+            ))
             
             conn.commit()
             return cursor.lastrowid

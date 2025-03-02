@@ -464,7 +464,7 @@ STRICT FORMAT RULES:
 - DO NOT repeat tags across categories
 - Keep tags concise and specific
 - Use ISO country names for geography tags
-- Add country context for cities (e.g., "paris-france")
+- Add country context for cities (e.g., "paris", "france" as seperate tags)
 - Maximum 5 tags per category, fewer is better
 
 Example of good tags:

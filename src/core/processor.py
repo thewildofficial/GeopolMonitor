@@ -78,26 +78,29 @@ class ImageExtractor:
         
         return images
 
-    def extract_first_image_from_content(self, content: str) -> Optional[str]:
+    def extract_first_image_from_content(self, content: Optional[str]) -> Optional[str]:
         """Extract the first valid image URL from HTML content."""
         if not content:
             return None
             
         # First try to parse as HTML
-        soup = BeautifulSoup(content, 'html.parser')
-        
-        # Look for img tags
-        for img in soup.find_all('img'):
-            src = img.get('src')
-            if src and self._is_valid_image_url(src):
-                return src
-        
-        # If no img tags found, try regex patterns
-        for pattern in self.image_patterns:
-            matches = re.findall(pattern, content)
-            if matches:
-                return matches[0]
-        
+        try:
+            soup = BeautifulSoup(content, 'html.parser')
+            
+            # Look for img tags
+            for img in soup.find_all('img'):
+                src = img.get('src')
+                if src and self._is_valid_image_url(src):
+                    return src
+            
+            # If no img tags found, try regex patterns
+            for pattern in self.image_patterns:
+                matches = re.findall(pattern, content)
+                if matches:
+                    return matches[0]
+        except Exception as e:
+            logger.warning(f"Error extracting image from content: {e}")
+            
         return None
 
     def _is_valid_image_url(self, url: str) -> bool:

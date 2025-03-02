@@ -119,38 +119,66 @@ class FeedWatcher:
     def _parse_date_with_timezone(self, entry) -> Tuple[Optional[datetime], bool]:
         """
         Parse the date from a feed entry with timezone awareness.
+        All dates are converted to UTC.
+        
         Returns (datetime, is_timezone_aware) tuple.
         """
+        from ..utils.date_utils import ensure_utc, safe_parse_date
+        
         # Try parsing published_parsed first (struct_time format)
         if hasattr(entry, 'published_parsed') and entry.published_parsed:
             try:
                 # Convert time tuple to UTC timestamp then to datetime
-                timestamp = mktime(entry.published_parsed)
-                dt = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+                # Since struct_time assumes UTC, we can directly create a UTC datetime
+                dt = datetime(
+                    year=entry.published_parsed.tm_year,
+                    month=entry.published_parsed.tm_mon,
+                    day=entry.published_parsed.tm_mday,
+                    hour=entry.published_parsed.tm_hour,
+                    minute=entry.published_parsed.tm_min,
+                    second=entry.published_parsed.tm_sec,
+                    tzinfo=timezone.utc
+                )
                 return dt, True
-            except Exception:
-                pass
-
+            except Exception as e:
+                logger.debug(f"Failed to parse published_parsed: {e}")
+        
         # Try parsing published (string format)
         if hasattr(entry, 'published') and entry.published:
             try:
                 # Try parsing with email.utils which handles RFC format dates
                 dt = parsedate_to_datetime(entry.published)
-                return dt, dt.tzinfo is not None
-            except Exception:
-                pass
-
+                # Ensure date is in UTC
+                dt = ensure_utc(dt)
+                return dt, True  # Since parsedate_to_datetime always returns timezone-aware
+            except Exception as e:
+                logger.debug(f"Failed to parse published with email.utils: {e}")
+                # Try with dateparser as fallback
+                dt = safe_parse_date(entry.published)
+                if dt:
+                    return dt, True
+        
         # Try updated fields as fallback
         if hasattr(entry, 'updated_parsed') and entry.updated_parsed:
             try:
-                timestamp = mktime(entry.updated_parsed)
-                dt = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+                # Use the same direct UTC conversion for updated_parsed
+                dt = datetime(
+                    year=entry.updated_parsed.tm_year,
+                    month=entry.updated_parsed.tm_mon,
+                    day=entry.updated_parsed.tm_mday,
+                    hour=entry.updated_parsed.tm_hour,
+                    minute=entry.updated_parsed.tm_min,
+                    second=entry.updated_parsed.tm_sec,
+                    tzinfo=timezone.utc
+                )
                 return dt, True
-            except Exception:
-                pass
-
-        # Last resort - use current time but mark as naive
-        return datetime.now(timezone.utc), False
+            except Exception as e:
+                logger.debug(f"Failed to parse updated_parsed: {e}")
+        
+        # Last resort - use current time but mark as timezone-aware
+        dt = datetime.now(timezone.utc)
+        logger.debug(f"Using current time as fallback: {dt}")
+        return dt, True  # Now always returning a timezone-aware datetime in UTC
 
     async def process_feed_content(self, feed_url: str, content: str):
         """Process the feed content and extract entries."""
