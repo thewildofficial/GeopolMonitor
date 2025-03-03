@@ -22,6 +22,7 @@ from ..core.processor import ImageExtractor
 from ..utils.text import clean_text
 from .websocket_manager import manager
 from config.settings import STATIC_DIR, TEMPLATES_DIR, WEB_HOST
+from datetime import datetime, timedelta
 
 # Ensure static directory exists
 STATIC_DIR.mkdir(exist_ok=True)
@@ -433,6 +434,266 @@ def create_app():
         except Exception as e:
             print(f"Error serving countries data: {str(e)}")
             raise HTTPException(status_code=500, detail=str(e))
+
+    @app.get("/api/news/stats")
+    async def get_news_stats(
+        tags: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ):
+        """Get aggregated geographic statistics for news articles.
+        
+        Args:
+            tags: Optional comma-separated list of tags to filter by
+            start_date: Optional start date in ISO format (YYYY-MM-DD)
+            end_date: Optional end date in ISO format (YYYY-MM-DD)
+            
+        Returns:
+            Dictionary with country statistics and metadata
+        """
+        try:
+            filter_conditions = []
+            query_params = []
+            
+            # Build date filters if provided
+            if start_date:
+                try:
+                    start = datetime.fromisoformat(start_date)
+                    filter_conditions.append("pub_date >= ?")
+                    query_params.append(start.isoformat())
+                except ValueError:
+                    # Invalid date format, ignore
+                    pass
+                    
+            if end_date:
+                try:
+                    end = datetime.fromisoformat(end_date)
+                    filter_conditions.append("pub_date <= ?")
+                    query_params.append(end.isoformat())
+                except ValueError:
+                    # Invalid date format, ignore
+                    pass
+                
+            # Build tag filter if provided
+            tag_filter_sql = ""
+            if tags:
+                tag_list = [t.strip() for t in tags.split(',')]
+                tag_placeholders = ','.join(['?'] * len(tag_list))
+                tag_filter_sql = f"""
+                    JOIN article_tags at ON ne.id = at.article_id
+                    JOIN tags t ON at.tag_id = t.id
+                    WHERE t.name IN ({tag_placeholders})
+                """
+                query_params.extend(tag_list)
+            
+            # Add WHERE clause if we have date filters
+            where_clause = ""
+            if filter_conditions:
+                connector = "AND" if tag_filter_sql else "WHERE"
+                where_clause = f"{connector} {' AND '.join(filter_conditions)}"
+                
+            with get_db() as conn:
+                # Query to get country counts from geography tags
+                country_sql = f"""
+                    SELECT t.name as country, COUNT(DISTINCT ne.id) as article_count
+                    FROM tags t
+                    JOIN article_tags at ON t.id = at.tag_id
+                    JOIN news_entries ne ON at.article_id = ne.id
+                    {tag_filter_sql}
+                    {where_clause}
+                    AND t.category = 'geography'
+                    GROUP BY t.name
+                    ORDER BY article_count DESC
+                """
+                
+                cursor = conn.execute(country_sql, query_params)
+                countries = [{"country": row[0], "count": row[1]} for row in cursor.fetchall()]
+                
+                # Get total articles count for this period
+                total_sql = f"""
+                    SELECT COUNT(DISTINCT ne.id) 
+                    FROM news_entries ne
+                    {tag_filter_sql}
+                    {where_clause}
+                """
+                
+                cursor = conn.execute(total_sql, query_params)
+                total_count = cursor.fetchone()[0] or 0
+                
+                # Get most recent article date
+                date_sql = f"""
+                    SELECT MAX(pub_date) 
+                    FROM news_entries ne
+                    {tag_filter_sql}
+                    {where_clause}
+                """
+                
+                cursor = conn.execute(date_sql, query_params)
+                latest_date = cursor.fetchone()[0]
+                
+                # Normalize country names and add codes
+                normalized_countries = []
+                for country_data in countries:
+                    try:
+                        country_name = country_data['country']
+                        normalized = country_utils.normalize_country(country_name)
+                        if normalized and normalized.get('code'):
+                            normalized_countries.append({
+                                "name": normalized.get('name'),
+                                "code": normalized.get('code'),
+                                "flag": normalized.get('flag', '🏳️'),
+                                "count": country_data['count']
+                            })
+                    except Exception as e:
+                        print(f"Error normalizing country {country_data['country']}: {str(e)}")
+                
+                response = {
+                    "countries": normalized_countries,
+                    "metadata": {
+                        "total_articles": total_count,
+                        "total_countries": len(normalized_countries),
+                        "latest_article_date": latest_date,
+                        "generated": datetime.now().isoformat()
+                    }
+                }
+                
+                return JSONResponse(
+                    content=response,
+                    headers={
+                        "Cache-Control": "max-age=3600",  # Cache for 1 hour
+                        "Access-Control-Allow-Origin": "*"
+                    }
+                )
+                
+        except Exception as e:
+            print(f"Error in get_news_stats: {str(e)}")
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "detail": str(e),
+                    "countries": [],
+                    "metadata": {
+                        "total_articles": 0,
+                        "total_countries": 0
+                    }
+                }
+            )
+
+    @app.get("/api/news/country/{country_name}")
+    async def get_news_by_country(
+        country_name: str,
+        page: int = Query(1, ge=1), 
+        page_size: int = Query(50, ge=1, le=100)
+    ):
+        """Get news specifically for a single country.
+        
+        Args:
+            country_name: The name of the country to get news for
+            page: Page number for pagination
+            page_size: Number of items per page
+            
+        Returns:
+            List of news articles related to the specified country
+        """
+        try:
+            # Normalize the country name
+            normalized_country = country_utils.normalize_country(country_name)
+            country_name_normalized = normalized_country.get('name') if normalized_country else country_name
+            
+            print(f"Fetching news for country: {country_name} (normalized to {country_name_normalized})")
+            
+            # Calculate offset for pagination
+            offset = (page - 1) * page_size
+            
+            with get_db() as conn:
+                # Query to get articles tagged with this country
+                # Using COLLATE NOCASE for case-insensitive comparison
+                query = """
+                    SELECT DISTINCT ne.id, ne.title, ne.description, ne.content, ne.link, 
+                           ne.pub_date, ne.feed_url, ne.image_url, ne.message, 
+                           ne.emoji1, ne.emoji2, ne.sentiment_score, ne.bias_category, ne.bias_score
+                    FROM news_entries ne
+                    JOIN article_tags at ON ne.id = at.article_id
+                    JOIN tags t ON at.tag_id = t.id
+                    WHERE t.category = 'geography' 
+                    AND (t.name = ? COLLATE NOCASE OR t.name LIKE ? COLLATE NOCASE)
+                    ORDER BY ne.pub_date DESC
+                    LIMIT ? OFFSET ?
+                """
+                
+                # Get count first
+                count_query = """
+                    SELECT COUNT(DISTINCT ne.id)
+                    FROM news_entries ne
+                    JOIN article_tags at ON ne.id = at.article_id
+                    JOIN tags t ON at.tag_id = t.id
+                    WHERE t.category = 'geography' 
+                    AND (t.name = ? COLLATE NOCASE OR t.name LIKE ? COLLATE NOCASE)
+                """
+                
+                count_cursor = conn.execute(
+                    count_query, 
+                    (country_name_normalized, f"%{country_name_normalized}%")
+                )
+                total_count = count_cursor.fetchone()[0] or 0
+                
+                cursor = conn.execute(
+                    query, 
+                    (country_name_normalized, f"%{country_name_normalized}%", page_size, offset)
+                )
+                
+                columns = [column[0] for column in cursor.description]
+                news_items = [dict(zip(columns, row)) for row in cursor.fetchall()]
+                
+                # Format news items
+                formatted_news = []
+                for item in news_items:
+                    if item:
+                        try:
+                            formatted = format_news_item(item)
+                            if formatted:
+                                formatted_news.append(formatted)
+                        except Exception as format_error:
+                            print(f"Error formatting news item {item.get('id')}: {str(format_error)}")
+                            continue
+                
+                # Include pagination metadata
+                total_pages = max(1, (total_count + page_size - 1) // page_size)
+                response = {
+                    "country": {
+                        "name": country_name_normalized,
+                        "code": normalized_country.get('code') if normalized_country else None,
+                        "flag": normalized_country.get('flag') if normalized_country else None
+                    },
+                    "news": formatted_news,
+                    "pagination": {
+                        "page": page,
+                        "page_size": page_size,
+                        "total_count": total_count,
+                        "total_pages": total_pages,
+                        "has_next": page * page_size < total_count,
+                        "has_prev": page > 1
+                    }
+                }
+                return response
+                
+        except Exception as e:
+            print(f"Error in get_news_by_country: {str(e)}")
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "detail": str(e),
+                    "news": [],
+                    "pagination": {
+                        "page": 1,
+                        "page_size": page_size,
+                        "total_count": 0,
+                        "total_pages": 1,
+                        "has_next": False,
+                        "has_prev": False
+                    }
+                }
+            )
 
     @app.websocket("/ws")
     async def websocket_endpoint(websocket: WebSocket):
