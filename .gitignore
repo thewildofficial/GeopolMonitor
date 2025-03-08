@@ -15,3 +15,5 @@ feeds.txt
 /.goose
 src/core/processor.py
 venv
+
+

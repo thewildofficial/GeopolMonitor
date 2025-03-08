@@ -1,13 +1,7 @@
-"""Database models and initialization."""
-import sqlite3
-from contextlib import contextmanager
-from datetime import datetime, timezone
-import os
-from pathlib import Path
-from typing import Optional, List, Dict
-from .backup import backup_database
-import atexit
-import logging
+"""
+Database models initialization.
+Core database functionality is defined here.
+"""
 
 # All exports from this module
 __all__ = [
@@ -23,16 +17,33 @@ __all__ = [
     'tag_article',
     'get_article_tags',
     'search_articles_by_tags',
-    'store_article'
+    'store_article',
+    'init_briefing_tables',
+    'save_briefing',
+    'get_current_briefing',
+    'get_briefing_by_date',
+    'get_briefing_by_id',
+    'get_flash_items',
+    'update_briefing_metrics',
+    'get_regional_summary',
+    'get_news_in_timespan'
 ]
 
+import sqlite3
+from contextlib import contextmanager
+from datetime import datetime, timezone
+import os
+from pathlib import Path
+from typing import Optional, List, Dict
+import atexit
+import logging
+
 # Get project root directory and set database path
-PROJECT_ROOT = Path(__file__).parent.parent.parent.absolute()
+PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.absolute()
 DB_PATH = os.path.join(PROJECT_ROOT, 'data', 'news_monitor.db')
 
 _connection = None
 _last_backup = datetime.now()
-
 logger = logging.getLogger(__name__)
 
 def init_db(connection=None):
@@ -45,28 +56,20 @@ def init_db(connection=None):
     else:
         conn = sqlite3.connect(DB_PATH)
 
-    # Create tags table
+    # Create tables
     conn.execute('''
-        CREATE TABLE IF NOT EXISTS tags (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE NOT NULL,
-            category TEXT NOT NULL,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        CREATE TABLE IF NOT EXISTS feed_cache (
+            url TEXT PRIMARY KEY,
+            last_check TEXT,
+            etag TEXT,
+            last_modified TEXT,
+            update_frequency INTEGER DEFAULT 3600,
+            last_success_time TEXT,
+            consecutive_failures INTEGER DEFAULT 0,
+            source_priority INTEGER DEFAULT 100
         )
     ''')
     
-    # Create article-tag relationships table
-    conn.execute('''
-        CREATE TABLE IF NOT EXISTS article_tags (
-            article_id INTEGER,
-            tag_id INTEGER,
-            PRIMARY KEY (article_id, tag_id),
-            FOREIGN KEY (article_id) REFERENCES news_entries(id),
-            FOREIGN KEY (tag_id) REFERENCES tags(id)
-        )
-    ''')
-
-    # Create news entries table with all required columns
     conn.execute('''
         CREATE TABLE IF NOT EXISTS news_entries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -88,21 +91,35 @@ def init_db(connection=None):
         )
     ''')
 
-    # Create indices for better performance
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS tags (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            category TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS article_tags (
+            article_id INTEGER,
+            tag_id INTEGER,
+            PRIMARY KEY (article_id, tag_id),
+            FOREIGN KEY (article_id) REFERENCES news_entries(id),
+            FOREIGN KEY (tag_id) REFERENCES tags(id)
+        )
+    ''')
+
+    # Create indices
     conn.execute('CREATE INDEX IF NOT EXISTS idx_link ON news_entries(link)')
     conn.execute('CREATE INDEX IF NOT EXISTS idx_feed_url ON news_entries(feed_url)')
     conn.execute('CREATE INDEX IF NOT EXISTS idx_pub_date ON news_entries(pub_date)')
     conn.execute('CREATE INDEX IF NOT EXISTS idx_guid ON news_entries(guid)')
-
-    # Create indices for tag tables
     conn.execute('CREATE INDEX IF NOT EXISTS idx_tag_name ON tags(name)')
     conn.execute('CREATE INDEX IF NOT EXISTS idx_tag_category ON tags(category)')
     conn.execute('CREATE INDEX IF NOT EXISTS idx_article_tags ON article_tags(article_id)')
-    
+
     conn.commit()
-    
-    # Create initial backup
-    backup_database(DB_PATH)
     
     if not connection:
         conn.close()
@@ -124,19 +141,11 @@ def get_db():
             _connection = sqlite3.connect(DB_PATH)
         connection = _connection
         yield connection
-        
-        # Create periodic backup every 6 hours
-        now = datetime.now()
-        if (now - _last_backup).total_seconds() > 21600:  # 6 hours
-            backup_database(DB_PATH)
-            _last_backup = now
-            
     except Exception as e:
         if connection:
             connection.rollback()
         raise e
     finally:
-        # Only close the connection if it's not the global one
         if connection and connection != _connection:
             connection.close()
 
@@ -145,13 +154,11 @@ def cleanup_db():
     global _connection
     if _connection is not None:
         try:
-            backup_database(DB_PATH)  # Final backup
             _connection.close()
         except Exception as e:
             logger.error(f"Error during database cleanup: {e}")
         _connection = None
 
-# Register cleanup function to run on program exit
 atexit.register(cleanup_db)
 
 def load_feed_cache():
@@ -215,10 +222,8 @@ def get_feed_metrics(url: str) -> dict:
         }
 
 def get_source_priority(feed_url: str) -> int:
-    """Get current priority score for a feed source.
-    Lower numbers mean the source has been logged more recently/frequently."""
+    """Get current priority score for a feed source."""
     with get_db() as conn:
-        # Look at the last 6 hours of entries for more responsive priority adjustment
         cursor = conn.execute('''
             SELECT COUNT(*) as entry_count 
             FROM news_entries 
@@ -227,11 +232,8 @@ def get_source_priority(feed_url: str) -> int:
         ''', (feed_url,))
         count = cursor.fetchone()[0]
         
-        # Calculate priority - more entries means lower priority
-        # Base priority of 100, subtract 10 for each recent entry, minimum 5
         priority = max(100 - (count * 10), 5)
         
-        # Update the cache
         conn.execute('''
             UPDATE feed_cache 
             SET source_priority = ? 
@@ -241,7 +243,6 @@ def get_source_priority(feed_url: str) -> int:
         
         return priority
 
-# Add new functions for tag operations
 def add_tag(name: str, category: str) -> int:
     """Add a new tag or get existing tag ID."""
     with get_db() as conn:
@@ -258,10 +259,7 @@ def tag_article(article_id: int, tag_ids: list[int]):
     """Tag an article with multiple tags."""
     with get_db() as conn:
         try:
-            # First, remove any existing tags for this article to prevent duplicates
             conn.execute('DELETE FROM article_tags WHERE article_id = ?', (article_id,))
-            
-            # Then add the new tags
             conn.executemany(
                 'INSERT OR IGNORE INTO article_tags (article_id, tag_id) VALUES (?, ?)',
                 [(article_id, tag_id) for tag_id in tag_ids]
@@ -315,25 +313,21 @@ async def store_article(
     bias_score: float = 0.0
 ) -> int:
     """Store a processed article in the database."""
-    # Ensure we have a timezone-aware datetime in UTC
     if not pub_date.tzinfo:
         pub_date = pub_date.replace(tzinfo=timezone.utc)
     elif pub_date.tzinfo != timezone.utc:
         pub_date = pub_date.astimezone(timezone.utc)
     
-    # Store the time as ISO format which preserves timezone info
     pub_date_str = pub_date.isoformat()
     
     with get_db() as conn:
         cursor = conn.cursor()
         try:
-            # Check if URL already exists
             cursor.execute('SELECT id FROM news_entries WHERE link = ?', (link,))
             existing = cursor.fetchone()
             if existing:
-                return existing[0]  # Return existing ID, no need to reprocess
+                return existing[0]
             
-            # Store article with timestamp
             current_time = datetime.now(timezone.utc).isoformat()
             cursor.execute('''
                 INSERT INTO news_entries (
@@ -356,3 +350,16 @@ async def store_article(
 
 # Initialize database on module import
 init_db()
+
+# Import briefing models
+from .briefing_models import (
+    init_briefing_tables,
+    save_briefing,
+    get_current_briefing,
+    get_briefing_by_date,
+    get_briefing_by_id,
+    get_flash_items,
+    update_briefing_metrics,
+    get_regional_summary,
+    get_news_in_timespan
+)

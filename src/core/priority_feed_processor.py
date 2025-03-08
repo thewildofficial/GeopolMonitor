@@ -11,7 +11,15 @@ from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 from queue import PriorityQueue
-from ..database.models import update_feed_cache, get_source_priority, add_tag, tag_article
+
+# Add the project root to PYTHONPATH
+import sys
+from pathlib import Path
+project_root = str(Path(__file__).parent.parent.parent.absolute())
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+from src.database.models import update_feed_cache, get_source_priority, add_tag, tag_article
 
 logger = logging.getLogger(__name__)
 
@@ -309,13 +317,13 @@ class PriorityFeedProcessor:
             }
             
             # Basic cleanup first
-            from ..utils.text import clean_text, clean_url
+            from src.utils.text import clean_text, clean_url
             cleaned_title = clean_text(article.title)
             cleaned_content = clean_text(getattr(article, 'content', ''))
             cleaned_url = clean_url(article.link)
 
             # Process with AI
-            from ..utils.ai import content_processor
+            from src.utils.ai import content_processor
             
             try:
                 # Process title
@@ -351,7 +359,7 @@ class PriorityFeedProcessor:
             # Extract image URL from the article with proper error handling
             image_url = None
             try:
-                from ..core.processor import ImageExtractor
+                from src.core.processor import ImageExtractor
                 image_extractor = ImageExtractor()
                 
                 # Only attempt image extraction if we have content
@@ -367,7 +375,7 @@ class PriorityFeedProcessor:
                 image_url = None
             
             # Store processed article
-            from ..database.models import store_article
+            from src.database.models import store_article
             article_id = await store_article(
                 title=processed_title or cleaned_title,
                 content=processed_text or cleaned_content,
@@ -707,6 +715,9 @@ class PriorityFeedProcessor:
         # Clear screen thoroughly
         clear_terminal()
         
+        # Add processing state indicator
+        processing_state = f"{Colors.GREEN}RUNNING{Colors.END}" if self._running else f"{Colors.RED}STOPPED{Colors.END}"
+        
         # Format article info with title and link if available
         latest_str = f"{status['last_processed_str']} ({status['last_processed_age']})"
         if status['latest_processed_info']:
@@ -759,6 +770,7 @@ class PriorityFeedProcessor:
         # Build status string
         status_str = (
             f"{Colors.HEADER}{'='*20} Feed Processing Status {'='*20}{Colors.END}\n"
+            f"\n{Colors.BOLD}⚡ Processing State:{Colors.END} {processing_state}\n"
             f"\n{Colors.BOLD}📊 Queue Status:{Colors.END}\n"
             f"   Queue Size: {Colors.CYAN}{status['queue_size']}/{status['peak_queue_size']}{Colors.END} (current/peak)\n"
             f"   Processed: {Colors.GREEN}{status['processed_articles']}/{status['total_articles']}{Colors.END}\n"

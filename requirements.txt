@@ -34,6 +34,5 @@ dateparser==1.2.0
 pytz>=2023.3  # Timezone definitions and utilities
 tzlocal>=5.0.1  # For detecting system timezone
 python-dateutil==2.8.2
-peewee==3.16.3
-starlette==0.36.3
 flask
+apscheduler

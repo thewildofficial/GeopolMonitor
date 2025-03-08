@@ -5,7 +5,7 @@ import ssl
 import time
 from datetime import datetime, timezone, timedelta
 from dataclasses import dataclass
-from typing import Dict, Set, Optional, Tuple
+from typing import Dict, Set, Optional, Tuple, List
 from email.utils import parsedate_to_datetime
 from time import mktime
 from .priority_feed_processor import PriorityFeedProcessor, ArticleEntry
@@ -21,6 +21,7 @@ class FeedConfiguration:
     total_timeout: float = 60.0
     batch_size: int = 100
     max_entries_per_feed: int = 1000
+    briefing_refresh_interval: int = 3600  # 1 hour by default
 
 class FeedWatcher:
     def __init__(self, config: Optional[FeedConfiguration] = None, ssl_context: Optional[ssl.SSLContext] = None):
@@ -42,6 +43,22 @@ class FeedWatcher:
             'articles_by_feed': {},
             'connection_errors': 0,
             'parse_errors': 0
+        }
+        # Add briefing metrics to track daily briefing generation and updates
+        self.briefing_metrics = {
+            'last_generation_time': None,
+            'last_refresh_time': None,
+            'total_briefings_generated': 0,
+            'total_refreshes': 0,
+            'failed_refreshes': 0,
+            'avg_generation_time': 0.0,
+            'avg_refresh_time': 0.0,
+            'total_generation_time': 0.0,
+            'total_refresh_time': 0.0,
+            'flash_alerts_today': 0,
+            'flash_alerts_total': 0,
+            'regional_hotspots': [],
+            'briefing_history': []
         }
 
     async def init(self):
@@ -304,6 +321,126 @@ class FeedWatcher:
             stats['total_processing_time'] += processing_time
             stats['avg_processing_time'] = stats['total_processing_time'] / stats['total_attempts']
 
+    def update_briefing_metrics(self, 
+                               briefing_generated: bool = False, 
+                               refresh_success: bool = True, 
+                               generation_time: float = 0.0, 
+                               refresh_time: float = 0.0,
+                               flash_alerts: int = 0,
+                               regional_hotspots: List[str] = None):
+        """Update metrics related to daily briefing generation and refresh.
+
+        Args:
+            briefing_generated: Whether a new briefing was generated (vs just refreshed)
+            refresh_success: Whether the refresh operation was successful
+            generation_time: Time taken to generate the briefing in seconds
+            refresh_time: Time taken to refresh the briefing in seconds
+            flash_alerts: Number of new flash alerts in this refresh
+            regional_hotspots: List of regions identified as hotspots
+        """
+        now = datetime.now(timezone.utc)
+        
+        # Update timestamps
+        if briefing_generated:
+            self.briefing_metrics['last_generation_time'] = now
+            self.briefing_metrics['total_briefings_generated'] += 1
+            
+            if generation_time > 0:
+                self.briefing_metrics['total_generation_time'] += generation_time
+                self.briefing_metrics['avg_generation_time'] = (
+                    self.briefing_metrics['total_generation_time'] / 
+                    self.briefing_metrics['total_briefings_generated']
+                )
+                
+            # Add to history (keep last 10)
+            self.briefing_metrics['briefing_history'].append({
+                'timestamp': now,
+                'generation_time': generation_time,
+                'flash_alerts': flash_alerts
+            })
+            
+            # Keep only last 10 entries
+            self.briefing_metrics['briefing_history'] = self.briefing_metrics['briefing_history'][-10:]
+        
+        # Always update refresh metrics
+        self.briefing_metrics['last_refresh_time'] = now
+        self.briefing_metrics['total_refreshes'] += 1
+        
+        if not refresh_success:
+            self.briefing_metrics['failed_refreshes'] += 1
+        
+        if refresh_time > 0:
+            self.briefing_metrics['total_refresh_time'] += refresh_time
+            self.briefing_metrics['avg_refresh_time'] = (
+                self.briefing_metrics['total_refresh_time'] / 
+                self.briefing_metrics['total_refreshes']
+            )
+        
+        # Track flash alerts
+        if flash_alerts > 0:
+            self.briefing_metrics['flash_alerts_today'] += flash_alerts
+            self.briefing_metrics['flash_alerts_total'] += flash_alerts
+        
+        # Update regional hotspots if provided
+        if regional_hotspots:
+            self.briefing_metrics['regional_hotspots'] = regional_hotspots
+        
+        logger.debug(f"Updated briefing metrics: generation={briefing_generated}, "
+                   f"refresh_time={refresh_time:.2f}s, flash_alerts={flash_alerts}")
+
+    def reset_daily_briefing_metrics(self):
+        """Reset the daily counters for briefing metrics (call at midnight)"""
+        self.briefing_metrics['flash_alerts_today'] = 0
+        logger.info("Daily briefing metrics reset for new day")
+    
+    def get_briefing_status(self) -> dict:
+        """Get the current status of the daily briefing system.
+
+        Returns:
+            dict: Dictionary containing briefing metrics
+        """
+        # Calculate time since last generation and refresh
+        now = datetime.now(timezone.utc)
+        last_gen = self.briefing_metrics['last_generation_time']
+        last_refresh = self.briefing_metrics['last_refresh_time']
+        
+        time_since_generation = None
+        if last_gen:
+            td = now - last_gen
+            hours, remainder = divmod(td.seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            time_since_generation = f"{hours}h {minutes}m {seconds}s"
+            
+        time_since_refresh = None
+        if last_refresh:
+            td = now - last_refresh
+            hours, remainder = divmod(td.seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            time_since_refresh = f"{hours}h {minutes}m {seconds}s"
+        
+        # Calculate refresh reliability
+        total_refreshes = self.briefing_metrics['total_refreshes']
+        failed_refreshes = self.briefing_metrics['failed_refreshes']
+        refresh_reliability = 0
+        if total_refreshes > 0:
+            refresh_reliability = ((total_refreshes - failed_refreshes) / total_refreshes) * 100
+            
+        return {
+            'last_generation': last_gen.strftime('%Y-%m-%d %H:%M:%S') if last_gen else "Never",
+            'last_refresh': last_refresh.strftime('%Y-%m-%d %H:%M:%S') if last_refresh else "Never",
+            'time_since_generation': time_since_generation or "N/A",
+            'time_since_refresh': time_since_refresh or "N/A",
+            'total_briefings': self.briefing_metrics['total_briefings_generated'],
+            'total_refreshes': total_refreshes,
+            'refresh_reliability': f"{refresh_reliability:.1f}%",
+            'avg_generation_time': f"{self.briefing_metrics['avg_generation_time']:.2f}s",
+            'avg_refresh_time': f"{self.briefing_metrics['avg_refresh_time']:.2f}s",
+            'flash_alerts_today': self.briefing_metrics['flash_alerts_today'],
+            'flash_alerts_total': self.briefing_metrics['flash_alerts_total'],
+            'regional_hotspots': self.briefing_metrics['regional_hotspots'],
+            'refresh_interval': f"{self.config.briefing_refresh_interval}s"
+        }
+
     def get_watcher_status(self) -> dict:
         """Get current status of the feed watcher."""
         now = datetime.now()
@@ -318,6 +455,7 @@ class FeedWatcher:
             'parse_errors': self.feed_metrics['parse_errors'],
             'last_update': (self.feed_metrics['last_update_time'].strftime('%Y-%m-%d %H:%M:%S') 
                           if self.feed_metrics['last_update_time'] else "Never"),
+            'briefing_status': self.get_briefing_status() if hasattr(self, 'briefing_metrics') else {},
             'feed_stats': {
                 url: {
                     'success_rate': f"{stats['success_rate']:.1f}%",
@@ -358,6 +496,22 @@ class FeedWatcher:
         logger.info(f"   Processing Rate: {queue_status['processing_rate']}")
         logger.info(f"   Newest Article: {queue_status['newest_article']}")
         logger.info(f"   Oldest Article: {queue_status['oldest_article']}")
+        
+        # Add Daily Briefing section to the status output if briefing metrics are available
+        if 'briefing_status' in status and status['briefing_status']:
+            briefing = status['briefing_status']
+            logger.info(f"\n📅 Daily Briefing:")
+            logger.info(f"   Last Generation: {briefing['last_generation']}")
+            logger.info(f"   Last Refresh: {briefing['last_refresh']} ({briefing['time_since_refresh']} ago)")
+            logger.info(f"   Reliability: {briefing['refresh_reliability']} ({briefing['total_refreshes']} total)")
+            logger.info(f"   Performance: {briefing['avg_generation_time']} gen, {briefing['avg_refresh_time']} refresh")
+            logger.info(f"   Flash Alerts: {briefing['flash_alerts_today']} today, {briefing['flash_alerts_total']} total")
+            
+            if briefing['regional_hotspots']:
+                hotspot_str = ", ".join(briefing['regional_hotspots'][:5])
+                if len(briefing['regional_hotspots']) > 5:
+                    hotspot_str += f" and {len(briefing['regional_hotspots']) - 5} more"
+                logger.info(f"   Regional Hotspots: {hotspot_str}")
         
         if status['feed_stats']:
             logger.info("\n📊 Feed Statistics:")
