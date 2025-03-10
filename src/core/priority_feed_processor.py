@@ -216,8 +216,6 @@ class PriorityFeedProcessor:
     async def _processing_loop(self):
         """Continuous loop to process articles from the queue."""
         logger.info("✨ Processing loop started")
-        last_status_update = time.time()
-        status_update_interval = 1  # Update status every 1 second (decreased from 5)
         
         while self._running:
             try:
@@ -232,11 +230,6 @@ class PriorityFeedProcessor:
                 # Only sleep if no articles were processed
                 if processed_count == 0:
                     await asyncio.sleep(0.1)
-                    
-                # Update status display periodically
-                if current_time - last_status_update >= status_update_interval:
-                    self._update_status_display()
-                    last_status_update = current_time
                     
             except Exception as e:
                 logger.error(f"Error in processing loop: {str(e)}")
@@ -273,11 +266,6 @@ class PriorityFeedProcessor:
         if (not self.processing_stats['oldest_queued_article'] or 
             article.pub_date < self.processing_stats['oldest_queued_article']):
             self.processing_stats['oldest_queued_article'] = article.pub_date
-
-        # Only log every 10th article or when queue size hits certain thresholds
-        if (self.processing_stats['total_articles'] % 10 == 0 or 
-            self.processing_stats['queued_articles'] in [1, 10, 50, 100, 500, 1000]):
-            self._update_status_display()
         
         # Update feed statistics
         if article.feed_url not in self.feed_stats:
@@ -570,238 +558,64 @@ class PriorityFeedProcessor:
         
         # Look through the queue for details (non-destructive peek)
         if not self.article_queue.empty():
-            # We can't peek at a PriorityQueue directly, so we'll need to use a workaround
-            # This is just for the status display, not for actual processing
-            try:
-                # Create a temporary queue with references to the same articles
-                temp_queue = PriorityQueue()
-                items = []
+            # Create a temporary queue with references to the same articles
+            items = []
+            temp_items = []
+            
+            # Empty the queue temporarily
+            while not self.article_queue.empty():
+                item = self.article_queue.get()
+                items.append(item)
+                temp_items.append(item)
+            
+            # Process the items to find newest and oldest
+            for item in temp_items:
+                if self.processing_stats['newest_queued_article'] == item.pub_date:
+                    newest_article_info = {
+                        'title': item.title[:50] + ('...' if len(item.title) > 50 else ''),
+                        'link': item.link,
+                        'pub_date': item.pub_date,
+                    }
+                if self.processing_stats['oldest_queued_article'] == item.pub_date:
+                    oldest_article_info = {
+                        'title': item.title[:50] + ('...' if len(item.title) > 50 else ''),
+                        'link': item.link,
+                        'pub_date': item.pub_date,
+                    }
                 
-                # Empty the queue temporarily
-                while not self.article_queue.empty():
-                    item = self.article_queue.get()
-                    items.append(item)
-                
-                # Process the items to find newest and oldest
-                for item in items:
-                    if self.processing_stats['newest_queued_article'] == item.pub_date:
-                        newest_article_info = {
-                            'title': item.title[:50] + ('...' if len(item.title) > 50 else ''),
-                            'link': item.link,
-                        }
-                    if self.processing_stats['oldest_queued_article'] == item.pub_date:
-                        oldest_article_info = {
-                            'title': item.title[:50] + ('...' if len(item.title) > 50 else ''),
-                            'link': item.link,
-                        }
-                    
-                    # Put the item back in the original queue
-                    self.article_queue.put(item)
-            except Exception as e:
-                # If anything goes wrong, we don't want to lose the queue
-                for item in items:
-                    if item not in self.article_queue.queue:
-                        self.article_queue.put(item)
+            # Put all items back in the original queue
+            for item in items:
+                self.article_queue.put(item)
         
         # Get latest processed article info
         latest_processed_info = self.recently_processed[-1] if self.recently_processed else None
         currently_processing_info = self.currently_processing
         
+        # Include performance trend data
+        minute_rate = self.performance_metrics['last_minute_processed']
+        hour_rate = self.performance_metrics['last_hour_rate']
+        
         return {
             'queue_size': self.processing_stats['queued_articles'],
-            'peak_queue_size': self.processing_stats['peak_queue_size'],
-            'total_articles': self.processing_stats['total_articles'],
-            'processed_articles': self.processing_stats['processed_articles'],
-            'processing_rate': f"{processing_rate:.2f} articles/minute",
-            'avg_processing_time': f"{avg_time:.2f}s",
-            'min_processing_time': f"{self.processing_stats['min_processing_time']:.2f}s" if self.processing_stats['min_processing_time'] != float('inf') else "N/A",
-            'max_processing_time': f"{self.processing_stats['max_processing_time']:.2f}s",
-            'median_processing_time': f"{median_time:.2f}s",
-            'api_utilization': api_utilization,
-            'api_utilization_str': colorize_rate(api_utilization),
-            'runtime': f"{int(runtime // 3600)}h {int((runtime % 3600) // 60)}m {int(runtime % 60)}s",
-            'runtime_seconds': runtime,
+            'peak_size': self.processing_stats['peak_queue_size'],
+            'total': self.processing_stats['total_articles'],
+            'processed': self.processing_stats['processed_articles'],
+            'processing_rate': processing_rate,
+            'avg_time': avg_time,
+            'median_time': median_time,
+            'api_load': api_utilization,
             'error_rate': error_rate,
-            'error_rate_str': colorize_rate(error_rate),
-            'articles_by_age': self.processing_stats['articles_by_age'],
-            'newest_article': self.processing_stats['newest_queued_article'],
-            'newest_article_str': self.processing_stats['newest_queued_article'].strftime('%Y-%m-%d %H:%M:%S') if self.processing_stats['newest_queued_article'] else "None",
-            'newest_article_age': format_relative_time(self.processing_stats['newest_queued_article']),
-            'oldest_article': self.processing_stats['oldest_queued_article'],
-            'oldest_article_str': self.processing_stats['oldest_queued_article'].strftime('%Y-%m-%d %H:%M:%S') if self.processing_stats['oldest_queued_article'] else "None",
-            'oldest_article_age': format_relative_time(self.processing_stats['oldest_queued_article']),
-            'last_processed': self.processing_stats['last_processed_article'],
-            'last_processed_str': self.processing_stats['last_processed_article'].strftime('%Y-%m-%d %H:%M:%S') if self.processing_stats['last_processed_article'] else "None",
-            'last_processed_age': format_relative_time(self.processing_stats['last_processed_article']),
+            'age_distribution': self.processing_stats['articles_by_age'],
+            'newest_article': newest_article_info,
+            'oldest_article': oldest_article_info,
+            'latest_article': latest_processed_info,
+            'current_article': currently_processing_info,
+            'current_time': current_processing_duration,
             'success_streak': self.processing_stats['success_streak'],
-            'consecutive_errors': self.processing_stats['consecutive_errors'],
-            'active_feeds': len(self.feed_stats),
-            'feed_stats': self.feed_stats,
-            'newest_article_info': newest_article_info,
-            'oldest_article_info': oldest_article_info,
-            'latest_processed_info': latest_processed_info,
-            'currently_processing_info': currently_processing_info,
-            'recently_processed': self.recently_processed,
             'est_completion': est_completion,
-            'current_processing_duration': current_processing_duration,
-            'active_feeds_list': active_feeds,
-            'top_errors': top_errors,
-            'trending_domains': self._get_trending_domains(),
-            'performance_trend': {
-                'last_minute_rate': self.performance_metrics['last_minute_processed'],
-                'last_hour_rate': self.performance_metrics['last_hour_rate'],
-                'hourly_rates': self.performance_metrics['hourly_rates']
-            }
+            'rate_per_minute': minute_rate,
+            'rate_per_hour': hour_rate
         }
-        
-    def _get_trending_domains(self) -> List[Tuple[str, int]]:
-        """Get the most frequent domains from recent articles."""
-        domain_counter = Counter()
-        for article in self.recently_processed:
-            if 'domain' in article:
-                domain_counter[article['domain']] += 1
-        
-        return domain_counter.most_common(5)
-
-    def print_status(self):
-        """Print current processing status in a clean format."""
-        status = self.get_processing_status()
-        
-        print(f"\n{Colors.HEADER}{'='*20} Feed Processing Status {'='*20}{Colors.END}")
-        
-        # Queue Status Section
-        print(f"\n{Colors.BOLD}📊 Queue Status:{Colors.END}")
-        print(f"   Current Queue Size: {Colors.CYAN}{status['queue_size']}{Colors.END} articles")
-        print(f"   Peak Queue Size: {Colors.CYAN}{status['peak_queue_size']}{Colors.END} articles")
-        print(f"   Total Articles: {Colors.CYAN}{status['total_articles']}{Colors.END}")
-        print(f"   Processed: {Colors.CYAN}{status['processed_articles']}{Colors.END}")
-        
-        # Performance Metrics
-        print(f"\n{Colors.BOLD}⚡ Performance Metrics:{Colors.END}")
-        print(f"   Processing Rate: {Colors.GREEN}{status['processing_rate']}{Colors.END}")
-        print(f"   Average Time: {Colors.CYAN}{status['avg_processing_time']}{Colors.END}")
-        print(f"   Median Time: {Colors.CYAN}{status['median_processing_time']}{Colors.END}")
-        print(f"   Peak Time: {Colors.YELLOW}{status['max_processing_time']}{Colors.END}")
-        print(f"   Best Time: {Colors.GREEN}{status['min_processing_time']}{Colors.END}")
-        
-        # System Status
-        print(f"\n{Colors.BOLD}🔄 System Status:{Colors.END}")
-        print(f"   Runtime: {Colors.CYAN}{status['runtime']}{Colors.END}")
-        print(f"   API Utilization: {status['api_utilization_str']}")
-        print(f"   Error Rate: {status['error_rate_str']}")
-        print(f"   Success Streak: {Colors.GREEN}{status['success_streak']}{Colors.END}")
-        print(f"   Active Feeds: {Colors.CYAN}{status['active_feeds']}{Colors.END}")
-        
-        # Queue Timeline
-        print(f"\n{Colors.BOLD}🕒 Queue Timeline:{Colors.END}")
-        print(f"   Latest Processed: {Colors.GREEN}{status['last_processed_str']}{Colors.END} ({status['last_processed_age']})")
-        print(f"   Newest in Queue: {Colors.CYAN}{status['newest_article_str']}{Colors.END} ({status['newest_article_age']})")
-        print(f"   Oldest in Queue: {Colors.YELLOW}{status['oldest_article_str']}{Colors.END} ({status['oldest_article_age']})")
-        
-        # Article Age Distribution
-        print(f"\n{Colors.BOLD}📈 Article Age Distribution:{Colors.END}")
-        print(f"   ≤5min : {Colors.GREEN}{status['articles_by_age']['5min']}{Colors.END}")
-        print(f"   ≤15min: {Colors.CYAN}{status['articles_by_age']['15min']}{Colors.END}")
-        print(f"   ≤30min: {Colors.BLUE}{status['articles_by_age']['30min']}{Colors.END}")
-        print(f"   ≤60min: {Colors.YELLOW}{status['articles_by_age']['60min']}{Colors.END}")
-        print(f"   >60min: {Colors.RED}{status['articles_by_age']['older']}{Colors.END}")
-        
-        print(f"\n{Colors.HEADER}{'='*58}{Colors.END}\n")
-
-    def _update_status_display(self):
-        """Update the status display in place."""
-        status = self.get_processing_status()
-        
-        # Clear screen thoroughly
-        clear_terminal()
-        
-        # Add processing state indicator
-        processing_state = f"{Colors.GREEN}RUNNING{Colors.END}" if self._running else f"{Colors.RED}STOPPED{Colors.END}"
-        
-        # Format article info with title and link if available
-        latest_str = f"{status['last_processed_str']} ({status['last_processed_age']})"
-        if status['latest_processed_info']:
-            info = status['latest_processed_info']
-            latest_str = f"{Colors.BOLD}{info['title']}{Colors.END}\n" + \
-                         f"      {Colors.CYAN}{info['link']}{Colors.END}\n" + \
-                         f"      {status['last_processed_str']} ({status['last_processed_age']})"
-        
-        newest_str = f"{status['newest_article_str']} ({status['newest_article_age']})"
-        if status['newest_article_info']:
-            info = status['newest_article_info']
-            newest_str = f"{Colors.BOLD}{info['title']}{Colors.END}\n" + \
-                         f"      {Colors.CYAN}{info['link']}{Colors.END}\n" + \
-                         f"      {status['newest_article_str']} ({status['newest_article_age']})"
-            
-        oldest_str = f"{status['oldest_article_str']} ({status['oldest_article_age']})"
-        if status['oldest_article_info']:
-            info = status['oldest_article_info']
-            oldest_str = f"{Colors.BOLD}{info['title']}{Colors.END}\n" + \
-                         f"      {Colors.CYAN}{info['link']}{Colors.END}\n" + \
-                         f"      {status['oldest_article_str']} ({status['oldest_article_age']})"
-        
-        # Now processing section with duration
-        now_processing = ""
-        if status['currently_processing_info']:
-            info = status['currently_processing_info']
-            duration = format_time_elapsed(status['current_processing_duration'])
-            now_processing = (
-                f"\n{Colors.BOLD}⚙️ Now Processing ({duration}):{Colors.END}\n"
-                f"   {Colors.BOLD}{info['title']}{Colors.END}\n"
-                f"   {Colors.CYAN}{info['link']}{Colors.END}\n"
-                f"   {info['date'].strftime('%Y-%m-%d %H:%M:%S')}"
-            )
-        
-        # Format trending domains
-        trending_domains = ""
-        if status['trending_domains']:
-            trending_domains = f"\n{Colors.BOLD}🔍 Trending Domains:{Colors.END}\n"
-            for domain, count in status['trending_domains']:
-                trending_domains += f"   {Colors.YELLOW}{domain}{Colors.END}: {count}\n"
-        
-        # Add performance trend
-        performance_trend = (
-            f"\n{Colors.BOLD}📊 Performance Trend:{Colors.END}\n"
-            f"   Last minute: {Colors.CYAN}{status['performance_trend']['last_minute_rate']}{Colors.END} articles\n"
-            f"   Last hour: {Colors.GREEN}{status['performance_trend']['last_hour_rate']:.1f}{Colors.END} articles/hour\n"
-            f"   Est. completion: {Colors.YELLOW}{status['est_completion']}{Colors.END}"
-        )
-        
-        # Build status string
-        status_str = (
-            f"{Colors.HEADER}{'='*20} Feed Processing Status {'='*20}{Colors.END}\n"
-            f"\n{Colors.BOLD}⚡ Processing State:{Colors.END} {processing_state}\n"
-            f"\n{Colors.BOLD}📊 Queue Status:{Colors.END}\n"
-            f"   Queue Size: {Colors.CYAN}{status['queue_size']}/{status['peak_queue_size']}{Colors.END} (current/peak)\n"
-            f"   Processed: {Colors.GREEN}{status['processed_articles']}/{status['total_articles']}{Colors.END}\n"
-            f"{performance_trend}\n"
-            f"\n{Colors.BOLD}⚡ Processing:{Colors.END}\n"
-            f"   Rate: {Colors.GREEN}{status['processing_rate']}{Colors.END}\n"
-            f"   Avg/Med Time: {Colors.CYAN}{status['avg_processing_time']}{Colors.END} / {Colors.CYAN}{status['median_processing_time']}{Colors.END}\n"
-            f"   API Load: {status['api_utilization_str']}\n"
-            f"   Errors: {status['error_rate_str']}\n"
-            f"{now_processing}\n"
-            f"\n{Colors.BOLD}🕒 Timeline:{Colors.END}\n"
-            f"   Latest: {Colors.GREEN}{latest_str}{Colors.END}\n"
-            f"   Newest: {Colors.CYAN}{newest_str}{Colors.END}\n"
-            f"   Oldest: {Colors.YELLOW}{oldest_str}{Colors.END}\n"
-            f"{trending_domains}"
-            f"\n{Colors.BOLD}📈 Article Age:{Colors.END}\n"
-            f"   ≤5min : {Colors.GREEN}{status['articles_by_age']['5min']}{Colors.END}\n"
-            f"   ≤15min: {Colors.CYAN}{status['articles_by_age']['15min']}{Colors.END}\n"
-            f"   ≤30min: {Colors.BLUE}{status['articles_by_age']['30min']}{Colors.END}\n"
-            f"   ≤60min: {Colors.YELLOW}{status['articles_by_age']['60min']}{Colors.END}\n"
-            f"   >60min: {Colors.RED}{status['articles_by_age']['older']}{Colors.END}\n"
-            f"\n{Colors.BOLD}⚙️ System:{Colors.END}\n"
-            f"   Runtime: {Colors.CYAN}{status['runtime']}{Colors.END}\n"
-            f"   Success Streak: {Colors.GREEN}{status['success_streak']}{Colors.END}\n"
-            f"   Active Feeds: {Colors.CYAN}{status['active_feeds']}{Colors.END}\n"
-            f"\n{Colors.HEADER}{'='*58}{Colors.END}\n"
-        )
-        
-        # Print status and ensure output is flushed
-        sys.stdout.write(status_str)
-        sys.stdout.flush()
 
 def extract_domain(url: str) -> str:
     """Extract the domain name from a URL."""

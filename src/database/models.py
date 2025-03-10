@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 from typing import Optional, List, Dict
 from .backup import backup_database
+from .models.briefing_models import init_briefing_tables
 import atexit
 import logging
 
@@ -106,6 +107,9 @@ def init_db(connection=None):
     
     if not connection:
         conn.close()
+    
+    # Initialize briefing tables after main tables
+    init_briefing_tables()
 
 def exists_in_db(link: str) -> bool:
     """Check if an entry with this link already exists in the database."""

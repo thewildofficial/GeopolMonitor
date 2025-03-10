@@ -537,29 +537,21 @@ def get_regional_summary(region_code: str) -> List[Dict[str, Any]]:
 
 
 def get_news_in_timespan(start_time: datetime, end_time: datetime) -> List[Dict[str, Any]]:
-    """Get news articles within the specified time range.
-    
-    Args:
-        start_time: Start time for the range
-        end_time: End time for the range
-        
-    Returns:
-        List of news articles
-    """
+    """Get news articles within the specified time range."""
     try:
+        # Convert to strings if needed
+        if isinstance(start_time, datetime):
+            start_time = start_time.isoformat()
+        if isinstance(end_time, datetime):
+            end_time = end_time.isoformat()
+            
         with get_db() as conn:
-            # Convert to strings if needed
-            if isinstance(start_time, datetime):
-                start_time = start_time.isoformat()
-            if isinstance(end_time, datetime):
-                end_time = end_time.isoformat()
-                
             cursor = conn.execute('''
-            SELECT id, title, content, description, link, timestamp, 
+            SELECT id, title, content, description, link, pub_date as timestamp, 
                   sentiment_score, bias_score
-            FROM news
-            WHERE timestamp >= ? AND timestamp <= ?
-            ORDER BY timestamp DESC
+            FROM news_entries
+            WHERE pub_date >= ? AND pub_date <= ?
+            ORDER BY pub_date DESC
             ''', (start_time, end_time))
             
             articles = []
@@ -568,8 +560,8 @@ def get_news_in_timespan(start_time: datetime, end_time: datetime) -> List[Dict[
                 tag_cursor = conn.execute('''
                 SELECT t.name, t.category
                 FROM tags t
-                JOIN news_tags nt ON t.id = nt.tag_id
-                WHERE nt.news_id = ?
+                JOIN article_tags at ON t.id = at.tag_id
+                WHERE at.article_id = ?
                 ''', (row['id'],))
                 
                 tags = []
@@ -590,9 +582,9 @@ def get_news_in_timespan(start_time: datetime, end_time: datetime) -> List[Dict[
                     'bias_score': row['bias_score'],
                     'tags': tags
                 })
-                
+            
             return articles
-                
+            
     except Exception as e:
         logger.error(f"Error getting news in timespan: {str(e)}", exc_info=True)
         return []

@@ -134,20 +134,14 @@ def exists_in_db(link: str) -> bool:
 @contextmanager
 def get_db():
     """Context manager for database connections."""
-    global _connection, _last_backup
-    connection = None
+    conn = None
     try:
-        if _connection is None:
-            _connection = sqlite3.connect(DB_PATH)
-        connection = _connection
-        yield connection
-    except Exception as e:
-        if connection:
-            connection.rollback()
-        raise e
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        yield conn
     finally:
-        if connection and connection != _connection:
-            connection.close()
+        if conn:
+            conn.close()
 
 def cleanup_db():
     """Cleanup function to be called on program exit."""

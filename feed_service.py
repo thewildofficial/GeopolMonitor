@@ -2,6 +2,7 @@
 import asyncio
 import logging
 import ssl
+import time
 from src.core.feed_watcher import FeedWatcher, FeedConfiguration
 from src.core.priority_feed_processor import PriorityFeedProcessor
 from src.core.services.briefing_generator import BriefingGenerator, BriefingConfiguration
@@ -15,22 +16,27 @@ from src.database.models import init_db, init_briefing_tables
 
 # Configure logging - more selective about what gets logged
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.ERROR,  # Set global level to ERROR
     format='%(message)s'  # Simplified format without timestamps and logger names
 )
 
-# Set all loggers to WARNING or higher to minimize noise
-for name in logging.root.manager.loggerDict:
-    if name != "__main__":  # Keep main logger at INFO
-        logging.getLogger(name).setLevel(logging.WARNING)
+# Only allow status messages from main logger
+logging.getLogger(__name__).setLevel(logging.INFO)
 
-# Specifically silence noisy loggers
+# Silence all other loggers
+for name in logging.root.manager.loggerDict:
+    if name != __name__:
+        logging.getLogger(name).setLevel(logging.ERROR)
+
+# Configure specific loggers
 logging.getLogger('google_genai').setLevel(logging.ERROR)
-logging.getLogger('src.core.feed_watcher').setLevel(logging.ERROR)
-logging.getLogger('src.core.priority_feed_processor').setLevel(logging.WARNING)
-logging.getLogger('src.utils.ai').setLevel(logging.WARNING)
-logging.getLogger('asyncio').setLevel(logging.WARNING)
-logging.getLogger('aiohttp').setLevel(logging.WARNING)
+logging.getLogger('src.core.feed_watcher').setLevel(logging.INFO)
+logging.getLogger('src.core.services.briefing_scheduler').setLevel(logging.INFO)
+logging.getLogger('src.core.priority_feed_processor').setLevel(logging.ERROR)
+logging.getLogger('src.utils.ai').setLevel(logging.ERROR)
+logging.getLogger('asyncio').setLevel(logging.ERROR)
+logging.getLogger('aiohttp').setLevel(logging.ERROR)
+logging.getLogger('urllib3').setLevel(logging.ERROR)
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +53,10 @@ def load_feed_urls():
 
 async def run_feed_watcher():
     """Initialize and run the feed watcher service"""
+    # Initialize database tables
+    init_db()  # This now handles briefing tables initialization internally
+    logger.info("📊 Database tables initialized")
+    
     config = FeedConfiguration(
         max_concurrent_feeds=MAX_CONCURRENT_FEEDS,
         min_poll_interval=FEED_POLL_INTERVAL[0],
@@ -133,30 +143,56 @@ async def run_feed_watcher():
             logger.info(f"✨ Feed watcher initialized with {len(feed_urls)} feeds")
             logger.info("▶️ Starting feed monitoring...")
             
-            # Run feed watching and briefing scheduler indefinitely
             try:
                 # Create integrated status update function
-                async def update_display():
-                    while True:
-                        # Get scheduler status
-                        scheduler_status = briefing_scheduler.get_scheduler_status()
+                async def update_status_display():
+                    display_interval = 1  # Update every second
+                    last_update = 0
+                    
+                    # ANSI escape codes for terminal control
+                    CLEAR = '\033[2J'        # Clear entire screen
+                    HOME = '\033[H'          # Move cursor to home position
+                    CLEAR_DOWN = '\033[J'    # Clear screen from cursor down
+                    ALT_SCREEN = '\033[?1049h'  # Switch to alternate screen buffer
+                    MAIN_SCREEN = '\033[?1049l'  # Return to main screen buffer
+                    SAVE_CURSOR = '\033[s'    # Save cursor position
+                    RESTORE_CURSOR = '\033[u' # Restore cursor position
+                    
+                    try:
+                        # Switch to alternate screen buffer
+                        print(ALT_SCREEN + CLEAR + HOME, end='', flush=True)
                         
-                        # Update the processor's display (it will handle the full display)
-                        feed_watcher.priority_processor._update_status_display()
-                        
-                        # Only add scheduler info if it's running
-                        if scheduler_status['is_running']:
-                            print(f"\n🔄 Briefing Scheduler Status:")
-                            print(f"   Last Generated: {scheduler_status['last_generated'] or 'Never'}")
-                            print(f"   Last Refreshed: {scheduler_status['last_refreshed'] or 'Never'}")
-                            print(f"   Next Generation: {scheduler_status['next_generation'] or 'Not scheduled'}")
-                            print(f"   Next Refresh: {scheduler_status['next_refresh'] or 'Not scheduled'}")
-                        
-                        await asyncio.sleep(1)
+                        while True:
+                            current_time = time.time()
+                            if current_time - last_update >= display_interval:
+                                # Get scheduler status for briefing system metrics
+                                scheduler_status = briefing_scheduler.get_scheduler_status()
+                                feed_watcher.briefing_status = scheduler_status
+                                
+                                # Save cursor position before status update
+                                print(SAVE_CURSOR, end='', flush=True)
+                                
+                                # Move cursor to home position and clear screen from cursor down
+                                print(HOME + CLEAR_DOWN, end='', flush=True)
+                                
+                                # Display status (this will now write at cursor position)
+                                feed_watcher.print_status()
+                                
+                                # Restore cursor position to preserve any error messages
+                                print(RESTORE_CURSOR, end='', flush=True)
+                                
+                                last_update = current_time
+                                
+                            await asyncio.sleep(0.1)  # Small sleep to prevent CPU spinning
+                    finally:
+                        # Return to main screen buffer on exit
+                        print(MAIN_SCREEN, end='', flush=True)
                 
-                status_task = asyncio.create_task(update_display())
+                # Create and run tasks
+                logger.info("Starting feed monitoring tasks...")
+                status_task = asyncio.create_task(update_status_display())
                 
-                # Run all tasks concurrently
+                # Run all tasks
                 await asyncio.gather(status_task, *feed_tasks)
                 
             except asyncio.CancelledError:
@@ -185,7 +221,6 @@ if __name__ == "__main__":
     try:
         # Initialize database and briefing tables
         init_db()
-        init_briefing_tables()
         logger.info("📦 Database and briefing tables initialized")
         
         # Run the feed watcher

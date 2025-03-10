@@ -1,8 +1,10 @@
 import logging
 import time
+import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
+from ...database.models import get_db  # Add the missing import
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +18,8 @@ class BriefingConfiguration:
                 context_item_limit: int = 50,        # Max items in context section
                 hotspot_threshold: int = 10,         # Number of articles to qualify as hotspot
                 summarization_temperature: float = 0.7,  # Temperature for AI summarization
-                summary_max_tokens: int = 500):        # Max tokens for summaries
+                summary_max_tokens: int = 500,       # Max tokens for summaries
+                default_timespan_hours: int = 24):   # Default time window for briefings
         self.max_flash_items = max_flash_items
         self.flash_sentiment_threshold = flash_sentiment_threshold
         self.refresh_interval_seconds = refresh_interval_seconds
@@ -25,6 +28,7 @@ class BriefingConfiguration:
         self.hotspot_threshold = hotspot_threshold
         self.summarization_temperature = summarization_temperature
         self.summary_max_tokens = summary_max_tokens
+        self.default_timespan_hours = default_timespan_hours
 
 class BriefingGenerator:
     """Core class for generating daily briefings based on news articles."""
@@ -38,16 +42,8 @@ class BriefingGenerator:
         
     async def generate_daily_briefing(self, 
                                     start_time: Optional[datetime] = None, 
-                                    end_time: Optional[datetime] = None) -> Dict[str, Any]:
-        """Generate a complete daily briefing based on available news.
-        
-        Args:
-            start_time: Optional start time for the briefing window
-            end_time: Optional end time for the briefing window
-            
-        Returns:
-            Dict containing the complete briefing with all tiers
-        """
+                                    end_time: Optional[datetime] = None) -> Tuple[Dict[str, Any], float, int, List[str]]:
+        """Generate a complete daily briefing based on available news."""
         generation_start = time.time()
         
         # Set default time range if not provided (last 24 hours)
@@ -63,13 +59,17 @@ class BriefingGenerator:
             news_collection = await self._fetch_news_articles(start_time, end_time)
             if not news_collection:
                 logger.warning("No news articles found in the specified time range")
-                return self._create_empty_briefing(start_time, end_time)
+                empty_briefing = self._create_empty_briefing(start_time, end_time)
+                return empty_briefing, 0, 0, []
                 
             # Classify news by priority
             news_by_tier = self._classify_news_by_priority(news_collection)
             
             # Identify regional hotspots
             regional_hotspots = self.identify_regional_hotspots(news_collection)
+            
+            # Extract just the hotspot names for the return value
+            hotspot_names = [r['name'] for r in regional_hotspots[:5]]  # Top 5 hotspots
             
             # Generate summaries for each tier
             flash_tier = await self._generate_flash_tier(news_by_tier.get('flash', []))
@@ -101,7 +101,7 @@ class BriefingGenerator:
                     'start_time': start_time,
                     'end_time': end_time,
                     'total_articles': len(news_collection),
-                    'regional_hotspots': [r['name'] for r in regional_hotspots[:5]]
+                    'regional_hotspots': hotspot_names  # Use the extracted names here
                 },
                 'executive_summary': executive_summary,
                 'flash': flash_tier,
@@ -109,6 +109,15 @@ class BriefingGenerator:
                 'context': context_tier,
                 'changes': changes
             }
+            
+            # Store briefing in database
+            from ...database.models.briefing_models import save_briefing
+            briefing_id = save_briefing(briefing)
+            
+            if briefing_id:
+                logger.info(f"✅ Saved briefing to database with ID {briefing_id}")
+            else:
+                logger.error("❌ Failed to save briefing to database")
             
             # Store as last briefing
             self.last_briefing = briefing
@@ -118,11 +127,13 @@ class BriefingGenerator:
             generation_time = time.time() - generation_start
             logger.info(f"Daily briefing generated in {generation_time:.2f}s with {len(news_collection)} articles")
             
-            return briefing, generation_time, len(flash_tier.get('items', [])), regional_hotspots[:5]
+            # Return the briefing, generation time, flash count, and hotspot names
+            return briefing, generation_time, len(flash_tier.get('items', [])), hotspot_names
             
         except Exception as e:
             logger.error(f"Error generating daily briefing: {str(e)}", exc_info=True)
-            return self._create_empty_briefing(start_time, end_time), 0, 0, []
+            empty_briefing = self._create_empty_briefing(start_time, end_time)
+            return empty_briefing, 0, 0, []
     
     async def refresh_briefing(self, current_briefing: Dict[str, Any]) -> Dict[str, Any]:
         """Refresh an existing briefing with new data.
@@ -230,21 +241,68 @@ class BriefingGenerator:
         }
         
     async def _fetch_news_articles(self, start_time, end_time) -> List[Dict[str, Any]]:
-        """Fetch news articles from the database within the given time range.
-        
-        In a real implementation, this would query the database. For now,
-        we'll implement a placeholder that would need to be connected to
-        your actual data source.
-        """
-        # Implementation would depend on your database model
-        # Placeholder for now, would connect to your actual news repository
-        from ...database.models import get_news_in_timespan
-        
+        """Fetch news articles from the database within the given time range."""
         try:
-            return get_news_in_timespan(start_time, end_time)
+            # Ensure both times are timezone-aware
+            if start_time.tzinfo is None:
+                start_time = start_time.replace(tzinfo=timezone.utc)
+            if end_time.tzinfo is None:
+                end_time = end_time.replace(tzinfo=timezone.utc)
+                
+            # Convert to UTC for consistent comparison
+            start_time = start_time.astimezone(timezone.utc)
+            end_time = end_time.astimezone(timezone.utc)
+            
+            logger.info(f"🔍 Fetching articles from {start_time.isoformat()} to {end_time.isoformat()}")
+            
+            with get_db() as conn:
+                # Enable dictionary row factory for this connection
+                conn.row_factory = sqlite3.Row
+                
+                cursor = conn.execute('''
+                    SELECT n.*, GROUP_CONCAT(t.name || ':' || t.category) as tags
+                    FROM news_entries n
+                    LEFT JOIN article_tags at ON n.id = at.article_id
+                    LEFT JOIN tags t ON at.tag_id = t.id
+                    WHERE n.pub_date >= ? AND n.pub_date <= ?
+                    GROUP BY n.id
+                    ORDER BY n.pub_date DESC
+                ''', (start_time.isoformat(), end_time.isoformat()))
+                
+                articles = []
+                for row in cursor.fetchall():
+                    # Convert sqlite3.Row to dict for consistent access
+                    row_dict = dict(row)
+                    
+                    # Create article with proper field handling
+                    article = {
+                        'id': row_dict['id'],
+                        'title': row_dict['title'],
+                        'content': row_dict['content'],
+                        'link': row_dict['link'],
+                        'timestamp': row_dict['pub_date'],
+                        'sentiment_score': float(row_dict['sentiment_score']) if row_dict['sentiment_score'] is not None else 0.0,
+                        'source': {'name': row_dict.get('source_name', 'Unknown')},
+                        'tags': []
+                    }
+                    
+                    # Parse tags
+                    if row_dict.get('tags'):
+                        for tag_str in row_dict['tags'].split(','):
+                            if ':' in tag_str:
+                                name, category = tag_str.split(':')
+                                article['tags'].append({
+                                    'name': name,
+                                    'category': category
+                                })
+                    
+                    articles.append(article)
+                
+                logger.info(f"📊 Found {len(articles)} articles in time range")
+                return articles
+                
         except Exception as e:
-            logger.error(f"Error fetching news articles: {str(e)}")
-            # If the import fails (module doesn't exist yet), return empty list
+            logger.error(f"❌ Error fetching news articles: {str(e)}", exc_info=True)
             return []
     
     def _classify_news_by_priority(self, news_collection: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:

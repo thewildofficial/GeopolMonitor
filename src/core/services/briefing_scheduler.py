@@ -8,7 +8,17 @@ from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.schedulers.base import SchedulerNotRunningError
 from .briefing_generator import BriefingGenerator, BriefingConfiguration
 
+# Configure specific logger for briefing system
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Add a stream handler if it doesn't exist
+if not logger.handlers:
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
 
 class BriefingSchedulerConfiguration:
     """Configuration for the briefing scheduler."""
@@ -49,6 +59,15 @@ class BriefingScheduler:
         self.last_refreshed_time = None
         self.notification_callbacks = []
         self._jobs = {}  # Track scheduled jobs
+        self.metrics = {
+            'total_briefings': 0,
+            'last_generation_time': None,
+            'flash_alerts_today': 0,
+            'flash_alerts_total': 0,
+            'generation_time': 0.0,
+            'hotspots': [],
+            'failed_generations': 0
+        }
         logger.info("BriefingScheduler initialized")
         
     def register_notification_callback(self, callback: Callable[[str, Dict[str, Any]], None]):
@@ -78,53 +97,79 @@ class BriefingScheduler:
     async def start(self):
         """Start the briefing scheduler."""
         if self.scheduler is not None:
-            logger.warning("Scheduler is already running")
+            logger.warning("⚠️ Scheduler is already running")
             return
 
         try:
-            self.scheduler = AsyncIOScheduler()
-            logger.info("Created new AsyncIOScheduler")
+            logger.info("🚀 Initializing briefing scheduler...")
             
-            # Schedule daily briefing generation (once a day)
-            job = self.scheduler.add_job(
-                self.generate_new_daily_briefing,
-                IntervalTrigger(hours=self.config.generation_interval_hours),
-                id='daily_briefing_generation',
-                replace_existing=True
-            )
-            self._jobs['daily_briefing_generation'] = job
-            logger.info(f"Scheduled daily briefing generation every {self.config.generation_interval_hours} hours")
+            if not self.generator:
+                raise ValueError("🔴 BriefingGenerator not initialized")
+                
+            self.scheduler = AsyncIOScheduler()
+            logger.info("✨ Created new AsyncIOScheduler")
+            
+            # Schedule daily briefing generation
+            try:
+                job = self.scheduler.add_job(
+                    self.generate_new_daily_briefing,
+                    IntervalTrigger(hours=self.config.generation_interval_hours),
+                    id='daily_briefing_generation',
+                    replace_existing=True
+                )
+                self._jobs['daily_briefing_generation'] = job
+                logger.info(f"📅 Scheduled daily briefing generation every {self.config.generation_interval_hours} hours")
+            except Exception as e:
+                logger.error(f"🔴 Failed to schedule daily briefing generation: {str(e)}", exc_info=True)
+                raise
             
             # Schedule hourly briefing refresh
-            job = self.scheduler.add_job(
-                self.refresh_current_briefing,
-                IntervalTrigger(seconds=self.config.refresh_interval_seconds),
-                id='briefing_refresh',
-                replace_existing=True
-            )
-            self._jobs['briefing_refresh'] = job
-            logger.info(f"Scheduled briefing refresh every {self.config.refresh_interval_seconds} seconds")
+            try:
+                job = self.scheduler.add_job(
+                    self.refresh_current_briefing,
+                    IntervalTrigger(seconds=self.config.refresh_interval_seconds),
+                    id='briefing_refresh',
+                    replace_existing=True
+                )
+                self._jobs['briefing_refresh'] = job
+                logger.info(f"🔄 Scheduled briefing refresh every {self.config.refresh_interval_seconds} seconds")
+            except Exception as e:
+                logger.error(f"🔴 Failed to schedule briefing refresh: {str(e)}", exc_info=True)
+                raise
             
-            # Schedule reset of daily counters at midnight
-            job = self.scheduler.add_job(
-                self.reset_daily_metrics,
-                IntervalTrigger(days=1, start_date=f'2023-01-01 {self.config.daily_reset_hour}:00:00'),
-                id='reset_daily_metrics',
-                replace_existing=True
-            )
-            self._jobs['reset_daily_metrics'] = job
-            logger.info(f"Scheduled daily metrics reset at hour {self.config.daily_reset_hour}")
+            # Schedule reset of daily counters
+            try:
+                job = self.scheduler.add_job(
+                    self.reset_daily_metrics,
+                    IntervalTrigger(days=1, start_date=f'2023-01-01 {self.config.daily_reset_hour}:00:00'),
+                    id='reset_daily_metrics',
+                    replace_existing=True
+                )
+                self._jobs['reset_daily_metrics'] = job
+                logger.info(f"⏰ Scheduled daily metrics reset at hour {self.config.daily_reset_hour}")
+            except Exception as e:
+                logger.error(f"🔴 Failed to schedule metrics reset: {str(e)}", exc_info=True)
+                raise
             
             # Start the scheduler
-            self.scheduler.start()
-            logger.info("Briefing scheduler started successfully")
+            try:
+                self.scheduler.start()
+                logger.info("✅ Briefing scheduler started successfully")
+            except Exception as e:
+                logger.error(f"🔴 Failed to start scheduler: {str(e)}", exc_info=True)
+                raise
             
             # Generate initial briefing
-            logger.info("Generating initial briefing...")
-            await self.generate_new_daily_briefing()
+            logger.info("📊 Generating initial briefing...")
+            try:
+                await self.generate_new_daily_briefing()
+                logger.info("✅ Initial briefing generated successfully")
+            except Exception as e:
+                logger.error(f"🔴 Failed to generate initial briefing: {str(e)}", exc_info=True)
+                # Don't raise here, allow scheduler to continue running
             
         except Exception as e:
-            logger.error(f"Error starting scheduler: {str(e)}")
+            logger.error(f"🔴 Critical error in briefing scheduler startup: {str(e)}", exc_info=True)
             if self.scheduler:
                 await self.stop()
             raise
@@ -182,69 +227,74 @@ class BriefingScheduler:
         return status
 
     async def generate_new_daily_briefing(self):
-        """Generate a new daily briefing from scratch using the 24-hour window."""
+        """Generate a new daily briefing."""
+        logger.info("📝 Starting daily briefing generation...")
+        
         try:
-            logger.info("Generating new daily briefing")
-            
-            # Setup the 24-hour rolling window
+            # Set time window for briefing
             end_time = datetime.now(timezone.utc)
             start_time = end_time - timedelta(hours=24)
             
-            generation_start_time = time.time()
-            # Generate the briefing
-            briefing, generation_time, flash_count, hotspots = await self.generator.generate_daily_briefing(
+            logger.info(f"🕒 Generating briefing for window: {start_time.isoformat()} to {end_time.isoformat()}")
+            
+            # Generate briefing
+            briefing, generation_time, flash_alerts_count, hotspots = await self.generator.generate_daily_briefing(
                 start_time=start_time,
                 end_time=end_time
             )
             
-            # Store the generated briefing
+            if not briefing:
+                raise ValueError("Empty briefing returned from generator")
+            
+            # Update metrics
+            self.metrics['total_briefings'] += 1
+            self.metrics['last_generation_time'] = end_time
+            self.metrics['flash_alerts_today'] = flash_alerts_count
+            self.metrics['flash_alerts_total'] += flash_alerts_count
+            self.metrics['generation_time'] = generation_time
+            self.metrics['hotspots'] = hotspots
+            
+            # Store current briefing
             self.current_briefing = briefing
-            self.last_generated_time = datetime.now(timezone.utc)
-            self.last_refreshed_time = self.last_generated_time
+            self.last_generated_time = end_time
             
             # Update feed watcher metrics
             if self.feed_watcher:
-                hotspot_names = [r['name'] for r in hotspots] if hotspots else []
+                # No need to process hotspot names since hotspots are already strings
                 self.feed_watcher.update_briefing_metrics(
                     briefing_generated=True,
-                    refresh_success=True,
+                    refresh_success=False,
                     generation_time=generation_time,
-                    refresh_time=generation_time,  # First generation counts as refresh too
-                    flash_alerts=flash_count,
-                    regional_hotspots=hotspot_names
+                    flash_alerts=flash_alerts_count,
+                    regional_hotspots=hotspots
                 )
             
-            # Notify subscribers
-            self.send_notification('briefing_generated', {
-                'timestamp': self.last_generated_time.isoformat(),
-                'summary': briefing.get('executive_summary', {}).get('text', ''),
-                'flash_count': flash_count,
-                'total_articles': briefing.get('metadata', {}).get('total_articles', 0),
-                'regional_hotspots': hotspot_names
+            # Send notification
+            self.send_notification('new_briefing_generated', {
+                'timestamp': end_time.isoformat(),
+                'generation_time': generation_time,
+                'flash_alerts': flash_alerts_count
             })
             
-            logger.info(
-                f"Daily briefing generated in {generation_time:.2f}s with "
-                f"{flash_count} flash alerts and {len(hotspots)} regional hotspots"
-            )
+            logger.info(f"✅ Daily briefing generated successfully with {flash_alerts_count} flash alerts")
+            logger.info(f"⚡ Generation time: {generation_time:.2f}s")
+            logger.info(f"🌍 Active hotspots: {', '.join(hotspots) if hotspots else 'None'}")
             
             return briefing
             
         except Exception as e:
-            logger.error(f"Error generating daily briefing: {str(e)}", exc_info=True)
+            logger.error(f"🔴 Error generating daily briefing: {str(e)}", exc_info=True)
+            self.metrics['failed_generations'] += 1
             
-            # Update feed watcher metrics on failure
             if self.feed_watcher:
                 self.feed_watcher.update_briefing_metrics(
-                    briefing_generated=True,
+                    briefing_generated=False,
                     refresh_success=False,
                     generation_time=0.0,
-                    flash_alerts=0,
-                    regional_hotspots=[]
+                    flash_alerts=0
                 )
-                
             return None
-            
+
     async def refresh_current_briefing(self):
         """Refresh the current briefing with new information."""
         if not self.current_briefing:

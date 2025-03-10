@@ -9,6 +9,7 @@ from typing import Dict, Set, Optional, Tuple, List
 from email.utils import parsedate_to_datetime
 from time import mktime
 from .priority_feed_processor import PriorityFeedProcessor, ArticleEntry
+from config.settings import API_CALLS_PER_MINUTE, API_CALLS_PER_DAY
 
 logger = logging.getLogger(__name__)
 
@@ -24,14 +25,28 @@ class FeedConfiguration:
     briefing_refresh_interval: int = 3600  # 1 hour by default
 
 class FeedWatcher:
-    def __init__(self, config: Optional[FeedConfiguration] = None, ssl_context: Optional[ssl.SSLContext] = None):
+    """Main class for watching and processing RSS/Atom feeds."""
+    
+    def __init__(self, config: FeedConfiguration = None, 
+                 ssl_context: Optional[ssl.SSLContext] = None):
+        """Initialize the feed watcher."""
         self.config = config or FeedConfiguration()
-        self.session: Optional[aiohttp.ClientSession] = None
-        self.feeds: Dict[str, dict] = {}
-        self.logged_entries: Set[str] = set()
-        self.rate_limiter = RateLimiter()
+        self.priority_processor = PriorityFeedProcessor(API_CALLS_PER_MINUTE)
+        self.feed_metrics = {
+            'last_update_time': None,
+            'articles_by_feed': {},
+        }
         self.ssl_context = ssl_context or ssl.create_default_context()
-        self.priority_processor = PriorityFeedProcessor()
+        self.logged_entries = set()
+        self.session = None
+        self.healthy_feeds = set()
+        self.unhealthy_feeds = {}
+        self.briefing_status = {}  # Store briefing system metrics
+        self.feeds = {}  # Store feed metadata like etags and last-modified
+        self.rate_limiter = RateLimiter(
+            calls_per_minute=API_CALLS_PER_MINUTE,
+            calls_per_day=API_CALLS_PER_DAY
+        )
         self.feed_metrics = {
             'total_feeds': 0,
             'active_feeds': 0,
@@ -479,52 +494,189 @@ class FeedWatcher:
 
     def print_status(self):
         """Print current watcher status in a clean format."""
+        # ANSI Color codes
+        CYAN = '\033[96m'
+        GREEN = '\033[92m'
+        YELLOW = '\033[93m'
+        RED = '\033[91m'
+        BLUE = '\033[94m'
+        MAGENTA = '\033[95m'
+        BOLD = '\033[1m'
+        END = '\033[0m'
+
         status = self.get_watcher_status()
         queue_status = self.priority_processor.get_processing_status()
+        briefing_status = status.get('briefing_status', {})
         
-        logger.info("\n=== Feed Watcher Status ===")
-        logger.info(f"⏱️  Uptime: {status['uptime']}")
-        logger.info(f"📡 Active Feeds: {status['active_feeds']}")
-        logger.info(f"❌ Failed Feeds: {status['failed_feeds']}")
-        logger.info(f"📊 Data Received: {status['total_bytes'] / 1024:.1f}KB")
-        logger.info(f"🔄 Last Update: {status['last_update']}")
-        logger.info(f"\n🚦 Error Stats:")
-        logger.info(f"   Connection Errors: {status['connection_errors']}")
-        logger.info(f"   Parse Errors: {status['parse_errors']}")
-        logger.info(f"\n📈 Processing Queue:")
-        logger.info(f"   Articles Queued: {queue_status['queue_size']}")
-        logger.info(f"   Processing Rate: {queue_status['processing_rate']}")
-        logger.info(f"   Newest Article: {queue_status['newest_article']}")
-        logger.info(f"   Oldest Article: {queue_status['oldest_article']}")
+        print(f"\n{BOLD}{BLUE}==================== Feed Processing Status ===================={END}\n")
         
-        # Add Daily Briefing section to the status output if briefing metrics are available
-        if 'briefing_status' in status and status['briefing_status']:
-            briefing = status['briefing_status']
-            logger.info(f"\n📅 Daily Briefing:")
-            logger.info(f"   Last Generation: {briefing['last_generation']}")
-            logger.info(f"   Last Refresh: {briefing['last_refresh']} ({briefing['time_since_refresh']} ago)")
-            logger.info(f"   Reliability: {briefing['refresh_reliability']} ({briefing['total_refreshes']} total)")
-            logger.info(f"   Performance: {briefing['avg_generation_time']} gen, {briefing['avg_refresh_time']} refresh")
-            logger.info(f"   Flash Alerts: {briefing['flash_alerts_today']} today, {briefing['flash_alerts_total']} total")
+        print(f"{BOLD}{GREEN}⚡ Processing State:{END} RUNNING")
+        
+        print(f"\n{BOLD}{CYAN}📊 Queue Status:{END}")
+        print(f"   Queue Size: {BOLD}{queue_status['queue_size']}/{queue_status['peak_size']}{END} (current/peak)")
+        print(f"   Processed: {BOLD}{queue_status['processed']}/{queue_status['total']}{END}")
+        
+        print(f"\n{BOLD}{CYAN}📊 Performance Trend:{END}")
+        print(f"   Last minute: {BOLD}{queue_status['rate_per_minute']:.0f}{END} articles")
+        print(f"   Last hour: {BOLD}{queue_status['rate_per_hour']:.1f}{END} articles/hour")
+        
+        # Color code the completion time based on queue size
+        est_completion = queue_status['est_completion']
+        if 'hours' in est_completion:
+            completion_color = RED
+        elif 'minutes' in est_completion:
+            completion_color = YELLOW
+        else:
+            completion_color = GREEN
+        print(f"   Est. completion: {completion_color}{est_completion}{END}")
+
+        print(f"\n{BOLD}{CYAN}⚡ Processing:{END}")
+        print(f"   Rate: {BOLD}{queue_status['processing_rate']:.2f}{END} articles/minute")
+        print(f"   Avg/Med Time: {BOLD}{queue_status['avg_time']:.2f}s / {queue_status['median_time']:.2f}s{END}")
+        
+        # Color code API load
+        api_load = queue_status['api_load']
+        if api_load > 90:
+            api_color = RED
+        elif api_load > 70:
+            api_color = YELLOW
+        else:
+            api_color = GREEN
+        print(f"   API Load: {api_color}{api_load:.1f}%{END}")
+        
+        # Color code error rate
+        error_rate = queue_status['error_rate']
+        if error_rate > 10:
+            error_color = RED
+        elif error_rate > 5:
+            error_color = YELLOW
+        else:
+            error_color = GREEN
+        print(f"   Errors: {error_color}{error_rate:.1f}%{END}")
+        
+        if queue_status.get('current_article'):
+            print(f"\n{BOLD}{MAGENTA}⚙️ Now Processing ({queue_status['current_time']:.1f}s):{END}")
+            print(f"   {BOLD}{queue_status['current_article'].get('title', 'Unknown')[:50]}...{END}")
+            print(f"   {BLUE}{queue_status['current_article'].get('link', 'No link')}{END}")
+            print(f"   {queue_status['current_article'].get('pub_date', 'No date')}")
+
+        print(f"\n{BOLD}{CYAN}📋 Daily Briefing Status:{END}")
+        print(f"   Current Stage: {BOLD}{briefing_status.get('current_stage', 'Not running')}{END}")
+        
+        # Color code stage progress
+        progress = float(briefing_status.get('stage_progress', '0').rstrip('%'))
+        if progress > 75:
+            progress_color = GREEN
+        elif progress > 25:
+            progress_color = YELLOW
+        else:
+            progress_color = RED
+        print(f"   Stage Progress: {progress_color}{progress}%{END}")
+        
+        print(f"   Articles in Analysis: {BOLD}{briefing_status.get('articles_in_analysis', 0)}{END}")
+        print(f"   Pending Summaries: {BOLD}{briefing_status.get('pending_summaries', 0)}{END}")
+        
+        last_gen = briefing_status.get('last_generation', 'Never')
+        last_refresh = briefing_status.get('last_refresh', 'Never')
+        refresh_reliability = briefing_status.get('refresh_reliability', '0%')
+        
+        print(f"   Last Generation: {YELLOW}{last_gen}{END}")
+        print(f"   Last Refresh: {YELLOW}{last_refresh}{END}")
+        print(f"   Reliability: {GREEN}{refresh_reliability}{END}")
+        print(f"   Flash Alerts: {RED}{briefing_status.get('flash_alerts_today', 0)}{END} today, {BOLD}{briefing_status.get('flash_alerts_total', 0)}{END} total")
+
+        if briefing_status.get('regional_hotspots'):
+            hotspots = briefing_status['regional_hotspots']
+            hotspot_str = ", ".join(hotspots[:5])
+            if len(hotspots) > 5:
+                hotspot_str += f" and {len(hotspots) - 5} more"
+            print(f"   Active Hotspots: {RED}{hotspot_str}{END}")
+
+        print(f"\n{BOLD}{CYAN}🕒 Timeline:{END}")
+        if queue_status.get('latest_article'):
+            print(f"   Latest: {BOLD}{queue_status['latest_article'].get('title', 'Unknown')[:50]}{END}")
+            print(f"      {BLUE}{queue_status['latest_article'].get('link', 'No link')}{END}")
+            print(f"      {YELLOW}{queue_status['latest_article'].get('pub_date', 'No date')}{END} ({queue_status.get('latest_age', 'unknown')} ago)")
+
+        if queue_status.get('newest_article'):
+            print(f"   Newest: {BOLD}{queue_status['newest_article'].get('title', 'Unknown')[:50]}{END}")
+            print(f"      {BLUE}{queue_status['newest_article'].get('link', 'No link')}{END}")
+            print(f"      {YELLOW}{queue_status['newest_article'].get('pub_date', 'No date')}{END} ({queue_status.get('newest_age', 'unknown')} ago)")
+
+        if queue_status.get('oldest_article'):
+            print(f"   Oldest: {BOLD}{queue_status['oldest_article'].get('title', 'Unknown')[:50]}{END}")
+            print(f"      {BLUE}{queue_status['oldest_article'].get('link', 'No link')}{END}")
+            print(f"      {YELLOW}{queue_status['oldest_article'].get('pub_date', 'No date')}{END} ({queue_status.get('oldest_age', 'unknown')} ago)")
+
+        if status.get('feed_stats'):
+            print(f"\n{BOLD}{CYAN}🔍 Trending Domains:{END}")
+            domain_counts = {}
+            for url, stats in status['feed_stats'].items():
+                domain = url.split('/')[2]
+                if stats.get('updates', 0) > 0:
+                    domain_counts[domain] = domain_counts.get(domain, 0) + 1
             
-            if briefing['regional_hotspots']:
-                hotspot_str = ", ".join(briefing['regional_hotspots'][:5])
-                if len(briefing['regional_hotspots']) > 5:
-                    hotspot_str += f" and {len(briefing['regional_hotspots']) - 5} more"
-                logger.info(f"   Regional Hotspots: {hotspot_str}")
+            for domain, count in sorted(domain_counts.items(), key=lambda x: x[1], reverse=True)[:3]:
+                print(f"   {MAGENTA}{domain}{END}: {BOLD}{count}{END}")
+
+        print(f"\n{BOLD}{CYAN}📈 Article Age:{END}")
+        if queue_status.get('age_distribution'):
+            for age, count in queue_status['age_distribution'].items():
+                print(f"   {YELLOW}{age:6}{END}: {BOLD}{count}{END}")
+
+        print(f"\n{BOLD}{CYAN}⚙️ System:{END}")
+        print(f"   Runtime: {BOLD}{status['uptime']}{END}")
+        print(f"   Success Streak: {GREEN}{queue_status.get('success_streak', 0)}{END}")
+        print(f"   Active Feeds: {BOLD}{status['active_feeds']}{END}")
         
-        if status['feed_stats']:
-            logger.info("\n📊 Feed Statistics:")
-            for url, feed_stat in status['feed_stats'].items():
-                logger.info(f"\n   {url}:")
-                logger.info(f"   ├─ Success Rate: {feed_stat['success_rate']}")
-                logger.info(f"   ├─ Updates: {feed_stat['updates']}")
-                logger.info(f"   ├─ Errors: {feed_stat['errors']}")
-                logger.info(f"   ├─ Avg Processing: {feed_stat['avg_processing_time']}")
-                logger.info(f"   ├─ Last Update: {feed_stat['last_update']}")
-                logger.info(f"   └─ Articles: {feed_stat['articles']['new']} new, "
-                          f"{feed_stat['articles']['duplicates']} duplicates")
+        # Print errors in red at the bottom of the status
+        if status['connection_errors'] > 0 or status['parse_errors'] > 0:
+            print(f"\n{RED}🚦 Error Summary:")
+            print(f"   Connection Errors: {status['connection_errors']}")
+            print(f"   Parse Errors: {status['parse_errors']}{END}")
+
+        print(f"\n{BOLD}{BLUE}=========================================================={END}\n")
 
 class RateLimiter:
-    def __init__(self):
-        self._error_count = 0
+    """Rate limiter for API calls"""
+    def __init__(self, calls_per_minute: int, calls_per_day: int):
+        self.calls_per_minute = calls_per_minute
+        self.calls_per_day = calls_per_day
+        self.minute_calls = 0
+        self.daily_calls = 0
+        self.last_reset_minute = time.time()
+        self.last_reset_day = time.time()
+
+    def check_rate_limit(self) -> bool:
+        """Check if we can make another API call."""
+        current_time = time.time()
+        
+        # Reset minute counter if a minute has passed
+        if current_time - self.last_reset_minute >= 60:
+            self.minute_calls = 0
+            self.last_reset_minute = current_time
+            
+        # Reset daily counter if a day has passed
+        if current_time - self.last_reset_day >= 86400:
+            self.daily_calls = 0
+            self.last_reset_day = current_time
+            
+        # Check limits
+        if self.minute_calls >= self.calls_per_minute:
+            return False
+        if self.daily_calls >= self.calls_per_day:
+            return False
+            
+        return True
+        
+    def record_call(self):
+        """Record that we made an API call."""
+        self.minute_calls += 1
+        self.daily_calls += 1
+        
+    def get_remaining_calls(self) -> Tuple[int, int]:
+        """Get remaining API calls for minute and day."""
+        return (
+            max(0, self.calls_per_minute - self.minute_calls),
+            max(0, self.calls_per_day - self.daily_calls)
+        )
