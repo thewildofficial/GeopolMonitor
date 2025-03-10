@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}GeopolMonitor{% endblock %}</title>
+    
+    <!-- Common CSS -->
+    <link rel="stylesheet" href="/static/css/base.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    
+    <!-- Page-specific styles -->
+    {% block styles %}{% endblock %}
+</head>
+<body>
+    <nav class="main-nav">
+        <div class="nav-container">
+            <a href="/" class="nav-logo">GeopolMonitor</a>
+            <div class="nav-links">
+                <a href="/" class="nav-item">Home</a>
+                <a href="/briefing" class="nav-item">Briefing</a>
+                <a href="/map" class="nav-item">Map</a>
+                <a href="/about" class="nav-item">About</a>
+            </div>
+        </div>
+    </nav>
+
+    {% block content %}{% endblock %}
+
+    <footer class="main-footer">
+        <div class="footer-container">
+            <p>&copy; {{ datetime.now().year }} GeopolMonitor. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- Common JavaScript -->
+    <script src="/static/js/base.js"></script>
+    
+    <!-- Page-specific scripts -->
+    {% block scripts %}{% endblock %}
+</body>
+</html>

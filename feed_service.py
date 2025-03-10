@@ -54,7 +54,8 @@ def load_feed_urls():
 async def run_feed_watcher():
     """Initialize and run the feed watcher service"""
     # Initialize database tables
-    init_db()  # This now handles briefing tables initialization internally
+    init_db()
+    init_briefing_tables()
     logger.info("📊 Database tables initialized")
     
     config = FeedConfiguration(
@@ -155,8 +156,6 @@ async def run_feed_watcher():
                     CLEAR_DOWN = '\033[J'    # Clear screen from cursor down
                     ALT_SCREEN = '\033[?1049h'  # Switch to alternate screen buffer
                     MAIN_SCREEN = '\033[?1049l'  # Return to main screen buffer
-                    SAVE_CURSOR = '\033[s'    # Save cursor position
-                    RESTORE_CURSOR = '\033[u' # Restore cursor position
                     
                     try:
                         # Switch to alternate screen buffer
@@ -169,17 +168,11 @@ async def run_feed_watcher():
                                 scheduler_status = briefing_scheduler.get_scheduler_status()
                                 feed_watcher.briefing_status = scheduler_status
                                 
-                                # Save cursor position before status update
-                                print(SAVE_CURSOR, end='', flush=True)
-                                
-                                # Move cursor to home position and clear screen from cursor down
+                                # Move cursor to home position and clear screen
                                 print(HOME + CLEAR_DOWN, end='', flush=True)
                                 
                                 # Display status (this will now write at cursor position)
                                 feed_watcher.print_status()
-                                
-                                # Restore cursor position to preserve any error messages
-                                print(RESTORE_CURSOR, end='', flush=True)
                                 
                                 last_update = current_time
                                 
@@ -221,6 +214,7 @@ if __name__ == "__main__":
     try:
         # Initialize database and briefing tables
         init_db()
+        init_briefing_tables()
         logger.info("📦 Database and briefing tables initialized")
         
         # Run the feed watcher

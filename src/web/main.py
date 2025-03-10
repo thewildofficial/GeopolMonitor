@@ -21,6 +21,7 @@ from ..database.models import (
 from ..core.processor import ImageExtractor
 from ..utils.text import clean_text
 from .websocket_manager import manager
+from .controllers.briefing_controller import router as briefing_router  # Import the briefing router
 from config.settings import STATIC_DIR, TEMPLATES_DIR, WEB_HOST
 from datetime import datetime, timedelta
 
@@ -59,6 +60,9 @@ def create_app():
     
     # Create templates with footer context for all pages
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+    
+    # Register API routers
+    app.include_router(briefing_router)  # Add the briefing router
     
     # Remove the middleware that's causing the error
     # @app.middleware("http")
@@ -243,6 +247,14 @@ def create_app():
         return templates.TemplateResponse(
             "about.html",
             {"request": request, "free_palestine_link": {"url": "https://www.pcrf.net/", "text": "Free Palestine"}}
+        )
+
+    # Add Briefing page route
+    @app.get("/briefing", response_class=HTMLResponse)
+    async def briefing_page(request: Request):
+        return templates.TemplateResponse(
+            "briefing.html",
+            {"request": request, "datetime": datetime, "free_palestine_link": {"url": "https://www.pcrf.net/", "text": "Free Palestine"}}
         )
 
     @app.get("/api/news")
@@ -694,6 +706,15 @@ def create_app():
                     }
                 }
             )
+
+    @app.websocket("/ws/briefing")
+    async def briefing_websocket_endpoint(websocket: WebSocket):
+        await manager.connect(websocket)
+        try:
+            while True:
+                await websocket.receive_text()  # Keep connection alive
+        except:
+            manager.disconnect(websocket)
 
     @app.websocket("/ws")
     async def websocket_endpoint(websocket: WebSocket):
