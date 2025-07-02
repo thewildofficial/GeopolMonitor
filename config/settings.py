@@ -27,9 +27,18 @@ def get_api_keys() -> List[str]:
         i += 1
     return keys if keys else [os.getenv("GEMINI_API_KEY")]  # Fallback to single key
 
-# Telegram Configuration
+# Telegram Bot Configuration (existing bot)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID")
+
+# Telegram Client Configuration (new monitoring client)
+TELEGRAM_API_ID = int(os.getenv("TELEGRAM_API_ID", "0"))
+TELEGRAM_API_HASH = os.getenv("TELEGRAM_API_HASH", "")
+TELEGRAM_SESSION_NAME = os.getenv("TELEGRAM_SESSION_NAME", "geopol_monitor")
+TELEGRAM_RATE_LIMIT_DELAY = float(os.getenv("TELEGRAM_RATE_LIMIT_DELAY", "2.0"))
+
+# Redis Configuration (for message buffering)
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
 # API Configuration
 GEMINI_API_KEYS = get_api_keys()

@@ -22,11 +22,11 @@ except ImportError:
         return conn
 
 
-def init_briefing_tables():
+async def init_briefing_tables():
     """Initialize the database tables for briefing storage."""
-    with get_db() as conn:
+    async with get_db() as conn:
         # Main briefing document table
-        conn.execute('''
+        await conn.execute('''
         CREATE TABLE IF NOT EXISTS briefing_document (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             generated_at TIMESTAMP NOT NULL,
@@ -40,7 +40,7 @@ def init_briefing_tables():
         ''')
         
         # Briefing sections table (flash, summary, context)
-        conn.execute('''
+        await conn.execute('''
         CREATE TABLE IF NOT EXISTS briefing_section (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             briefing_id INTEGER NOT NULL,
@@ -52,7 +52,7 @@ def init_briefing_tables():
         ''')
         
         # Briefing items table (individual news items)
-        conn.execute('''
+        await conn.execute('''
         CREATE TABLE IF NOT EXISTS briefing_item (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             section_id INTEGER NOT NULL,
@@ -68,7 +68,7 @@ def init_briefing_tables():
         ''')
         
         # Regional summaries table
-        conn.execute('''
+        await conn.execute('''
         CREATE TABLE IF NOT EXISTS regional_summary (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             briefing_id INTEGER NOT NULL,
@@ -80,7 +80,7 @@ def init_briefing_tables():
         ''')
         
         # Briefing metrics table
-        conn.execute('''
+        await conn.execute('''
         CREATE TABLE IF NOT EXISTS briefing_metrics (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             briefing_id INTEGER NOT NULL,
@@ -94,11 +94,11 @@ def init_briefing_tables():
         )
         ''')
         
-        conn.commit()
+        await conn.commit()
         logger.info("Briefing database tables initialized")
 
 
-def save_briefing(briefing: Dict[str, Any]) -> int:
+async def save_briefing(briefing: Dict[str, Any]) -> int:
     """Save a briefing to the database.
     
     Args:

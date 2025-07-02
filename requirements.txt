@@ -37,3 +37,8 @@ python-dateutil==2.8.2
 flask
 apscheduler
 sqlalchemy
+
+# Telegram client dependencies
+pyrogram==2.0.106
+tgcrypto==1.2.5
+redis==5.0.1
