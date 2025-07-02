@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.pool import NullPool
 from sqlalchemy import text
 from pathlib import Path
+from sqlalchemy.exc import SQLAlchemyError
 
 from .models.telegram_models import TelegramBase, TelegramChannel, TelegramMessage, ChannelMetric
 
@@ -57,6 +58,38 @@ def get_database_url(db_path: Optional[str] = None) -> str:
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
     
     return f"sqlite+aiosqlite:///{db_path}"
+
+
+def get_sync_database_url(db_path: Optional[str] = None) -> str:
+    """
+    Get the database URL for synchronous SQLAlchemy connection (used by Alembic).
+    
+    Args:
+        db_path: Optional custom database path. If not provided, uses default SQLite.
+        
+    Returns:
+        str: Synchronous database URL
+    """
+    # Check for PostgreSQL configuration first (for production)
+    if os.getenv('POSTGRES_URL'):
+        # Use psycopg2 for sync operations
+        return os.getenv('POSTGRES_URL').replace('postgresql://', 'postgresql+psycopg2://')
+    
+    # Check for custom database URL and convert to sync
+    if os.getenv('TELEGRAM_DATABASE_URL'):
+        sync_url = os.getenv('TELEGRAM_DATABASE_URL')
+        # Convert async drivers to sync equivalents
+        sync_url = sync_url.replace('postgresql+asyncpg://', 'postgresql+psycopg2://')
+        sync_url = sync_url.replace('sqlite+aiosqlite://', 'sqlite:///')
+        return sync_url
+    
+    # Default to SQLite with sync driver
+    db_path = db_path or DEFAULT_SQLITE_DB_PATH
+    
+    # Ensure directory exists
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    
+    return f"sqlite:///{db_path}"
 
 
 async def init_telegram_db(database_url: Optional[str] = None, echo: bool = False) -> AsyncEngine:
