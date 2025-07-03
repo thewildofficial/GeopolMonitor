@@ -1,280 +1,273 @@
-/* ==========================================================================
-   OSINT Design System - Global Styles
-   ========================================================================== */
+/* Geomonitor - Real-Time Intelligence UI Design System v1.0 */
 
 :root {
-  /* Professional OSINT Color Palette */
-  --osint-bg-primary: #030712;        /* Deep navy/black primary background */
-  --osint-bg-secondary: #0A0F1C;      /* Secondary background */
-  --osint-surface: #0F1629;           /* Surface elements */
-  --osint-surface-elevated: #1A2332;  /* Elevated surfaces */
-  --osint-surface-card: #1E293B;      /* Card backgrounds */
+  /* Global Palette */
+  --background-primary: #111827;
+  --background-secondary: #1F2937;
+  --background-tertiary: #374151;
   
-  /* Professional Accent Colors */
-  --osint-accent-cyan: #00D9FF;       /* Primary cyan accent */
-  --osint-accent-cyan-bright: #1FFBFF; /* Bright cyan highlights */
-  --osint-accent-red: #FF4757;        /* Alert/threat red */
-  --osint-accent-green: #2ED573;      /* Success/safe green */
-  --osint-accent-yellow: #FFC107;     /* Warning yellow */
+  --text-primary: #E5E7EB;
+  --text-secondary: #9CA3AF;
+  --text-accent: #6EE7B7;
+  --text-highlight: #6EE7B7;
   
-  /* Text Colors - High Contrast */
-  --osint-text-primary: #F8FAFC;      /* Primary text - near white */
-  --osint-text-secondary: #CBD5E1;    /* Secondary text - light gray */
-  --osint-text-muted: #94A3B8;        /* Muted text */
-  --osint-text-cyan: #00D9FF;         /* Cyan text for highlights */
+  --border-primary: #374151;
+  --border-interactive: #4B5563;
   
-  /* Border and Divider Colors */
-  --osint-border: #334155;            /* Subtle borders */
-  --osint-border-hover: #475569;      /* Hover state borders */
+  --accent-primary: #6EE7B7;
+  --accent-secondary: #34D399;
   
-  /* Alert Colors */
-  --osint-alert-high-bg: rgba(255, 71, 87, 0.1);
-  --osint-alert-high-fg: var(--osint-accent-red);
-  --osint-alert-bg: rgba(255, 193, 7, 0.1);
-  --osint-alert-fg: var(--osint-accent-yellow);
+  --status-high: #F97316;
+  --status-medium: #FBBF24;
+  --status-low: #3B82F6;
+  --status-active: #10B981;
+  --status-inactive: #6B7280;
   
-  /* Professional Shadows */
-  --osint-shadow-card: 0 2px 8px rgba(0, 0, 0, 0.4);
-  --osint-shadow-card-hover: 0 4px 16px rgba(0, 217, 255, 0.15);
-  --osint-shadow-card-elevated: 0 8px 24px rgba(0, 0, 0, 0.5);
-  --osint-shadow-map: 0 4px 20px rgba(0, 0, 0, 0.6);
+  --data-viz-glow-primary: #F97316;
+  --data-viz-glow-secondary: #3B82F6;
+  --data-viz-chart-line: #6EE7B7;
+  --data-viz-chart-gradient-start: rgba(110, 231, 183, 0.2);
+  --data-viz-chart-gradient-end: rgba(110, 231, 183, 0);
   
-  /* Glow Effects */
-  --osint-glow-cyan: 0 0 8px rgba(0, 217, 255, 0.3);
-  --osint-glow-red: 0 0 8px rgba(255, 71, 87, 0.3);
-  --osint-glow-green: 0 0 8px rgba(46, 213, 115, 0.3);
+  /* Typography */
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-size-xs: 0.75rem;   /* 12px */
+  --font-size-sm: 0.875rem;  /* 14px */
+  --font-size-md: 1rem;      /* 16px */
+  --font-size-lg: 1.125rem;  /* 18px */
+  --font-size-xl: 1.5rem;    /* 24px */
   
-  /* Typography Scale */
-  --font-family-primary: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-size-xs: 0.75rem;
-  --font-size-sm: 0.875rem;
-  --font-size-base: 1rem;
-  --font-size-lg: 1.125rem;
-  --font-size-xl: 1.25rem;
-  --font-size-2xl: 1.5rem;
-  --font-size-3xl: 1.875rem;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
   
-  /* Spacing Scale */
-  --space-1: 0.25rem;
-  --space-2: 0.5rem;
-  --space-3: 0.75rem;
-  --space-4: 1rem;
-  --space-5: 1.25rem;
-  --space-6: 1.5rem;
-  --space-8: 2rem;
-  --space-10: 2.5rem;
-  --space-12: 3rem;
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-xxl: 48px;
   
-  /* Border Radius */
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
-  --radius-xl: 12px;
-  --radius-full: 9999px;
-  
-  /* Transitions */
-  --transition-fast: 0.15s ease;
-  --transition-base: 0.2s ease;
-  --transition-slow: 0.3s ease;
+  /* Effects */
+  --border-radius: 8px;
+  --box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  --glow: 0 0 8px;
 }
 
-/* ==========================================================================
-   Base Reset & Typography
-   ========================================================================== */
-
-*,
-*::before,
-*::after {
+* {
+  margin: 0;
+  padding: 0;
   box-sizing: border-box;
 }
 
-html {
+html,
+body {
   height: 100%;
-  font-family: var(--font-family-primary);
+  font-family: var(--font-family);
+  font-size: var(--font-size-md);
+  background-color: var(--background-primary);
+  color: var(--text-primary);
   line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
   margin: 0;
   padding: 0;
-  height: 100%;
-  background: var(--osint-bg-primary);
-  color: var(--osint-text-primary);
   overflow-x: hidden;
 }
 
-/* ==========================================================================
-   Typography
-   ========================================================================== */
-
-h1, h2, h3, h4, h5, h6 {
-  margin: 0;
-  font-weight: 600;
-  line-height: 1.2;
-  color: var(--osint-text-primary);
+/* Typography Scale */
+h1 {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-lg);
 }
 
-h1 { font-size: var(--font-size-3xl); }
-h2 { font-size: var(--font-size-2xl); }
-h3 { font-size: var(--font-size-xl); }
-h4 { font-size: var(--font-size-lg); }
-h5 { font-size: var(--font-size-base); }
-h6 { font-size: var(--font-size-sm); }
+h2 {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-md);
+}
+
+h3 {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-sm);
+}
 
 p {
-  margin: 0;
-  color: var(--osint-text-secondary);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-regular);
+  color: var(--text-primary);
+  line-height: 1.6;
 }
 
-/* ==========================================================================
-   Utility Classes
-   ========================================================================== */
-
-.text-primary { color: var(--osint-text-primary); }
-.text-secondary { color: var(--osint-text-secondary); }
-.text-muted { color: var(--osint-text-muted); }
-.text-cyan { color: var(--osint-text-cyan); }
-.text-red { color: var(--osint-accent-red); }
-.text-green { color: var(--osint-accent-green); }
-
-.bg-primary { background: var(--osint-bg-primary); }
-.bg-secondary { background: var(--osint-bg-secondary); }
-.bg-surface { background: var(--osint-surface); }
-.bg-card { background: var(--osint-surface-card); }
-
-.font-light { font-weight: 300; }
-.font-normal { font-weight: 400; }
-.font-medium { font-weight: 500; }
-.font-semibold { font-weight: 600; }
-.font-bold { font-weight: 700; }
-
-.text-xs { font-size: var(--font-size-xs); }
-.text-sm { font-size: var(--font-size-sm); }
-.text-base { font-size: var(--font-size-base); }
-.text-lg { font-size: var(--font-size-lg); }
-.text-xl { font-size: var(--font-size-xl); }
-
-/* ==========================================================================
-   Component Base Styles
-   ========================================================================== */
-
-.card {
-  background: var(--osint-surface-card);
-  border: 1px solid var(--osint-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--osint-shadow-card);
-  transition: all var(--transition-base);
+small {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
 }
 
-.card:hover {
-  box-shadow: var(--osint-shadow-card-hover);
-  transform: translateY(-1px);
+/* Focus Management */
+*:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
 }
 
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-2) var(--space-4);
-  border: 1px solid var(--osint-border);
-  border-radius: var(--radius-md);
-  background: var(--osint-surface);
-  color: var(--osint-text-secondary);
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-  text-decoration: none;
-  cursor: pointer;
-  transition: all var(--transition-base);
-}
-
-.btn:hover {
-  background: var(--osint-surface-elevated);
-  border-color: var(--osint-border-hover);
-  color: var(--osint-text-primary);
-}
-
-.btn-primary {
-  background: var(--osint-accent-cyan);
-  border-color: var(--osint-accent-cyan);
-  color: var(--osint-bg-primary);
-}
-
-.btn-primary:hover {
-  background: var(--osint-accent-cyan-bright);
-  border-color: var(--osint-accent-cyan-bright);
-  box-shadow: var(--osint-glow-cyan);
-}
-
-/* ==========================================================================
-   Scrollbar Styling
-   ========================================================================== */
-
+/* Scrollbar Styling */
 ::-webkit-scrollbar {
   width: 8px;
-  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--osint-bg-secondary);
+  background: var(--background-secondary);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--osint-border);
-  border-radius: var(--radius-full);
+  background: var(--border-interactive);
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--osint-border-hover);
+  background: var(--accent-primary);
 }
 
-/* ==========================================================================
-   Loading and Animation States
-   ========================================================================== */
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+/* Component Base Classes */
+.panel {
+  background-color: rgba(31, 41, 55, 0.5);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--border-radius);
+  padding: var(--spacing-lg);
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+.tag {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  display: inline-block;
 }
 
-.animate-pulse {
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+.tag-high {
+  background-color: rgba(249, 115, 22, 0.2);
+  color: var(--status-high);
 }
 
-.animate-fadeIn {
-  animation: fadeIn 0.3s ease-out;
+.tag-medium {
+  background-color: rgba(251, 191, 36, 0.2);
+  color: var(--status-medium);
 }
 
-/* ==========================================================================
-   Responsive Design
-   ========================================================================== */
+.tag-low {
+  background-color: rgba(59, 130, 246, 0.2);
+  color: var(--status-low);
+}
 
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.status-indicator.active {
+  color: var(--status-active);
+}
+
+.status-indicator.inactive {
+  color: var(--status-inactive);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: currentColor;
+}
+
+.status-indicator.active .status-dot {
+  box-shadow: var(--glow) var(--status-active);
+}
+
+/* Utility Classes */
+.text-xs { font-size: var(--font-size-xs); }
+.text-sm { font-size: var(--font-size-sm); }
+.text-md { font-size: var(--font-size-md); }
+.text-lg { font-size: var(--font-size-lg); }
+.text-xl { font-size: var(--font-size-xl); }
+
+.font-regular { font-weight: var(--font-weight-regular); }
+.font-medium { font-weight: var(--font-weight-medium); }
+.font-semibold { font-weight: var(--font-weight-semibold); }
+.font-bold { font-weight: var(--font-weight-bold); }
+
+.text-primary { color: var(--text-primary); }
+.text-secondary { color: var(--text-secondary); }
+.text-accent { color: var(--text-accent); }
+.text-highlight { color: var(--text-highlight); }
+
+.bg-primary { background-color: var(--background-primary); }
+.bg-secondary { background-color: var(--background-secondary); }
+.bg-tertiary { background-color: var(--background-tertiary); }
+
+.border-primary { border-color: var(--border-primary); }
+.border-interactive { border-color: var(--border-interactive); }
+
+.space-xs { margin: var(--spacing-xs); }
+.space-sm { margin: var(--spacing-sm); }
+.space-md { margin: var(--spacing-md); }
+.space-lg { margin: var(--spacing-lg); }
+.space-xl { margin: var(--spacing-xl); }
+.space-xxl { margin: var(--spacing-xxl); }
+
+.p-xs { padding: var(--spacing-xs); }
+.p-sm { padding: var(--spacing-sm); }
+.p-md { padding: var(--spacing-md); }
+.p-lg { padding: var(--spacing-lg); }
+.p-xl { padding: var(--spacing-xl); }
+.p-xxl { padding: var(--spacing-xxl); }
+
+.gap-xs { gap: var(--spacing-xs); }
+.gap-sm { gap: var(--spacing-sm); }
+.gap-md { gap: var(--spacing-md); }
+.gap-lg { gap: var(--spacing-lg); }
+.gap-xl { gap: var(--spacing-xl); }
+.gap-xxl { gap: var(--spacing-xxl); }
+
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.items-center { align-items: center; }
+.justify-center { justify-content: center; }
+.justify-between { justify-content: space-between; }
+.justify-end { justify-content: flex-end; }
+
+.w-full { width: 100%; }
+.h-full { height: 100%; }
+.min-h-screen { min-height: 100vh; }
+
+.rounded { border-radius: var(--border-radius); }
+.shadow { box-shadow: var(--box-shadow); }
+
+.transition { transition: all 0.2s ease; }
+
+/* Responsive Design */
 @media (max-width: 768px) {
-  :root {
-    --font-size-xs: 0.7rem;
-    --font-size-sm: 0.8rem;
-    --font-size-base: 0.9rem;
-    --font-size-lg: 1rem;
-    --font-size-xl: 1.125rem;
-    --font-size-2xl: 1.25rem;
-    --font-size-3xl: 1.5rem;
+  .panel {
+    padding: var(--spacing-md);
   }
-}
-
-/* ==========================================================================
-   Print Styles
-   ========================================================================== */
-
-@media print {
-  * {
-    background: white !important;
-    color: black !important;
-    box-shadow: none !important;
+  
+  h1 {
+    font-size: var(--font-size-lg);
+  }
+  
+  h2 {
+    font-size: var(--font-size-md);
   }
 } 

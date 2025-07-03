@@ -1,229 +1,159 @@
-<script lang="ts">
+<script>
   import { onMount } from 'svelte';
-  import { slide } from 'svelte/transition';
-  import { filteredMessages, messageStats } from '$stores/filters';
-  import { websocketState, connectionQuality } from '$stores/websocket';
+  import { webSocketStore } from '$lib/stores/websocket';
+  import { filterStore } from '$lib/stores/filters';
   import MessageCard from './MessageCard.svelte';
-  import type { TelegramMessage } from '$lib/types';
 
-  // Component state
-  let feedContainer: HTMLElement;
-  let autoScroll = true;
-  let isAtBottom = true;
+  let filteredMessages = [];
+  let wsState = null;
+  let filterState = null;
 
-  // Reactive declarations
-  $: messages = $filteredMessages;
-  $: stats = $messageStats;
-  $: isConnected = $websocketState.connected;
-
-  // Handle scroll events
-  function handleScroll(event: Event) {
-    const target = event.target as HTMLElement;
-    const threshold = 100;
-    isAtBottom = target.scrollTop + target.clientHeight >= target.scrollHeight - threshold;
+  // Subscribe to stores
+  onMount(() => {
+    console.log('🔴 TelegramFeed component initialized');
     
-    if (!isAtBottom) {
-      autoScroll = false;
-    }
+    // Subscribe to WebSocket store
+    const unsubscribeWS = webSocketStore.subscribe(value => {
+      wsState = value;
+      console.log('📡 WebSocket state updated:', value);
+    });
+
+    // Subscribe to filter store
+    const unsubscribeFilter = filterStore.subscribe(value => {
+      filterState = value;
+      console.log('🔍 Filter state updated:', value);
+    });
+
+    // Connect WebSocket
+    webSocketStore.connect();
+
+    // Cleanup function
+    return () => {
+      unsubscribeWS();
+      unsubscribeFilter();
+    };
+  });
+
+  // Filter messages based on current filter state
+  $: if (wsState && filterState) {
+    filteredMessages = wsState.messages.filter(message => {
+      // Apply filters
+      if (filterState.threatLevel && message.threatLevel !== filterState.threatLevel) {
+        return false;
+      }
+      if (filterState.channel && message.channel !== filterState.channel) {
+        return false;
+      }
+      if (filterState.searchTerm && !message.content.toLowerCase().includes(filterState.searchTerm.toLowerCase())) {
+        return false;
+      }
+      return true;
+    });
+  } else if (wsState) {
+    filteredMessages = wsState.messages;
   }
 
-  // Auto-scroll to bottom when new messages arrive
-  $: if (autoScroll && isAtBottom && feedContainer) {
-    setTimeout(() => {
-      feedContainer.scrollTop = feedContainer.scrollHeight;
-    }, 50);
-  }
-
-  // Scroll to bottom
-  function scrollToBottom() {
-    autoScroll = true;
-    if (feedContainer) {
-      feedContainer.scrollTo({
-        top: feedContainer.scrollHeight,
-        behavior: 'smooth'
-      });
-    }
-  }
-
-  // Handle message actions
-  function handleMessageAction(event: CustomEvent) {
-    const { action, messageId } = event.detail;
-    console.log(`Action ${action} on message ${messageId}`);
+  function handleMessageAction(event) {
+    console.log('Message action:', event.detail);
+    // Handle message actions like flag, save, etc.
   }
 </script>
 
 <div class="telegram-feed">
-  <!-- Header -->
-  <div class="feed-header">
-    <div class="header-left">
-      <h2 class="feed-title">🔴 LIVE TELEGRAM FEED</h2>
-      <div class="connection-status" class:connected={isConnected}>
-        {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
-      </div>
-    </div>
-    <div class="header-right">
-      <div class="stats-summary">
-        <span class="stat-item">
-          <span class="stat-value">{stats.total}</span>
-          <span class="stat-label">Messages</span>
+  <div class="panel">
+    <div class="feed-header">
+      <h1>Live Intelligence Feed</h1>
+      <div class="connection-status">
+        <span class="status-indicator {wsState?.connected ? 'active' : 'inactive'}">
+          <div class="status-dot"></div>
+          {wsState?.connected ? 'Connected' : 'Disconnected'}
         </span>
-        <span class="stat-item">
-          <span class="stat-value threat-high">{stats.threatBreakdown.high}</span>
-          <span class="stat-label">High Threat</span>
+        <span class="message-count">
+          {filteredMessages.length} messages
         </span>
       </div>
     </div>
-  </div>
 
-  <!-- Message feed -->
-  <div class="feed-content">
-    <div 
-      class="message-container"
-      bind:this={feedContainer}
-      on:scroll={handleScroll}
-    >
-      {#if messages.length === 0}
-        <div class="empty-state">
-          <div class="empty-icon">🛰️</div>
-          <h3>Monitoring Global Communications</h3>
-          <p>Waiting for intelligence signals...</p>
-        </div>
-      {:else}
-        {#each messages as message (message.id)}
+    <div class="feed-content">
+      {#if filteredMessages.length > 0}
+        {#each filteredMessages as message (message.id)}
           <MessageCard {message} on:action={handleMessageAction} />
         {/each}
+      {:else}
+        <div class="no-messages">
+          <p>No messages match current filters</p>
+        </div>
       {/if}
     </div>
-
-    <!-- Scroll to bottom button -->
-    {#if !isAtBottom && messages.length > 0}
-      <button 
-        class="scroll-bottom-btn"
-        on:click={scrollToBottom}
-        transition:slide={{ duration: 200 }}
-      >
-        ⬇️ New messages
-      </button>
-    {/if}
   </div>
 </div>
 
 <style>
   .telegram-feed {
-    display: flex;
-    flex-direction: column;
-    height: 100vh;
-    background: var(--osint-bg-primary);
-    color: var(--osint-text-primary);
-    font-family: 'Inter', system-ui, sans-serif;
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: var(--spacing-lg);
   }
 
   .feed-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 1rem 1.5rem;
-    background: var(--osint-surface);
-    border-bottom: 1px solid var(--osint-border);
+    margin-bottom: var(--spacing-lg);
+    padding-bottom: var(--spacing-md);
+    border-bottom: 1px solid var(--border-primary);
   }
 
-  .header-left {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-  }
-
-  .feed-title {
+  .feed-header h1 {
     margin: 0;
-    font-size: 1.25rem;
-    font-weight: 600;
-    color: var(--osint-accent-cyan);
+    color: var(--text-primary);
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-bold);
   }
 
   .connection-status {
-    font-size: 0.875rem;
-    color: var(--osint-accent-red);
-  }
-
-  .connection-status.connected {
-    color: var(--osint-accent-green);
-  }
-
-  .stats-summary {
     display: flex;
-    gap: 1.5rem;
-  }
-
-  .stat-item {
-    display: flex;
-    flex-direction: column;
     align-items: center;
-    gap: 0.25rem;
+    gap: var(--spacing-lg);
   }
 
-  .stat-value {
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: var(--osint-text-primary);
-  }
-
-  .stat-value.threat-high {
-    color: var(--osint-accent-red);
-  }
-
-  .stat-label {
-    font-size: 0.75rem;
-    color: var(--osint-text-muted);
-    text-transform: uppercase;
+  .message-count {
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    font-weight: var(--font-weight-medium);
   }
 
   .feed-content {
-    flex: 1;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .message-container {
-    height: 100%;
-    overflow-y: auto;
-    scroll-behavior: smooth;
-    padding: 1rem;
-  }
-
-  .empty-state {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
+    gap: var(--spacing-md);
+  }
+
+  .no-messages {
     text-align: center;
-    color: var(--osint-text-muted);
+    padding: var(--spacing-xxl);
+    color: var(--text-secondary);
   }
 
-  .empty-icon {
-    font-size: 4rem;
-    margin-bottom: 1rem;
-    opacity: 0.6;
+  .no-messages p {
+    margin: 0;
+    font-style: italic;
   }
 
-  .empty-state h3 {
-    margin: 0 0 0.5rem 0;
-    color: var(--osint-text-secondary);
-  }
-
-  .scroll-bottom-btn {
-    position: absolute;
-    bottom: 1rem;
-    left: 50%;
-    transform: translateX(-50%);
-    padding: 0.75rem 1.5rem;
-    background: var(--osint-accent-cyan);
-    color: var(--osint-bg-primary);
-    border: none;
-    border-radius: 24px;
-    font-weight: 600;
-    cursor: pointer;
-    box-shadow: var(--osint-shadow-card-elevated);
-    z-index: 10;
+  @media (max-width: 768px) {
+    .telegram-feed {
+      padding: var(--spacing-md);
+    }
+    
+    .feed-header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--spacing-md);
+    }
+    
+    .connection-status {
+      gap: var(--spacing-md);
+    }
   }
 </style> 

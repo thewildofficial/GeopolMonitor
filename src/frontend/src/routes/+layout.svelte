@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import '../lib/styles/global.css';
+  import '$lib/styles/global.css';
 
   onMount(() => {
     // Initialize any global app state here
@@ -8,23 +8,15 @@
   });
 </script>
 
-<main class="app">
+<main>
   <slot />
 </main>
 
 <style>
-  :global(html, body) {
-    margin: 0;
-    padding: 0;
-    height: 100%;
-    font-family: 'Inter', system-ui, sans-serif;
-    background: var(--osint-bg-primary);
-    color: var(--osint-text-primary);
-  }
-
-  .app {
-    height: 100vh;
-    width: 100vw;
-    overflow: hidden;
+  main {
+    width: 100%;
+    min-height: 100vh;
+    background-color: var(--background-primary);
+    color: var(--text-primary);
   }
 </style> 

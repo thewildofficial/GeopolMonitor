@@ -8,9 +8,9 @@ const config = {
 			// Build output goes to Flask's static directory
 			pages: '../web/static/svelte-build',
 			assets: '../web/static/svelte-build',
-			fallback: null,
+			fallback: 'index.html',
 			precompress: false,
-			strict: true
+			strict: false
 		}),
 		
 		// Configure paths for Flask integration - removed assets path for dev server compatibility
@@ -29,8 +29,9 @@ const config = {
 		
 		// Since we're building for static deployment with Flask backend
 		prerender: {
+			handleMissingId: 'warn',
 			handleHttpError: 'warn',
-			handleMissingId: 'warn'
+			entries: ['/', '/telegram']
 		}
 	}
 };

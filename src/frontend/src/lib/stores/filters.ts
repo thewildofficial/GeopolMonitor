@@ -216,5 +216,20 @@ export const filterActions = {
       dateRange: { start: null, end: null }
     });
     searchQuery.set('');
+  },
+
+  // Reset filters to show all data
+  resetFilters: () => {
+    filterState.set({
+      relevanceThreshold: 0,
+      threatLevels: new Set(['HIGH', 'MEDIUM', 'LOW']),
+      countries: new Set(),
+      channels: new Set(),
+      dateRange: { start: null, end: null }
+    });
+    searchQuery.set('');
   }
-}; 
+};
+
+// Export filterStore for compatibility
+export const filterStore = filterActions; 
