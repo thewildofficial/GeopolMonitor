@@ -7,6 +7,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from starlette.websockets import WebSocketDisconnect
 from typing import List, Optional
 import json
 import atexit
@@ -23,7 +24,7 @@ from ..utils.text import clean_text
 from .websocket_manager import manager
 from .controllers.briefing_controller import router as briefing_router  # Import the briefing router
 from config.settings import STATIC_DIR, TEMPLATES_DIR, WEB_HOST
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # Ensure static directory exists
 STATIC_DIR.mkdir(exist_ok=True)
@@ -714,16 +715,109 @@ def create_app():
             while True:
                 await websocket.receive_text()  # Keep connection alive
         except:
-            manager.disconnect(websocket)
+            manager.disconnect(websocket=websocket)
 
     @app.websocket("/ws")
     async def websocket_endpoint(websocket: WebSocket):
-        await manager.connect(websocket)
+        """
+        Enhanced WebSocket endpoint with filtering support.
+        
+        Query parameters:
+        - channels: Comma-separated list of Telegram channels to monitor
+        - countries: Comma-separated list of countries to filter by
+        - keywords: Comma-separated list of keywords to filter by
+        - sentiment_threshold: Minimum sentiment score (0.0-1.0)
+        - priority_level: Minimum priority level (low, medium, high, critical)
+        - message_types: Comma-separated message types (telegram_message, rss_update, channel_stats, system_status)
+        """
+        from .websocket_manager import WebSocketFilter, MessageType
+        
+        # Parse query parameters for filtering
+        query_params = websocket.query_params
+        
+        # Build filter configuration
+        filters = WebSocketFilter()
+        
+        if query_params.get("channels"):
+            filters.channels = set(ch.strip() for ch in query_params["channels"].split(","))
+            
+        if query_params.get("countries"):
+            filters.countries = set(country.strip() for country in query_params["countries"].split(","))
+            
+        if query_params.get("keywords"):
+            filters.keywords = set(kw.strip() for kw in query_params["keywords"].split(","))
+            
+        if query_params.get("sentiment_threshold"):
+            try:
+                filters.sentiment_threshold = float(query_params["sentiment_threshold"])
+            except ValueError:
+                pass
+                
+        if query_params.get("priority_level"):
+            priority_level = query_params["priority_level"].lower()
+            if priority_level in ["low", "medium", "high", "critical"]:
+                filters.priority_level = priority_level
+                
+        if query_params.get("message_types"):
+            try:
+                type_strings = [t.strip().upper() for t in query_params["message_types"].split(",")]
+                filters.message_types = {MessageType(t.lower()) for t in type_strings if hasattr(MessageType, t)}
+            except ValueError:
+                pass
+                
+        # Connect with filtering
+        client_id = await manager.connect(websocket, filters=filters)
+        
         try:
             while True:
-                await websocket.receive_text()  # Keep connection alive
-        except:
-            manager.disconnect(websocket)
+                # Listen for client messages (could be filter updates, pings, etc.)
+                data = await websocket.receive_text()
+                
+                try:
+                    message = json.loads(data)
+                    message_type = message.get("type")
+                    
+                    if message_type == "update_filters":
+                        # Update client filters
+                        new_filters = WebSocketFilter()
+                        filter_data = message.get("data", {})
+                        
+                        if "channels" in filter_data:
+                            new_filters.channels = set(filter_data["channels"])
+                        if "countries" in filter_data:
+                            new_filters.countries = set(filter_data["countries"])
+                        if "keywords" in filter_data:
+                            new_filters.keywords = set(filter_data["keywords"])
+                        if "sentiment_threshold" in filter_data:
+                            new_filters.sentiment_threshold = filter_data["sentiment_threshold"]
+                        if "priority_level" in filter_data:
+                            new_filters.priority_level = filter_data["priority_level"]
+                        if "message_types" in filter_data:
+                            new_filters.message_types = {MessageType(t) for t in filter_data["message_types"]}
+                            
+                        await manager.update_client_filters(client_id, new_filters)
+                        
+                    elif message_type == "ping":
+                        # Respond to ping with pong
+                        await websocket.send_text(json.dumps({
+                            "type": "pong",
+                            "timestamp": datetime.now(timezone.utc).isoformat()
+                        }))
+                        
+                except json.JSONDecodeError:
+                    # Ignore invalid JSON
+                    pass
+                    
+        except WebSocketDisconnect:
+            await manager.disconnect(client_id)
+        except Exception as e:
+            print(f"WebSocket error: {e}")
+            await manager.disconnect(client_id)
+
+    @app.get("/api/websocket/stats")
+    async def get_websocket_stats():
+        """Get WebSocket connection statistics."""
+        return manager.get_connection_stats()
 
     return app
 
