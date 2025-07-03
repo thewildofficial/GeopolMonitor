@@ -707,4 +707,3 @@ class TelegramWebSocket {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = { TelegramFeed, TelegramWebSocket };
 } 
-} 
