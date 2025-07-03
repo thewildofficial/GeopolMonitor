@@ -1,0 +1,99 @@
+{
+  "timestamp": "2025-07-03T07:33:49.960440",
+  "filtering_test": {
+    "passed": 3,
+    "filtered": 2,
+    "errors": 0,
+    "details": [
+      {
+        "test_case": "highly_relevant",
+        "text": "Breaking: Russia launches new military operation in eastern Ukraine. Multiple explosions reported in Donetsk region.",
+        "expected": "high",
+        "actual_score": 0.95,
+        "actual_category": "high",
+        "confidence": 1.0,
+        "is_relevant": true,
+        "passed_filter": true,
+        "success": true
+      },
+      {
+        "test_case": "highly_relevant",
+        "text": "President Biden announces new sanctions package against Russian oligarchs following emergency NATO summit.",
+        "expected": "high",
+        "actual_score": 0.9,
+        "actual_category": "high",
+        "confidence": 1.0,
+        "is_relevant": true,
+        "passed_filter": true,
+        "success": true
+      },
+      {
+        "test_case": "moderately_relevant",
+        "text": "China's Foreign Ministry responds to EU trade restrictions with diplomatic protest, warns of economic consequences.",
+        "expected": "medium",
+        "actual_score": 0.9,
+        "actual_category": "high",
+        "confidence": 1.0,
+        "is_relevant": true,
+        "passed_filter": true,
+        "success": true
+      },
+      {
+        "test_case": "irrelevant",
+        "text": "Beautiful sunset photos from my vacation in Paris! \ud83c\udf05 #travel #photography",
+        "expected": "none",
+        "actual_score": 0.0,
+        "actual_category": "none",
+        "confidence": 1.0,
+        "is_relevant": false,
+        "passed_filter": false,
+        "success": true
+      },
+      {
+        "test_case": "irrelevant",
+        "text": "\ud83c\udfae New video game just dropped! Who's playing tonight? DM me for multiplayer sessions.",
+        "expected": "none",
+        "actual_score": 0.05,
+        "actual_category": "none",
+        "confidence": 1.0,
+        "is_relevant": false,
+        "passed_filter": false,
+        "success": true
+      }
+    ]
+  },
+  "threshold_test": {
+    "0.1": {
+      "passed": 3,
+      "filtered": 0,
+      "pass_rate": 100.0
+    },
+    "0.3": {
+      "passed": 3,
+      "filtered": 0,
+      "pass_rate": 100.0
+    },
+    "0.5": {
+      "passed": 3,
+      "filtered": 0,
+      "pass_rate": 100.0
+    },
+    "0.7": {
+      "passed": 3,
+      "filtered": 0,
+      "pass_rate": 100.0
+    },
+    "0.9": {
+      "passed": 2,
+      "filtered": 1,
+      "pass_rate": 66.66666666666666
+    }
+  },
+  "summary": {
+    "total_tests": 5,
+    "passed_filter": 3,
+    "filtered_out": 2,
+    "errors": 0,
+    "success_rate": 100.0
+  }
+}

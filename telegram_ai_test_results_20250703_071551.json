@@ -1,0 +1,239 @@
+{
+  "single_message": {
+    "relevance": [
+      {
+        "success": true,
+        "processing_time": 7.062827110290527,
+        "result": {
+          "success": true,
+          "analysis_type": "relevance",
+          "relevance_score": 0.9,
+          "relevance_category": "high",
+          "confidence": 0.95,
+          "primary_topics": [
+            "Sanctions",
+            "Ukraine conflict",
+            "US foreign policy"
+          ],
+          "geographic_focus": [
+            "USA",
+            "Russia",
+            "Ukraine"
+          ],
+          "reasoning": "This message announces direct action by a major power (US) against another (Russia) related to a significant ongoing international conflict (Ukraine). Sanctions are a key tool of statecraft impacting international relations and economies, confirming high geopolitical relevance. The mention of the NATO summit further highlights its importance for international alliances and security.",
+          "message_text": "\ud83c\uddfa\ud83c\uddf8 BREAKING: US President announces new sanctions against Russia over Ukraine conflict. Full details..."
+        },
+        "message_text": "\ud83c\uddfa\ud83c\uddf8 BREAKING: US President announces new sanctions ..."
+      }
+    ],
+    "entities": [
+      {
+        "success": true,
+        "processing_time": 4.546201944351196,
+        "result": {
+          "success": true,
+          "analysis_type": "entities",
+          "people": [
+            "US President"
+          ],
+          "organizations": [
+            "NATO",
+            "United States government"
+          ],
+          "locations": [
+            "United States",
+            "Russia",
+            "Ukraine"
+          ],
+          "events": [
+            "NATO summit",
+            "Ukraine conflict"
+          ],
+          "topics": [
+            "sanctions",
+            "Ukraine conflict"
+          ],
+          "dates_times": [],
+          "summary": "The US President has announced new sanctions against Russia regarding the Ukraine conflict. Full details are expected at the upcoming NATO summit.",
+          "message_text": "\ud83c\uddfa\ud83c\uddf8 BREAKING: US President announces new sanctions against Russia over Ukraine conflict. Full details..."
+        },
+        "message_text": "\ud83c\uddfa\ud83c\uddf8 BREAKING: US President announces new sanctions ..."
+      }
+    ],
+    "summary": [
+      {
+        "success": true,
+        "processing_time": 4.528713941574097,
+        "result": {
+          "success": true,
+          "analysis_type": "summary",
+          "summary": "The US President has announced the imposition of new sanctions against Russia related to the conflict in Ukraine. The full details of these measures are scheduled to be released during the upcoming NATO summit.",
+          "key_points": [
+            "US President",
+            "new sanctions",
+            "Russia",
+            "Ukraine conflict"
+          ],
+          "tone": "urgent",
+          "language_quality": "excellent",
+          "message_type": "news",
+          "credibility_indicators": "Channel name claims \"Official News\", reports plausible geopolitical event, lacks specific source attribution within the message.",
+          "message_text": "\ud83c\uddfa\ud83c\uddf8 BREAKING: US President announces new sanctions against Russia over Ukraine conflict. Full details..."
+        },
+        "message_text": "\ud83c\uddfa\ud83c\uddf8 BREAKING: US President announces new sanctions ..."
+      }
+    ],
+    "full": [
+      {
+        "success": true,
+        "processing_time": 18.009225845336914,
+        "result": {
+          "success": true,
+          "analysis_type": "full",
+          "message_text": "\ud83c\uddfa\ud83c\uddf8 BREAKING: US President announces new sanctions against Russia over Ukraine conflict. Full details...",
+          "relevance": {
+            "success": true,
+            "analysis_type": "relevance",
+            "relevance_score": 0.95,
+            "relevance_category": "high",
+            "confidence": 1.0,
+            "primary_topics": [
+              "Sanctions",
+              "International Relations",
+              "Ukraine conflict"
+            ],
+            "geographic_focus": [
+              "United States",
+              "Russia",
+              "Ukraine"
+            ],
+            "reasoning": "This message details a direct government action by the US President imposing sanctions on Russia, explicitly linked to the ongoing Ukraine conflict. This represents a significant development in international relations and the geopolitical response to the conflict, placing it in the highest relevance category.",
+            "message_text": "\ud83c\uddfa\ud83c\uddf8 BREAKING: US President announces new sanctions against Russia over Ukraine conflict. Full details..."
+          },
+          "entities": {
+            "success": true,
+            "analysis_type": "entities",
+            "people": [
+              "[US President]"
+            ],
+            "organizations": [
+              "[NATO]"
+            ],
+            "locations": [
+              "[United States",
+              "Russia",
+              "Ukraine]"
+            ],
+            "events": [
+              "[Ukraine conflict",
+              "NATO summit]"
+            ],
+            "topics": [
+              "[Sanctions]"
+            ],
+            "dates_times": [
+              "[]"
+            ],
+            "summary": "[The US President announced new sanctions against Russia related to the Ukraine conflict. Further details will be available at the upcoming NATO summit.]",
+            "message_text": "\ud83c\uddfa\ud83c\uddf8 BREAKING: US President announces new sanctions against Russia over Ukraine conflict. Full details..."
+          },
+          "summary": {
+            "success": true,
+            "analysis_type": "summary",
+            "summary": "The US President has announced the imposition of new sanctions against Russia in response to the conflict in Ukraine. Further details regarding these sanctions are expected to be revealed during the upcoming NATO summit.",
+            "key_points": [
+              "US President announces sanctions",
+              "sanctions against Russia",
+              "over Ukraine conflict",
+              "details at NATO summit"
+            ],
+            "tone": "Urgent/professional",
+            "language_quality": "Excellent",
+            "message_type": "News/announcement",
+            "credibility_indicators": "Channel name \"Official News Channel\" suggests reliability (though not verifiable from text alone), use of \"BREAKING\" indicates timely news, specific actors and event (US President, Russia, Ukraine, NATO summit) are named.",
+            "message_text": "\ud83c\uddfa\ud83c\uddf8 BREAKING: US President announces new sanctions against Russia over Ukraine conflict. Full details..."
+          },
+          "channel_context": "Official News Channel",
+          "metadata": {
+            "timestamp": "2025-07-03T10:00:00Z",
+            "channel_id": "@breakingnews"
+          }
+        },
+        "message_text": "\ud83c\uddfa\ud83c\uddf8 BREAKING: US President announces new sanctions ..."
+      }
+    ]
+  },
+  "batch_processing": {
+    "total_messages": 3,
+    "successful_results": 3,
+    "processing_time": 16.654696941375732,
+    "messages_per_second": 0.1801293659416291,
+    "success_rate": 1.0
+  },
+  "relevance_accuracy": [
+    {
+      "message": "\ud83c\uddfa\ud83c\uddf8 BREAKING: US President announces new sanctions ...",
+      "expected": "high",
+      "predicted": "high",
+      "correct": true,
+      "relevance_score": 0.95,
+      "confidence": 1.0
+    },
+    {
+      "message": "European Parliament votes on climate policy. Green...",
+      "expected": "medium",
+      "predicted": "high",
+      "correct": false,
+      "relevance_score": 0.9,
+      "confidence": 1.0
+    },
+    {
+      "message": "Local mayor announces new park opening. Citizens e...",
+      "expected": "low",
+      "predicted": "none",
+      "correct": false,
+      "relevance_score": 0.1,
+      "confidence": 1.0
+    },
+    {
+      "message": "\ud83d\ude02\ud83d\ude02\ud83d\ude02 Just had the best pizza ever!!! Anyone know go...",
+      "expected": "none",
+      "predicted": "none",
+      "correct": true,
+      "relevance_score": 0.0,
+      "confidence": 1.0
+    },
+    {
+      "message": "\ud83d\udea8 URGENT: Military exercises begin in South China ...",
+      "expected": "high",
+      "predicted": "high",
+      "correct": true,
+      "relevance_score": 0.95,
+      "confidence": 1.0
+    },
+    {
+      "message": "Central Bank announces interest rate decision tomo...",
+      "expected": "medium",
+      "predicted": "high",
+      "correct": false,
+      "relevance_score": 0.8,
+      "confidence": 0.9
+    },
+    {
+      "message": "Meeting cancelled due to weather. Will reschedule ...",
+      "expected": "none",
+      "predicted": "none",
+      "correct": true,
+      "relevance_score": 0.0,
+      "confidence": 1.0
+    },
+    {
+      "message": "\ud83c\udde8\ud83c\uddf3\ud83c\uddf7\ud83c\uddfa Xi Jinping and Putin discuss energy cooperati...",
+      "expected": "high",
+      "predicted": "high",
+      "correct": true,
+      "relevance_score": 0.95,
+      "confidence": 1.0
+    }
+  ]
+}

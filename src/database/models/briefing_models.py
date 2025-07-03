@@ -24,9 +24,9 @@ except ImportError:
 
 async def init_briefing_tables():
     """Initialize the database tables for briefing storage."""
-    async with get_db() as conn:
+    with get_db() as conn:
         # Main briefing document table
-        await conn.execute('''
+        conn.execute('''
         CREATE TABLE IF NOT EXISTS briefing_document (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             generated_at TIMESTAMP NOT NULL,
@@ -40,7 +40,7 @@ async def init_briefing_tables():
         ''')
         
         # Briefing sections table (flash, summary, context)
-        await conn.execute('''
+        conn.execute('''
         CREATE TABLE IF NOT EXISTS briefing_section (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             briefing_id INTEGER NOT NULL,
@@ -52,7 +52,7 @@ async def init_briefing_tables():
         ''')
         
         # Briefing items table (individual news items)
-        await conn.execute('''
+        conn.execute('''
         CREATE TABLE IF NOT EXISTS briefing_item (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             section_id INTEGER NOT NULL,
@@ -68,7 +68,7 @@ async def init_briefing_tables():
         ''')
         
         # Regional summaries table
-        await conn.execute('''
+        conn.execute('''
         CREATE TABLE IF NOT EXISTS regional_summary (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             briefing_id INTEGER NOT NULL,
@@ -80,7 +80,7 @@ async def init_briefing_tables():
         ''')
         
         # Briefing metrics table
-        await conn.execute('''
+        conn.execute('''
         CREATE TABLE IF NOT EXISTS briefing_metrics (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             briefing_id INTEGER NOT NULL,
@@ -94,7 +94,7 @@ async def init_briefing_tables():
         )
         ''')
         
-        await conn.commit()
+        conn.commit()
         logger.info("Briefing database tables initialized")
 
 
@@ -590,5 +590,4 @@ def get_news_in_timespan(start_time: datetime, end_time: datetime) -> List[Dict[
         return []
 
 
-# Ensure tables exist when module is imported
-init_briefing_tables()
+# Note: Tables will be initialized by the web application startup handler

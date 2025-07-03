@@ -12,6 +12,7 @@ from typing import List, Optional
 import json
 import atexit
 from starlette.staticfiles import StaticFiles as StarletteStaticFiles
+from contextlib import asynccontextmanager
 
 from . import country_utils
 
@@ -19,6 +20,7 @@ from ..database.models import (
     init_db, get_db, cleanup_db, 
     get_article_tags, search_articles_by_tags
 )
+from ..database.models.briefing_models import init_briefing_tables
 from ..core.processor import ImageExtractor
 from ..utils.text import clean_text
 from .websocket_manager import manager
@@ -28,6 +30,16 @@ from datetime import datetime, timedelta, timezone
 
 # Ensure static directory exists
 STATIC_DIR.mkdir(exist_ok=True)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Handle application startup and shutdown events."""
+    # Startup
+    init_db()
+    await init_briefing_tables()
+    yield
+    # Shutdown
+    cleanup_db()
 
 def is_local_environment():
     """Check if we're running in a local environment"""
@@ -46,7 +58,7 @@ class CompressedStaticFiles(StarletteStaticFiles):
 
 def create_app():
     """Create and configure FastAPI application"""
-    app = FastAPI(debug=True)
+    app = FastAPI(debug=True, lifespan=lifespan)
     
     # Configure CORS
     app.add_middleware(
@@ -85,16 +97,6 @@ def create_app():
         response = await call_next(request)
         return response
 
-    @app.on_event("startup")
-    async def startup_event():
-        """Initialize database on startup."""
-        init_db()
-
-    @app.on_event("shutdown")
-    async def shutdown_event():
-        """Clean up database on shutdown."""
-        cleanup_db()
-
     def ensure_source_tag_exists(conn, source_name):
         """Ensure a source tag exists in the database."""
         cursor = conn.execute(
@@ -115,13 +117,15 @@ def create_app():
     def format_news_item(item):
         """Format news item for API response"""
         from ..utils.date_utils import format_iso_date, ensure_utc
+        from ..core.processor import ImageExtractor
         from datetime import datetime, timezone
         
         # Extract image from content if no image_url is present
         image_url = item.get('image_url')
         if not image_url and item.get('content'):
             try:
-                image_url = ImageExtractor.extract_first_image_from_content(item.get('content', ''))
+                image_extractor = ImageExtractor()
+                image_url = image_extractor.extract_first_image_from_content(item.get('content', ''))
             except Exception as e:
                 print(f"Error extracting image from content: {str(e)}")
                 image_url = None
@@ -229,21 +233,21 @@ def create_app():
             content={"detail": str(exc)},
         )
 
-    @app.get("/", response_class=HTMLResponse)
+    @app.get("/", response_class=HTMLResponse, name="index")
     async def root(request: Request):
         return templates.TemplateResponse(
             "index.html",
             {"request": request, "free_palestine_link": {"url": "https://www.pcrf.net/", "text": "Free Palestine"}}
         )
 
-    @app.get("/map", response_class=HTMLResponse)
+    @app.get("/map", response_class=HTMLResponse, name="map_page")
     async def map_page(request: Request):
         return templates.TemplateResponse(
             "map.html",
             {"request": request, "free_palestine_link": {"url": "https://www.pcrf.net/", "text": "Free Palestine"}}
         )
 
-    @app.get("/about", response_class=HTMLResponse)
+    @app.get("/about", response_class=HTMLResponse, name="about")
     async def about(request: Request):
         return templates.TemplateResponse(
             "about.html",
@@ -251,11 +255,19 @@ def create_app():
         )
 
     # Add Briefing page route
-    @app.get("/briefing", response_class=HTMLResponse)
+    @app.get("/briefing", response_class=HTMLResponse, name="briefing_page")
     async def briefing_page(request: Request):
         return templates.TemplateResponse(
             "briefing.html",
             {"request": request, "datetime": datetime, "free_palestine_link": {"url": "https://www.pcrf.net/", "text": "Free Palestine"}}
+        )
+
+    # Add Telegram feed page route
+    @app.get("/telegram", response_class=HTMLResponse, name="telegram_page")
+    async def telegram_feed_page(request: Request):
+        return templates.TemplateResponse(
+            "telegram.html",
+            {"request": request, "free_palestine_link": {"url": "https://www.pcrf.net/", "text": "Free Palestine"}}
         )
 
     @app.get("/api/news")
@@ -716,6 +728,140 @@ def create_app():
                 await websocket.receive_text()  # Keep connection alive
         except:
             manager.disconnect(websocket=websocket)
+
+    @app.websocket("/ws/telegram")
+    async def telegram_websocket_endpoint(websocket: WebSocket):
+        """
+        Dedicated WebSocket endpoint for Telegram feed with optimized filtering.
+        
+        Query parameters:
+        - relevance_threshold: Minimum relevance score (0.0-1.0, default: 0.3)
+        - channels: Comma-separated list of Telegram channels to monitor
+        - locations: Comma-separated list of locations to filter by
+        - urgency_level: Minimum urgency level (normal, urgent, breaking)
+        """
+        from .websocket_manager import WebSocketFilter, MessageType
+        
+        # Parse query parameters for Telegram-specific filtering
+        query_params = websocket.query_params
+        
+        # Build filter configuration with Telegram defaults
+        filters = WebSocketFilter()
+        filters.message_types = {MessageType.TELEGRAM_MESSAGE, MessageType.CHANNEL_STATS}
+        
+        # Relevance threshold filter
+        if query_params.get("relevance_threshold"):
+            try:
+                filters.sentiment_threshold = float(query_params["relevance_threshold"])
+            except ValueError:
+                filters.sentiment_threshold = 0.3
+        else:
+            filters.sentiment_threshold = 0.3
+            
+        # Channel filter
+        if query_params.get("channels"):
+            filters.channels = set(ch.strip() for ch in query_params["channels"].split(","))
+            
+        # Location filter
+        if query_params.get("locations"):
+            filters.countries = set(loc.strip() for loc in query_params["locations"].split(","))
+            
+        # Urgency level filter
+        if query_params.get("urgency_level"):
+            urgency_level = query_params["urgency_level"].lower()
+            if urgency_level in ["normal", "urgent", "breaking"]:
+                if urgency_level == "urgent":
+                    filters.sentiment_threshold = max(filters.sentiment_threshold, 0.6)
+                elif urgency_level == "breaking":
+                    filters.sentiment_threshold = max(filters.sentiment_threshold, 0.8)
+                    
+        # Connect with Telegram-specific filtering
+        client_id = await manager.connect(websocket, filters=filters)
+        
+        try:
+            while True:
+                # Listen for client messages
+                data = await websocket.receive_text()
+                
+                try:
+                    message = json.loads(data)
+                    message_type = message.get("type")
+                    
+                    if message_type == "update_filters":
+                        # Update Telegram filters
+                        new_filters = WebSocketFilter()
+                        new_filters.message_types = {MessageType.TELEGRAM_MESSAGE, MessageType.CHANNEL_STATS}
+                        filter_data = message.get("data", {})
+                        
+                        if "relevance_threshold" in filter_data:
+                            new_filters.sentiment_threshold = filter_data["relevance_threshold"]
+                        if "channels" in filter_data:
+                            new_filters.channels = set(filter_data["channels"])
+                        if "locations" in filter_data:
+                            new_filters.countries = set(filter_data["locations"])
+                            
+                        await manager.update_client_filters(client_id, new_filters)
+                        
+                        # Send confirmation
+                        await websocket.send_text(json.dumps({
+                            "type": "filter_updated",
+                            "data": {
+                                "relevance_threshold": new_filters.sentiment_threshold,
+                                "channels": list(new_filters.channels) if new_filters.channels else [],
+                                "locations": list(new_filters.countries) if new_filters.countries else []
+                            },
+                            "timestamp": datetime.now(timezone.utc).isoformat()
+                        }))
+                        
+                    elif message_type == "ping":
+                        # Respond to ping with pong and connection stats
+                        await websocket.send_text(json.dumps({
+                            "type": "pong",
+                            "data": {
+                                "connected_clients": len(manager.active_connections),
+                                "filters_active": bool(filters.channels or filters.countries or filters.sentiment_threshold > 0)
+                            },
+                            "timestamp": datetime.now(timezone.utc).isoformat()
+                        }))
+                        
+                    elif message_type == "get_recent_messages":
+                        # Send recent Telegram messages if available
+                        # This would integrate with your existing Telegram storage
+                        with get_db() as conn:
+                            try:
+                                cursor = conn.execute('''
+                                    SELECT message_id, channel_id, text, date, relevance_score, 
+                                           sentiment_score, urgency_score, detected_locations
+                                    FROM telegram_messages 
+                                    WHERE relevance_score >= ?
+                                    ORDER BY date DESC 
+                                    LIMIT 20
+                                ''', (filters.sentiment_threshold,))
+                                
+                                columns = [column[0] for column in cursor.description]
+                                recent_messages = [dict(zip(columns, row)) for row in cursor.fetchall()]
+                                
+                                await websocket.send_text(json.dumps({
+                                    "type": "recent_messages",
+                                    "data": recent_messages,
+                                    "timestamp": datetime.now(timezone.utc).isoformat()
+                                }))
+                            except Exception as db_error:
+                                await websocket.send_text(json.dumps({
+                                    "type": "error",
+                                    "message": f"Failed to fetch recent messages: {str(db_error)}",
+                                    "timestamp": datetime.now(timezone.utc).isoformat()
+                                }))
+                        
+                except json.JSONDecodeError:
+                    # Ignore invalid JSON
+                    pass
+                    
+        except WebSocketDisconnect:
+            await manager.disconnect(client_id)
+        except Exception as e:
+            print(f"Telegram WebSocket error: {e}")
+            await manager.disconnect(client_id)
 
     @app.websocket("/ws")
     async def websocket_endpoint(websocket: WebSocket):

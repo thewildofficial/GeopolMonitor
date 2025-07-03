@@ -1,0 +1,465 @@
+/* ===== DARK ANALYTICS DASHBOARD - DESIGN TOKENS ===== */
+
+/* === CORE COLOR PALETTE === */
+
+:root {
+  /* Background Colors */
+  --palette-background-default: hsl(222, 47%, 11%);
+  --palette-background-content: hsl(222, 39%, 16%);
+  --palette-background-elevated: hsl(220, 31%, 21%);
+  
+  /* Text Colors */
+  --palette-text-primary: hsl(210, 40%, 98%);
+  --palette-text-secondary: hsl(215, 20%, 65%);
+  --palette-text-interactive: hsl(210, 40%, 98%);
+  --palette-text-placeholder: hsl(215, 16%, 47%);
+  
+  /* Border Colors */
+  --palette-border-default: hsl(217, 19%, 27%);
+  --palette-border-interactive: hsl(215, 20%, 65%);
+  
+  /* Brand Colors */
+  --palette-brand-primary: hsl(244, 76%, 64%);
+  --palette-brand-secondary: hsl(215, 20%, 65%);
+  
+  /* Status Colors */
+  --palette-status-success-background: hsla(158, 64%, 52%, 0.1);
+  --palette-status-success-foreground: hsl(158, 79%, 41%);
+  --palette-status-inProgress-background: hsla(212, 92%, 59%, 0.1);
+  --palette-status-inProgress-foreground: hsl(212, 92%, 59%);
+  --palette-status-onHold-background: hsla(39, 92%, 50%, 0.1);
+  --palette-status-onHold-foreground: hsl(39, 92%, 50%);
+  
+  /* Progress Bar Colors */
+  --palette-progressBar-green: hsl(158, 64%, 52%);
+  --palette-progressBar-blue: hsl(244, 76%, 64%);
+  --palette-progressBar-pink: hsl(327, 80%, 63%);
+  
+  /* === TYPOGRAPHY === */
+  
+  --typography-fontFamily: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  
+  /* Font Sizes */
+  --typography-sizes-xs: 12px;
+  --typography-sizes-sm: 14px;
+  --typography-sizes-md: 16px;
+  --typography-sizes-lg: 20px;
+  --typography-sizes-xl: 24px;
+  
+  /* Font Weights */
+  --typography-weights-regular: 400;
+  --typography-weights-medium: 500;
+  --typography-weights-semibold: 600;
+  
+  /* === SPACING === */
+  
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  
+  /* === BORDER RADIUS === */
+  
+  --borderRadius-sm: 4px;
+  --borderRadius-md: 8px;
+  --borderRadius-lg: 12px;
+  --borderRadius-full: 9999px;
+  
+  /* === SHADOWS === */
+  
+  --shadows-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadows-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  
+  /* === TRANSITIONS === */
+  
+  --transition-fast: 0.2s ease;
+  --transition-normal: 0.3s ease;
+  --transition-slow: 0.5s ease;
+  
+  /* === Z-INDEX LAYERS === */
+  
+  --z-base: 0;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-overlay: 300;
+  --z-modal: 400;
+  --z-toast: 500;
+  
+  /* === COMPONENT-SPECIFIC TOKENS === */
+  
+  /* Buttons */
+  --button-padding: var(--spacing-sm) var(--spacing-md);
+  --button-border-radius: var(--borderRadius-md);
+  --button-font-weight: var(--typography-weights-medium);
+  --button-font-size: var(--typography-sizes-sm);
+  
+  /* Tables */
+  --table-header-color: var(--palette-text-secondary);
+  --table-header-font-size: var(--typography-sizes-xs);
+  --table-header-font-weight: var(--typography-weights-medium);
+  --table-cell-padding: var(--spacing-md) var(--spacing-lg);
+  --table-row-hover-background: hsla(222, 39%, 16%, 0.5);
+  
+  /* Status Tags */
+  --statusTag-padding: var(--spacing-xs) var(--spacing-sm);
+  --statusTag-border-radius: var(--borderRadius-full);
+  --statusTag-font-size: var(--typography-sizes-xs);
+  --statusTag-font-weight: var(--typography-weights-medium);
+  
+  /* Progress Bars */
+  --progressBar-height: 8px;
+  --progressBar-border-radius: var(--borderRadius-full);
+  --progressBar-track-background: var(--palette-background-elevated);
+  
+  /* Inputs */
+  --input-background: var(--palette-background-content);
+  --input-border: 1px solid var(--palette-border-default);
+  --input-border-radius: var(--borderRadius-md);
+  --input-padding: var(--spacing-sm) var(--spacing-md);
+  --input-font-size: var(--typography-sizes-sm);
+  --input-focus-border-color: var(--palette-brand-primary);
+  --input-focus-box-shadow: 0 0 0 3px hsla(244, 76%, 64%, 0.3);
+  
+  /* Avatar */
+  --avatar-size: 40px;
+  --avatar-border-radius: var(--borderRadius-full);
+  --avatar-border: 2px solid transparent;
+  
+  /* Checkbox */
+  --checkbox-size: 16px;
+  --checkbox-border-radius: var(--borderRadius-sm);
+  --checkbox-background: var(--palette-background-elevated);
+  --checkbox-border-color: var(--palette-border-default);
+  --checkbox-checked-background: var(--palette-brand-primary);
+  --checkbox-checked-border-color: var(--palette-brand-primary);
+  
+  /* Icons */
+  --icon-color: var(--palette-text-secondary);
+  --icon-size: 20px;
+  
+  /* Layout */
+  --container-padding: var(--spacing-lg);
+  --contentArea-padding: var(--spacing-lg);
+  --contentArea-background: var(--palette-background-content);
+  --contentArea-border-radius: var(--borderRadius-lg);
+  --contentArea-border: 1px solid var(--palette-border-default);
+}
+
+/* === MEDIA QUERIES === */
+
+@media (max-width: 768px) {
+  :root {
+    --container-padding: var(--spacing-md);
+    --contentArea-padding: var(--spacing-md);
+    --table-cell-padding: var(--spacing-sm) var(--spacing-md);
+  }
+}
+
+/* === REDUCED MOTION SUPPORT === */
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --transition-fast: 0s;
+    --transition-normal: 0s;
+    --transition-slow: 0s;
+  }
+}
+
+/* === HIGH CONTRAST SUPPORT === */
+
+@media (prefers-contrast: high) {
+  :root {
+    --palette-border-default: hsl(215, 20%, 65%);
+    --palette-text-secondary: hsl(210, 40%, 98%);
+  }
+}
+
+/* ==========================================================================
+   OSINT Design System Tokens
+   ========================================================================== */
+
+/* Import Inter font family */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap');
+
+:root {
+    /* ==========================================================================
+       OSINT Color Palette - Professional Intelligence Theme
+       ========================================================================== */
+    
+    /* Primary Background Colors - Deep Navy/Black for Professional Look */
+    --osint-bg-primary: #030712;          /* Almost black background */
+    --osint-bg-secondary: #0A0F1C;        /* Deep navy secondary */
+    --osint-surface: #0F1629;             /* Card/panel surface */
+    --osint-surface-elevated: #141B2E;    /* Elevated surfaces */
+    --osint-surface-card: #1A2037;        /* Message cards */
+    
+    /* Accent Colors - Professional Cyan with High Contrast */
+    --osint-accent-cyan: #00D9FF;         /* Professional cyan */
+    --osint-accent-cyan-bright: #1FFBFF;  /* Bright cyan for highlights */
+    --osint-accent-red: #FF4757;          /* Alert red */
+    --osint-accent-green: #2ED573;        /* Success green */
+    --osint-highlight-blue: #30D1FF;
+    
+    /* Text Colors - High Contrast for Professional Interface */
+    --osint-text-primary: #F8FAFC;        /* Near white for primary text */
+    --osint-text-secondary: #CBD5E1;      /* Light gray for secondary text */
+    --osint-text-muted: #94A3B8;          /* Muted text */
+    --osint-text-cyan: #00D9FF;           /* Cyan text for highlights */
+    
+    /* Alert Colors */
+    --osint-alert-high-bg: #261010;
+    --osint-alert-high-fg: #FF4C4C;
+    --osint-alert-medium-bg: rgba(255, 173, 51, 0.2);
+    --osint-alert-medium-fg: #FFAD33;
+    --osint-alert-low-bg: rgba(0, 229, 255, 0.2);
+    --osint-alert-low-fg: #30D1FF;
+    
+    /* Status Colors */
+    --osint-status-connected: #00FF99;
+    --osint-status-connecting: #FFAD33;
+    --osint-status-disconnected: #FF3B3B;
+    
+    /* ==========================================================================
+       Typography System
+       ========================================================================== */
+    
+    /* Font Family */
+    --osint-font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+    
+    /* Font Weights */
+    --osint-font-weight-regular: 400;
+    --osint-font-weight-medium: 500;
+    --osint-font-weight-bold: 700;
+    
+    /* Font Sizes */
+    --osint-font-size-small: 12px;
+    --osint-font-size-medium: 14px;
+    --osint-font-size-large: 16px;
+    --osint-font-size-xlarge: 20px;
+    --osint-font-size-xxlarge: 24px;
+    
+    /* Letter Spacing */
+    --osint-letter-spacing: 0.02em;
+    --osint-letter-spacing-wide: 0.1em;
+    
+    /* Line Heights */
+    --osint-line-height-tight: 1.2;
+    --osint-line-height-normal: 1.4;
+    --osint-line-height-relaxed: 1.6;
+    
+    /* ==========================================================================
+       Layout & Spacing System
+       ========================================================================== */
+    
+    /* Layout Dimensions */
+    --osint-sidebar-width: 240px;
+    --osint-right-panel-width: 320px;
+    --osint-grid-gap: 16px;
+    --osint-container-padding: 16px;
+    --osint-card-padding: 12px;
+    
+    /* Spacing Scale */
+    --osint-space-xs: 4px;
+    --osint-space-sm: 8px;
+    --osint-space-md: 12px;
+    --osint-space-lg: 16px;
+    --osint-space-xl: 20px;
+    --osint-space-xxl: 24px;
+    
+    /* Border Radius */
+    --osint-radius-sm: 4px;
+    --osint-radius-md: 6px;
+    --osint-radius-lg: 8px;
+    --osint-radius-xl: 12px;
+    --osint-radius-full: 50%;
+    
+    /* ==========================================================================
+       Shadow System
+       ========================================================================== */
+    
+    /* Card Shadows - Professional Depth */
+    --osint-shadow-card: 0 2px 8px rgba(0, 0, 0, 0.4);
+    --osint-shadow-card-hover: 0 4px 16px rgba(0, 217, 255, 0.15);
+    --osint-shadow-card-elevated: 0 8px 24px rgba(0, 0, 0, 0.5);
+    
+    /* Map & Specialized Shadows */
+    --osint-shadow-map: 0 0 16px rgba(0, 0, 0, 0.5);
+    --osint-shadow-modal: 0 20px 40px rgba(0, 0, 0, 0.5);
+    
+    /* Glow Effects - Subtle Professional Highlights */
+    --osint-glow-cyan: 0 0 8px rgba(0, 217, 255, 0.3);
+    --osint-glow-red: 0 0 8px rgba(255, 71, 87, 0.3);
+    --osint-glow-green: 0 0 8px rgba(46, 213, 115, 0.3);
+    
+    /* ==========================================================================
+       Animation & Transition System
+       ========================================================================== */
+    
+    /* Timing Functions */
+    --osint-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+    --osint-ease-out: cubic-bezier(0, 0, 0.2, 1);
+    --osint-ease-in: cubic-bezier(0.4, 0, 1, 1);
+    
+    /* Duration */
+    --osint-duration-fast: 0.15s;
+    --osint-duration-normal: 0.2s;
+    --osint-duration-slow: 0.3s;
+    --osint-duration-pulse: 1.5s;
+    
+    /* ==========================================================================
+       Component-Specific Tokens
+       ========================================================================== */
+    
+    /* Message Cards */
+    --osint-message-card-bg: var(--osint-surface-elevated);
+    --osint-message-card-border: 1px solid transparent;
+    --osint-message-card-border-hover: 1px solid rgba(0, 229, 255, 0.3);
+    
+    /* Filter Controls */
+    --osint-filter-bg: var(--osint-surface);
+    --osint-filter-border: 1px solid rgba(155, 174, 200, 0.1);
+    --osint-filter-accent: var(--osint-accent-green);
+    
+    /* Analytics Graphs */
+    --osint-graph-line-cyan: var(--osint-accent-cyan);
+    --osint-graph-line-blue: var(--osint-highlight-blue);
+    --osint-graph-bg: var(--osint-bg-secondary);
+    
+    /* Map Activity Dots */
+    --osint-dot-low: var(--osint-highlight-blue);
+    --osint-dot-medium: #FFAD33;
+    --osint-dot-high: var(--osint-accent-red);
+    
+    /* ==========================================================================
+       Responsive Breakpoints
+       ========================================================================== */
+    
+    --osint-breakpoint-mobile: 768px;
+    --osint-breakpoint-tablet: 1024px;
+    --osint-breakpoint-desktop: 1200px;
+    --osint-breakpoint-wide: 1400px;
+    
+    /* ==========================================================================
+       Z-Index Scale
+       ========================================================================== */
+    
+    --osint-z-dropdown: 100;
+    --osint-z-sticky: 200;
+    --osint-z-fixed: 300;
+    --osint-z-modal-backdrop: 1000;
+    --osint-z-modal: 1010;
+    --osint-z-toast: 1100;
+    
+    /* ==========================================================================
+       Legacy Compatibility (Fallbacks to existing variables)
+       ========================================================================== */
+    
+    /* Background colors */
+    --background-default: var(--osint-bg-primary);
+    --surface-elevated: var(--osint-surface-elevated);
+    --surface-hover: rgba(28, 36, 47, 0.6);
+    
+    /* Text colors */
+    --text-primary: var(--osint-text-primary);
+    --text-secondary: var(--osint-text-secondary);
+    
+    /* Border colors */
+    --border-subtle: rgba(155, 174, 200, 0.1);
+    
+    /* Font system */
+    --font-family: var(--osint-font-family);
+    --font-weight-medium: var(--osint-font-weight-medium);
+    --font-weight-semibold: var(--osint-font-weight-medium);
+    --font-weight-bold: var(--osint-font-weight-bold);
+    
+    /* Font sizes */
+    --font-size-xs: var(--osint-font-size-small);
+    --font-size-sm: var(--osint-font-size-medium);
+    --font-size-md: var(--osint-font-size-large);
+    --font-size-lg: var(--osint-font-size-large);
+    --font-size-xl: var(--osint-font-size-xlarge);
+    --font-size-2xl: var(--osint-font-size-xxlarge);
+    
+    /* Spacing */
+    --space-1: var(--osint-space-xs);
+    --space-2: var(--osint-space-sm);
+    --space-3: var(--osint-space-md);
+    --space-4: var(--osint-space-lg);
+    --space-6: var(--osint-space-xxl);
+    
+    /* Border radius */
+    --radius-xs: var(--osint-radius-sm);
+    --radius-sm: var(--osint-radius-md);
+    --radius-md: var(--osint-radius-lg);
+    --radius-lg: var(--osint-radius-xl);
+    --radius-full: var(--osint-radius-full);
+    
+    /* Shadows */
+    --shadow-sm: var(--osint-shadow-card);
+    --shadow-lg: var(--osint-shadow-modal);
+    
+    /* Animation */
+    --animation-speed-fast: var(--osint-duration-fast);
+    --animation-speed-normal: var(--osint-duration-normal);
+    --animation-ease: var(--osint-ease-in-out);
+}
+
+/* ==========================================================================
+   Global Reset for OSINT Theme
+   ========================================================================== */
+
+/* Apply OSINT font family globally */
+body {
+    font-family: var(--osint-font-family);
+    background-color: var(--osint-bg-primary);
+    color: var(--osint-text-primary);
+    letter-spacing: var(--osint-letter-spacing);
+}
+
+/* Ensure proper font rendering */
+* {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Enhanced scrollbar styling for OSINT theme */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--osint-bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--osint-surface);
+    border-radius: var(--osint-radius-md);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--osint-surface-elevated);
+}
+
+/* ==========================================================================
+   Utility Classes for OSINT Components
+   ========================================================================== */
+
+.osint-text-primary { color: var(--osint-text-primary); }
+.osint-text-secondary { color: var(--osint-text-secondary); }
+.osint-text-accent { color: var(--osint-accent-cyan); }
+
+.osint-bg-primary { background-color: var(--osint-bg-primary); }
+.osint-bg-secondary { background-color: var(--osint-bg-secondary); }
+.osint-bg-surface { background-color: var(--osint-surface); }
+
+.osint-shadow-card { box-shadow: var(--osint-shadow-card); }
+.osint-shadow-hover { box-shadow: var(--osint-shadow-card-hover); }
+
+.osint-font-small { font-size: var(--osint-font-size-small); }
+.osint-font-medium { font-size: var(--osint-font-size-medium); }
+.osint-font-large { font-size: var(--osint-font-size-large); }
+
+.osint-weight-medium { font-weight: var(--osint-font-weight-medium); }
+.osint-weight-bold { font-weight: var(--osint-font-weight-bold); } 
