@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { MapPin, Clock, TrendingUp, Globe } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
+import { getFlagEmoji } from "@/lib/flags"
 
 interface GeographicEvent {
   id: string
@@ -124,9 +125,9 @@ export function GeographicTimeline({ messages }: GeographicTimelineProps) {
   }, [eventsByLocation])
 
   const getUrgencyColor = (urgency: number) => {
-    if (urgency >= 0.7) return "bg-red-100 text-red-800 border-red-200"
-    if (urgency >= 0.4) return "bg-yellow-100 text-yellow-800 border-yellow-200"
-    return "bg-green-100 text-green-800 border-green-200"
+    if (urgency >= 0.7) return "bg-red-600 text-white border-red-600"
+    if (urgency >= 0.4) return "intel-badge-warning"
+    return "intel-badge-success"
   }
 
   const getUrgencyLabel = (urgency: number) => {
@@ -138,7 +139,7 @@ export function GeographicTimeline({ messages }: GeographicTimelineProps) {
   return (
     <div className="space-y-6">
       {/* Controls */}
-      <Card>
+      <Card className="intel-card intel-glow">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Globe className="h-5 w-5" />
@@ -168,7 +169,7 @@ export function GeographicTimeline({ messages }: GeographicTimelineProps) {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Location Overview */}
-        <Card>
+        <Card className="intel-card intel-glow">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <MapPin className="h-5 w-5" />
@@ -183,8 +184,8 @@ export function GeographicTimeline({ messages }: GeographicTimelineProps) {
                     key={stat.location}
                     className={`p-3 rounded-lg border cursor-pointer transition-colors ${
                       selectedLocation === stat.location
-                        ? "bg-blue-50 border-blue-200"
-                        : "bg-gray-50 border-gray-200 hover:bg-gray-100"
+                        ? "bg-intel-surface/70 border-intel-accent"
+                        : "bg-intel-surface/40 border-intel-border hover:bg-intel-surface/60"
                     }`}
                     onClick={() => setSelectedLocation(
                       selectedLocation === stat.location ? null : stat.location
@@ -192,15 +193,18 @@ export function GeographicTimeline({ messages }: GeographicTimelineProps) {
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <MapPin className="h-4 w-4 text-gray-500" />
-                        <span className="font-medium">{stat.location}</span>
-                        <Badge variant="secondary">{stat.count}</Badge>
+                        <MapPin className="h-4 w-4 text-intel-accent" />
+                        <span className="font-medium font-mono">
+                          <span className="mr-1">{getFlagEmoji(stat.location)}</span>
+                          {stat.location}
+                        </span>
+                        <Badge className="intel-badge-info">{stat.count}</Badge>
                       </div>
                       <Badge className={getUrgencyColor(stat.maxUrgency)}>
                         {getUrgencyLabel(stat.maxUrgency)}
                       </Badge>
                     </div>
-                    <div className="text-sm text-muted-foreground mt-1">
+                    <div className="text-sm text-intel-text-muted mt-1 font-mono">
                       Latest: {formatDistanceToNow(new Date(stat.latestEvent.timestamp), { addSuffix: true })}
                     </div>
                   </div>
@@ -211,7 +215,7 @@ export function GeographicTimeline({ messages }: GeographicTimelineProps) {
         </Card>
 
         {/* Timeline */}
-        <Card>
+        <Card className="intel-card intel-glow">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Clock className="h-5 w-5" />
@@ -222,24 +226,27 @@ export function GeographicTimeline({ messages }: GeographicTimelineProps) {
             <ScrollArea className="h-[400px]">
               <div className="space-y-3">
                 {(selectedLocation ? eventsByLocation[selectedLocation] || [] : filteredEvents.slice(0, 20)).map((event) => (
-                  <div key={event.id} className="p-3 rounded-lg border bg-white">
+                  <div key={event.id} className="p-3 rounded-lg border border-intel-border bg-intel-surface/40">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <MapPin className="h-3 w-3 text-gray-500" />
-                          <span className="text-sm font-medium">{event.location}</span>
-                          <Badge variant="outline" className="text-xs">
+                          <MapPin className="h-3 w-3 text-intel-accent" />
+                          <span className="text-sm font-medium font-mono">
+                            <span className="mr-1">{getFlagEmoji(event.location)}</span>
+                            {event.location}
+                          </span>
+                          <Badge variant="outline" className="text-xs border-intel-border">
                             {event.category}
                           </Badge>
                           <Badge className={`text-xs ${getUrgencyColor(event.urgency)}`}>
                             {getUrgencyLabel(event.urgency)}
                           </Badge>
                         </div>
-                        <p className="text-sm text-gray-700 mb-2 line-clamp-2">
+                        <p className="text-sm text-intel-text-secondary mb-2 line-clamp-2">
                           {event.message}
                         </p>
-                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                          <span>{event.channel}</span>
+                        <div className="flex items-center gap-4 text-xs text-intel-text-muted font-mono">
+                          <span className="truncate">{event.channel}</span>
                           <span>{formatDistanceToNow(new Date(event.timestamp), { addSuffix: true })}</span>
                         </div>
                       </div>
@@ -253,7 +260,7 @@ export function GeographicTimeline({ messages }: GeographicTimelineProps) {
       </div>
 
       {/* Activity Heatmap Preview */}
-      <Card>
+      <Card className="intel-card intel-glow">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5" />
@@ -271,7 +278,8 @@ export function GeographicTimeline({ messages }: GeographicTimelineProps) {
                      }}>
                   {stat.location.split(' ').map(word => word[0]).join('').slice(0, 2)}
                 </div>
-                <div className="mt-2 text-xs text-muted-foreground">
+                <div className="mt-2 text-xs text-intel-text-muted font-mono">
+                  <span className="mr-1">{getFlagEmoji(stat.location)}</span>
                   {stat.location}
                 </div>
                 <div className="text-xs font-medium">
