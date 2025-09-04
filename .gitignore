@@ -1,59 +1,70 @@
+# Environment and secrets
 .env
-__pycache__
-cache
-geopolenv
-feed_cache.json
-news_monitor.log
+.env.*
+*.local
 
-test_helper.py
-feeds.txt
-news_monitor.db.bak
-feeds.txt
-feeds.txt
-backups
-feeds.txt
-/.goose
-src/core/processor.py
-venv
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.coverage*
 
+# Node/JS
+node_modules/
+**/node_modules/
 
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
+*.sw?
 
 # Logs
-logs
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-dev-debug.log
-# Dependency directories
-node_modules/
-# Environment variables
-# Editor directories and files
-.idea
-.vscode
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-# OS specific
-.DS_Store
 
-# Task files
-# tasks.json
-# tasks/ 
-.clinerules/cline_rules.md
+# Build outputs
+build/
+dist/
+
+# Frontend build cache
+/src/frontend/.next/
+/src/frontend/out/
+/src/frontend/.turbo/
+/src/frontend/.vercel/
+/src/frontend-svelte-backup/.svelte-kit/
+/src/frontend-svelte-backup/build/
+
+# Local data & backups (do not commit local DBs)
+/data/*.db
+/data/backups/
+/data/telegram_sessions/
+backups/
+*.sqlite
+*.db
+
+# Tooling metadata (keep repo config directories, ignore their caches if any)
 /.clinerules
 /.cursor
-/.github
 /.roo
-.roomodes
 /.taskmaster
 /.trae
 /.windsurf
-AGENTS.md
-CLAUDE.md
-/src/frontend/.next
-/src/frontend/.next
-/src/frontend/.next
-/src/frontend/.next
+
+# Project-specific keepers (ensure we do NOT ignore source files)
+# Do not ignore these source/docs files:
+!AGENTS.md
+!CLAUDE.md
+!src/core/processor.py
+
+# Git
+.gitattributes
