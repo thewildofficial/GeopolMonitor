@@ -1,5 +1,6 @@
 {
   "/telegram/page": "app/telegram/page.js",
+  "/dashboard/page": "app/dashboard/page.js",
   "/map/page": "app/map/page.js",
-  "/dashboard/page": "app/dashboard/page.js"
+  "/analytics/page": "app/analytics/page.js"
 }

@@ -136,13 +136,19 @@ export function GeographicTimeline({ messages }: GeographicTimelineProps) {
     return "Low"
   }
 
+  const getUrgencyBorder = (urgency: number) => {
+    if (urgency >= 0.7) return "border-l-red-600"
+    if (urgency >= 0.4) return "border-l-yellow-500"
+    return "border-l-emerald-500"
+  }
+
   return (
     <div className="space-y-6">
       {/* Controls */}
       <Card className="intel-card intel-glow">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Globe className="h-5 w-5" />
+          <CardTitle className="flex items-center gap-2 intel-matrix-text font-mono">
+            <Globe className="h-5 w-5 text-intel-accent" />
             Geographic Activity Timeline
           </CardTitle>
         </CardHeader>
@@ -155,12 +161,13 @@ export function GeographicTimeline({ messages }: GeographicTimelineProps) {
                   variant={timeRange === range ? "default" : "outline"}
                   size="sm"
                   onClick={() => setTimeRange(range)}
+                  className={`font-mono ${timeRange === range ? "intel-badge" : "border-intel-border hover:bg-intel-surface/60"}`}
                 >
                   {range}
                 </Button>
               ))}
             </div>
-            <div className="text-sm text-muted-foreground">
+            <div className="text-sm text-intel-text-muted font-mono">
               {filteredEvents.length} events across {locationStats.length} locations
             </div>
           </div>
@@ -171,8 +178,8 @@ export function GeographicTimeline({ messages }: GeographicTimelineProps) {
         {/* Location Overview */}
         <Card className="intel-card intel-glow">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <MapPin className="h-5 w-5" />
+            <CardTitle className="flex items-center gap-2 intel-matrix-text font-mono">
+              <MapPin className="h-5 w-5 text-intel-accent" />
               Activity by Location
             </CardTitle>
           </CardHeader>
@@ -184,9 +191,9 @@ export function GeographicTimeline({ messages }: GeographicTimelineProps) {
                     key={stat.location}
                     className={`p-3 rounded-lg border cursor-pointer transition-colors ${
                       selectedLocation === stat.location
-                        ? "bg-intel-surface/70 border-intel-accent"
-                        : "bg-intel-surface/40 border-intel-border hover:bg-intel-surface/60"
-                    }`}
+                        ? "bg-intel-surface/70 border-intel-accent ring-1 ring-intel-accent/30"
+                        : "bg-intel-surface/40 border-intel-border hover:bg-intel-surface/60 hover:border-intel-accent/60"
+                    } shadow-sm transition-all duration-200`}
                     onClick={() => setSelectedLocation(
                       selectedLocation === stat.location ? null : stat.location
                     )}
@@ -217,8 +224,8 @@ export function GeographicTimeline({ messages }: GeographicTimelineProps) {
         {/* Timeline */}
         <Card className="intel-card intel-glow">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5" />
+            <CardTitle className="flex items-center gap-2 intel-matrix-text font-mono">
+              <Clock className="h-5 w-5 text-intel-accent" />
               {selectedLocation ? `${selectedLocation} Timeline` : "Recent Events"}
             </CardTitle>
           </CardHeader>
@@ -226,7 +233,10 @@ export function GeographicTimeline({ messages }: GeographicTimelineProps) {
             <ScrollArea className="h-[400px]">
               <div className="space-y-3">
                 {(selectedLocation ? eventsByLocation[selectedLocation] || [] : filteredEvents.slice(0, 20)).map((event) => (
-                  <div key={event.id} className="p-3 rounded-lg border border-intel-border bg-intel-surface/40">
+                  <div
+                    key={event.id}
+                    className={`group p-3 rounded-lg border border-intel-border bg-intel-surface/40 hover:bg-intel-surface/60 transition-all duration-200 border-l-2 ${getUrgencyBorder(event.urgency)}`}
+                  >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
@@ -262,8 +272,8 @@ export function GeographicTimeline({ messages }: GeographicTimelineProps) {
       {/* Activity Heatmap Preview */}
       <Card className="intel-card intel-glow">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5" />
+          <CardTitle className="flex items-center gap-2 intel-matrix-text font-mono">
+            <TrendingUp className="h-5 w-5 text-intel-accent" />
             Activity Heatmap
           </CardTitle>
         </CardHeader>
@@ -271,7 +281,7 @@ export function GeographicTimeline({ messages }: GeographicTimelineProps) {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {locationStats.slice(0, 8).map((stat) => (
               <div key={stat.location} className="text-center">
-                <div className="w-16 h-16 mx-auto rounded-full flex items-center justify-center text-white font-bold text-sm"
+                <div className="w-16 h-16 mx-auto rounded-full flex items-center justify-center text-white font-bold text-sm shadow-[0_0_20px_rgba(16,185,129,0.15)]"
                      style={{
                        backgroundColor: `rgba(239, 68, 68, ${Math.min(stat.maxUrgency + 0.2, 1)})`,
                        fontSize: `${Math.max(10, 16 - stat.location.length)}px`
