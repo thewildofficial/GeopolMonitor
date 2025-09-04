@@ -58,8 +58,13 @@ async def get_latest_briefing():
             "data": briefing
         }
     except Exception as e:
-        logger.error(f"Error fetching current briefing: {str(e)}")
-        raise HTTPException(status_code=500, detail="Error fetching briefing data")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Internal server error while retrieving briefing data",
+                "error_code": "BRIEFING_FETCH_ERROR"
+            }
+        )
 
 @router.get("/flash")
 async def get_flash_alerts(count: int = Query(5, description="Number of flash alerts to return"), 
