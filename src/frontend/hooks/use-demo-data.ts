@@ -19,6 +19,8 @@ interface TelegramMessage {
   forwards?: number
   has_media: boolean
   media_type?: string
+  media_urls?: string[]
+  video_url?: string
 }
 
 // Demo data for testing the frontend
@@ -56,7 +58,10 @@ const DEMO_MESSAGES: TelegramMessage[] = [
     views: 3240,
     forwards: 156,
     has_media: true,
-    media_type: "chart"
+    media_type: "photo",
+    media_urls: [
+      "https://images.unsplash.com/photo-1520975916090-3105956dac38?q=80&w=1200&auto=format&fit=crop"
+    ]
   },
   {
     message_id: 3,
@@ -74,7 +79,8 @@ const DEMO_MESSAGES: TelegramMessage[] = [
     views: 8760,
     forwards: 423,
     has_media: true,
-    media_type: "satellite"
+    media_type: "video",
+    video_url: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4"
   },
   {
     message_id: 4,
@@ -109,7 +115,11 @@ const DEMO_MESSAGES: TelegramMessage[] = [
     views: 12300,
     forwards: 567,
     has_media: true,
-    media_type: "infographic"
+    media_type: "photo",
+    media_urls: [
+      "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?q=80&w=1200&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1520607162513-77705c0f0d4a?q=80&w=1200&auto=format&fit=crop"
+    ]
   },
   {
     message_id: 6,
@@ -144,7 +154,10 @@ const DEMO_MESSAGES: TelegramMessage[] = [
     views: 9450,
     forwards: 312,
     has_media: true,
-    media_type: "photo"
+    media_type: "photo",
+    media_urls: [
+      "https://images.unsplash.com/photo-1517816743773-6e0fd518b4a6?q=80&w=1200&auto=format&fit=crop"
+    ]
   },
   {
     message_id: 8,

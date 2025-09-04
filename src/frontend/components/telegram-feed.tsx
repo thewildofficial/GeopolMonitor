@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect, useRef } from "react"
 import { useWebSocket } from "@/hooks/use-websocket"
 import { useDemoTelegramData } from "@/hooks/use-demo-data"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -41,6 +41,8 @@ interface TelegramMessage {
   forwards?: number
   has_media: boolean
   media_type?: string
+  media_urls?: string[]
+  video_url?: string
 }
 
 export function TelegramFeed() {
@@ -78,7 +80,9 @@ export function TelegramFeed() {
         views: msg.views,
         forwards: msg.forwards,
         has_media: msg.has_media || false,
-        media_type: msg.media_type
+        media_type: msg.media_type,
+        media_urls: (msg as any).media_urls || [],
+        video_url: (msg as any).video_url
       }))
   }, [messages])
 
@@ -168,6 +172,40 @@ export function TelegramFeed() {
     }
   }, [telegramMessages, demoStats])
 
+  // Integrate page scroll with feed scroll: when page reaches bottom and user keeps scrolling,
+  // continue scrolling inside the feed ScrollArea instead of doing nothing.
+  const feedContainerRef = useRef<HTMLDivElement | null>(null)
+  const feedViewportRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!feedContainerRef.current) return
+    // shadcn/radix adds an inner viewport element
+    feedViewportRef.current = feedContainerRef.current.querySelector<HTMLElement>(
+      '[data-radix-scroll-area-viewport]'
+    ) as HTMLDivElement | null
+
+    const onWheel = (e: WheelEvent) => {
+      if (!feedViewportRef.current) return
+      const atPageBottom =
+        window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2
+      if (!atPageBottom || e.deltaY <= 0) return
+
+      const vp = feedViewportRef.current
+      const maxScroll = vp.scrollHeight - vp.clientHeight
+      if (maxScroll <= 0) return
+
+      // If the feed can scroll further, consume the wheel event and scroll the feed
+      if (vp.scrollTop < maxScroll) {
+        e.preventDefault()
+        vp.scrollTop = Math.min(maxScroll, vp.scrollTop + e.deltaY)
+      }
+    }
+
+    // Use passive: false so we can preventDefault when needed
+    window.addEventListener("wheel", onWheel, { passive: false })
+    return () => window.removeEventListener("wheel", onWheel as EventListener)
+  }, [])
+
   return (
     <div className="container mx-auto p-6 space-y-6 bg-intel-bg min-h-screen">
       {/* Header */}
@@ -214,7 +252,7 @@ export function TelegramFeed() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <ScrollArea className="h-[600px] intel-data-stream">
+          <ScrollArea ref={feedContainerRef} className="h-[600px] intel-data-stream">
             <div className="space-y-4">
               {filteredMessages.length === 0 ? (
                 <div className="text-center py-12 text-intel-text-muted">

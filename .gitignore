@@ -53,3 +53,4 @@ node_modules/
 /.windsurf
 AGENTS.md
 CLAUDE.md
+/src/frontend/.next

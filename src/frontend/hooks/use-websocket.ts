@@ -21,6 +21,8 @@ interface Message {
   forwards?: number
   has_media?: boolean
   media_type?: string
+  media_urls?: string[]
+  video_url?: string
   // Legacy fields for backward compatibility
   id?: string
   content?: string
