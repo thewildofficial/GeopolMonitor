@@ -52,8 +52,35 @@ export function useWebSocket() {
 
     console.log("🔌 Attempting to connect to WebSocket...")
     
+    // Get WebSocket URL with proper fallback logic
+    const getWebSocketUrl = () => {
+      // First, try environment variable
+      if (process.env.NEXT_PUBLIC_WS_URL) {
+        return process.env.NEXT_PUBLIC_WS_URL
+      }
+      
+      // In production, we should not fall back to localhost
+      if (process.env.NODE_ENV === 'production') {
+        console.error("❌ NEXT_PUBLIC_WS_URL environment variable is required in production")
+        throw new Error("WebSocket URL not configured for production environment")
+      }
+      
+      // Only use localhost in development
+      if (process.env.NODE_ENV === 'development') {
+        console.warn("⚠️ Using localhost fallback for WebSocket URL in development")
+        return "http://localhost:8000"
+      }
+      
+      // Fallback for other environments
+      console.warn("⚠️ Using localhost fallback for WebSocket URL")
+      return "http://localhost:8000"
+    }
+    
+    const wsUrl = getWebSocketUrl()
+    console.log(`🔗 Connecting to WebSocket at: ${wsUrl}`)
+    
     // Connect to backend WebSocket server
-    const socket = io(process.env.NEXT_PUBLIC_WS_URL || "http://localhost:8000", {
+    const socket = io(wsUrl, {
       transports: ["websocket", "polling"],
       reconnection: true,
       reconnectionAttempts: 5,
@@ -83,6 +110,17 @@ export function useWebSocket() {
 
     socket.on("error", (error) => {
       console.error("🚨 WebSocket error:", error)
+      setIsConnected(false)
+    })
+
+    socket.on("connect_error", (error) => {
+      console.error("🚨 WebSocket connection error:", error)
+      setIsConnected(false)
+      
+      // In production, provide more helpful error messages
+      if (process.env.NODE_ENV === 'production') {
+        console.error("❌ Failed to connect to WebSocket server. Please check your NEXT_PUBLIC_WS_URL configuration.")
+      }
     })
 
     socketRef.current = socket
