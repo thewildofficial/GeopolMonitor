@@ -59,6 +59,17 @@ backups/
 /.taskmaster
 /.trae
 /.windsurf
+/.goose
+
+# AI/dev helper files
+CLAUDE.md
+AGENTS.md
+stagewise.json
+
+# Root artifacts and reports (move to data/reports/ but ignore if left at root)
+/basic_relevance_test_results_*.json
+/telegram_ai_test_results_*.json
+/message_capture_proof_*.json
 
 # Project-specific keepers (ensure we do NOT ignore source files)
 # Do not ignore these source/docs files:
