@@ -126,9 +126,16 @@ class FeedWatcher:
                     connect=self.config.connect_timeout,
                     total=self.config.total_timeout
                 )
-                # Choose SSL context per feed based on whitelist
-                ssl_ctx = insecure_ssl if any(feed_url.startswith(w) for w in INSECURE_FEED_WHITELIST) else default_ssl
-                
+                # Choose SSL context per feed based on hostname whitelist
+                parts = urlsplit(feed_url)
+                host = parts.hostname or ""
+                is_whitelisted = (
+                    host in self._insecure_hosts
+                    or any(host.endswith("." + h) for h in self._insecure_hosts)
+                )
+                ssl_ctx = self.insecure_ssl if (parts.scheme == "https" and is_whitelisted) else self.default_ssl
+                if is_whitelisted and parts.scheme == "https":
+                    logger.warning("Using INSECURE SSL for whitelisted host %s", host)
                 async with self.session.get(feed_url, headers=headers, timeout=timeout, ssl=ssl_ctx) as response:
                     if response.status == 304:  # Not modified
                         return ""

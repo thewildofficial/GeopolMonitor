@@ -627,18 +627,15 @@
 
 .activity-dot {
     fill: var(--highlight-blue);
-    r: 2;
     animation: dotPulse 1.5s ease-in-out infinite;
 }
 
 .activity-dot.medium {
     fill: #FFAD33;
-    r: 3;
 }
 
 .activity-dot.high {
     fill: var(--accent-red);
-    r: 4;
 }
 
 .activity-dot:hover {
@@ -851,5 +848,4 @@
     .message-stream {
         padding: 12px;
     }
-} 
-} 
+}

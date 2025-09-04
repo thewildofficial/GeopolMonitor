@@ -30,19 +30,30 @@ from .controllers.briefing_controller import router as briefing_router  # Import
 from config.settings import STATIC_DIR, TEMPLATES_DIR, WEB_HOST
 from datetime import datetime, timedelta, timezone
 
+# Helper to safely parse JSON from DB fields
+def _safe_json_parse(data, default=None):
+    if not data:
+        return [] if default is None else default
+    try:
+        return json.loads(data)
+    except (json.JSONDecodeError, TypeError):
+        return [] if default is None else default
+
 # Ensure static directory exists
 STATIC_DIR.mkdir(exist_ok=True)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Handle application startup and shutdown events."""
-    # Startup
-    init_db()
-    await init_news_db()
-    await init_briefing_tables()
-    yield
-    # Shutdown
-    cleanup_db()
+    try:
+        # Startup
+        init_db()
+        await init_news_db()
+        await init_briefing_tables()
+        yield
+    finally:
+        # Ensure DB cleanup on shutdown or on startup failure
+        cleanup_db()
 
 def is_local_environment():
     """Check if we're running in a local environment"""
@@ -668,8 +679,11 @@ def create_app():
         try:
             while True:
                 await websocket.receive_text()  # Keep connection alive
-        except:
-            manager.disconnect(websocket=websocket)
+        except Exception as e:
+            try:
+                await manager.disconnect(websocket=websocket)
+            finally:
+                pass
 
     @app.websocket("/ws/telegram")
     async def telegram_websocket_endpoint(websocket: WebSocket):
@@ -849,7 +863,7 @@ def create_app():
         if query_params.get("message_types"):
             try:
                 type_strings = [t.strip().upper() for t in query_params["message_types"].split(",")]
-                filters.message_types = {MessageType(t.lower()) for t in type_strings if hasattr(MessageType, t)}
+                filters.message_types = {MessageType[t] for t in type_strings if hasattr(MessageType, t)}
             except ValueError:
                 pass
                 
@@ -1012,8 +1026,8 @@ def create_app():
                         "urgency_score": msg["urgency_score"],
                         "relevance_score": msg["relevance_score"],
                         "sentiment_score": msg["sentiment_score"],
-                        "detected_locations": json.loads(msg["detected_locations"]) if msg["detected_locations"] else [],
-                        "categories": json.loads(msg["categories"]) if msg["categories"] else [],
+                        "detected_locations": _safe_json_parse(msg["detected_locations"]),
+                        "categories": _safe_json_parse(msg["categories"]),
                         "time_sensitivity": msg["time_sensitivity"],
                         "views": msg["views"],
                         "forwards": msg["forwards"],

@@ -100,6 +100,7 @@ async def sample_message(telegram_db, sample_channel):
 class TestTelegramChannel:
     """Test cases for TelegramChannel model."""
     
+    @pytest.mark.asyncio
     async def test_channel_creation(self, telegram_db):
         """Test basic channel creation."""
         channel_data = {
@@ -128,6 +129,7 @@ class TestTelegramChannel:
             assert saved_channel.priority_level == 5  # Default value
             assert saved_channel.credibility_score == 5.0  # Default value
     
+    @pytest.mark.asyncio
     async def test_channel_unique_constraints(self, telegram_db):
         """Test that username must be unique."""
         channel_data = {
@@ -152,7 +154,9 @@ class TestTelegramChannel:
             
             with pytest.raises(IntegrityError):
                 await session.commit()
+            await session.rollback()
     
+    @pytest.mark.asyncio
     async def test_channel_defaults(self, telegram_db):
         """Test that default values are properly set."""
         minimal_data = {
@@ -177,6 +181,7 @@ class TestTelegramChannel:
             assert channel.is_scam is False
             assert channel.is_fake is False
     
+    @pytest.mark.asyncio
     async def test_channel_relationships(self, telegram_db, sample_channel):
         """Test that channel relationships work correctly."""
         async with get_telegram_session() as session:
@@ -194,6 +199,7 @@ class TestTelegramChannel:
 class TestTelegramMessage:
     """Test cases for TelegramMessage model."""
     
+    @pytest.mark.asyncio
     async def test_message_creation(self, telegram_db, sample_channel):
         """Test basic message creation."""
         message_data = {
@@ -225,6 +231,7 @@ class TestTelegramMessage:
             assert saved_message.has_media is False  # Default value
             assert saved_message.ai_processed is False  # Default value
     
+    @pytest.mark.asyncio
     async def test_message_foreign_key_constraint(self, telegram_db):
         """Test that messages require valid channel_id."""
         message_data = {
@@ -240,7 +247,9 @@ class TestTelegramMessage:
             
             with pytest.raises(IntegrityError):
                 await session.commit()
+            await session.rollback()
     
+    @pytest.mark.asyncio
     async def test_message_composite_primary_key(self, telegram_db, sample_channel):
         """Test that composite primary key (message_id, channel_id) works."""
         message_data = {
@@ -263,7 +272,9 @@ class TestTelegramMessage:
             
             with pytest.raises(IntegrityError):
                 await session.commit()
+            await session.rollback()
     
+    @pytest.mark.asyncio
     async def test_message_relationship_to_channel(self, telegram_db, sample_message):
         """Test message-to-channel relationship."""
         async with get_telegram_session() as session:
@@ -285,6 +296,7 @@ class TestTelegramMessage:
 class TestChannelMetric:
     """Test cases for ChannelMetric model."""
     
+    @pytest.mark.asyncio
     async def test_metric_creation(self, telegram_db, sample_channel):
         """Test basic metric creation."""
         metric_data = {
@@ -308,6 +320,7 @@ class TestChannelMetric:
             assert metric.messages_per_hour == 6.25
             assert metric.activity_score == 8.5
     
+    @pytest.mark.asyncio
     async def test_metric_defaults(self, telegram_db, sample_channel):
         """Test metric default values."""
         minimal_data = {
@@ -327,6 +340,7 @@ class TestChannelMetric:
 class TestDatabaseUtilities:
     """Test utility functions."""
     
+    @pytest.mark.asyncio
     async def test_channel_exists(self, telegram_db, sample_channel):
         """Test channel_exists utility function."""
         # Existing channel
@@ -337,6 +351,7 @@ class TestDatabaseUtilities:
         exists = await channel_exists(999999999)
         assert exists is False
     
+    @pytest.mark.asyncio
     async def test_message_exists(self, telegram_db, sample_message):
         """Test message_exists utility function."""
         # Existing message
@@ -347,6 +362,7 @@ class TestDatabaseUtilities:
         exists = await message_exists(999999999, sample_message.channel_id)
         assert exists is False
     
+    @pytest.mark.asyncio
     async def test_get_active_channels(self, telegram_db, sample_channel):
         """Test get_active_channels utility function."""
         # Create an inactive channel
@@ -369,6 +385,7 @@ class TestDatabaseUtilities:
         assert active_channels[0].channel_id == sample_channel.channel_id
         assert active_channels[0].is_active is True
     
+    @pytest.mark.asyncio
     async def test_get_channel_by_username(self, telegram_db, sample_channel):
         """Test get_channel_by_username utility function."""
         # Existing username
@@ -380,6 +397,7 @@ class TestDatabaseUtilities:
         channel = await get_channel_by_username('nonexistent_channel')
         assert channel is None
     
+    @pytest.mark.asyncio
     async def test_health_check(self, telegram_db, sample_channel, sample_message):
         """Test database health check."""
         health = await health_check()
@@ -394,12 +412,14 @@ class TestDatabaseUtilities:
 class TestModelValidation:
     """Test model validation and constraints."""
     
+    @pytest.mark.asyncio
     async def test_invalid_data_types(self, telegram_db):
         """Test that invalid data types are handled."""
         with pytest.raises((ValueError, TypeError)):
             # Invalid channel_id type
             TelegramChannel(channel_id="not_a_number", title="Test")
     
+    @pytest.mark.asyncio
     async def test_required_fields(self, telegram_db):
         """Test that required fields are enforced."""
         # Channel without required title

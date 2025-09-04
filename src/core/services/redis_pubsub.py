@@ -96,6 +96,7 @@ class RedisConnectionManager:
         self.max_reconnect_delay = 60.0
         self.health_check_interval = 30.0
         self._health_check_task: Optional[asyncio.Task] = None
+        self._reconnect_task: Optional[asyncio.Task] = None
         self.connection_stats = {
             "total_connections": 0,
             "failed_connections": 0,
@@ -140,6 +141,12 @@ class RedisConnectionManager:
             self._health_check_task.cancel()
             try:
                 await self._health_check_task
+            except asyncio.CancelledError:
+                pass
+        if self._reconnect_task:
+            self._reconnect_task.cancel()
+            try:
+                await self._reconnect_task
             except asyncio.CancelledError:
                 pass
         
@@ -201,12 +208,26 @@ class RedisConnectionManager:
                     except Exception:
                         logger.warning("Health check failed, connection lost")
                         self.is_connected = False
-                        asyncio.create_task(self.reconnect())
+                        # Guard against spawning duplicate reconnect tasks
+                        if not self._reconnect_task or self._reconnect_task.done():
+                            self._reconnect_task = asyncio.create_task(self._reconnect_task_wrapper())
                 
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.error(f"Health check error: {e}")
+
+    async def _reconnect_task_wrapper(self) -> None:
+        """Wrapper to manage reconnect task lifecycle and prevent duplicates."""
+        try:
+            await self.reconnect()
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.error(f"Reconnect task error: {e}")
+        finally:
+            # Allow future reconnect attempts to be scheduled
+            self._reconnect_task = None
 
 
 class RedisPublisher:
@@ -217,7 +238,7 @@ class RedisPublisher:
         self.publish_stats = {
             "total_published": 0,
             "failed_publishes": 0,
-            "channels_used": set(),
+            "channels_used": [],
             "last_publish": None
         }
     
@@ -244,7 +265,8 @@ class RedisPublisher:
                 
                 # Update stats
                 self.publish_stats["total_published"] += 1
-                self.publish_stats["channels_used"].add(channel)
+                if channel not in self.publish_stats["channels_used"]:
+                    self.publish_stats["channels_used"].append(channel)
                 self.publish_stats["last_publish"] = datetime.now(timezone.utc).isoformat()
                 
                 logger.debug(f"Published message to {channel} (subscribers: {result})")
@@ -356,7 +378,10 @@ class RedisSubscriber:
         if self.is_listening:
             return
         
-        await self.connection_manager.ensure_connection()
+        connected = await self.connection_manager.ensure_connection()
+        if not connected or not self.connection_manager.redis_client or not self.connection_manager.is_connected:
+            logger.error("Cannot start Redis subscriber: Redis client is not connected")
+            return
         self.pubsub = self.connection_manager.redis_client.pubsub()
         
         # Only start listening task if we have subscriptions

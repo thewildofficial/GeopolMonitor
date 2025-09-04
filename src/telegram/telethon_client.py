@@ -141,7 +141,10 @@ class TelethonMonitorClient:
     def _register_event_handlers(self):
         """Register event handlers for message monitoring."""
         
-        @self.client.on(events.NewMessage(chats=lambda chat: chat.id in self.monitored_channels))
+        # Capture a snapshot of monitored channels to avoid race conditions
+        monitored_channel_ids = set(self.monitored_channels.keys())
+        
+        @self.client.on(events.NewMessage(chats=lambda chat: chat.id in monitored_channel_ids))
         async def handle_new_message(event):
             """Handle new messages from monitored channels."""
             try:
@@ -150,12 +153,15 @@ class TelethonMonitorClient:
                 logger.error(f"Error processing message {event.message.id}: {e}")
                 self.stats['errors_handled'] += 1
 
-    async def authenticate_user(self, phone_number: str) -> bool:
+    async def authenticate_user(self, phone_number: str, auth_callback: Optional[Callable[[str], str]] = None) -> bool:
         """
         Authenticate user with phone number and handle the verification flow.
         
         Args:
             phone_number: User's phone number in international format (e.g., +1234567890)
+            auth_callback: Optional callback function to get auth codes/passwords asynchronously.
+                          Should accept a prompt string and return the user input.
+                          If None, will use blocking input() (not recommended for production).
             
         Returns:
             bool: True if authentication successful, False otherwise
@@ -178,7 +184,11 @@ class TelethonMonitorClient:
             sent_code = await self.client.send_code_request(phone_number)
             
             # Get code from user input
-            code = input("Enter the authentication code you received: ").strip()
+            if auth_callback:
+                code = auth_callback("Enter the authentication code you received: ").strip()
+            else:
+                # Fallback to blocking input (not recommended for production)
+                code = input("Enter the authentication code you received: ").strip()
             
             try:
                 # Sign in with code
@@ -190,7 +200,11 @@ class TelethonMonitorClient:
             except SessionPasswordNeededError:
                 # Two-factor authentication required
                 logger.info("Two-factor authentication enabled, requesting password...")
-                password = input("Enter your 2FA password: ").strip()
+                if auth_callback:
+                    password = auth_callback("Enter your 2FA password: ").strip()
+                else:
+                    # Fallback to blocking input (not recommended for production)
+                    password = input("Enter your 2FA password: ").strip()
                 
                 await self.client.sign_in(password=password)
                 logger.info("Successfully authenticated with 2FA password")
@@ -210,12 +224,13 @@ class TelethonMonitorClient:
             logger.error(f"Authentication failed: {e}")
             return False
 
-    async def start(self, phone_number: Optional[str] = None) -> bool:
+    async def start(self, phone_number: Optional[str] = None, auth_callback: Optional[Callable[[str], str]] = None) -> bool:
         """
         Start the Telethon client and authenticate if needed.
         
         Args:
             phone_number: Phone number for authentication (optional if already authenticated)
+            auth_callback: Optional callback function to get auth codes/passwords asynchronously
             
         Returns:
             bool: True if started successfully, False otherwise
@@ -232,7 +247,7 @@ class TelethonMonitorClient:
                 self.is_authenticated = True
             elif phone_number:
                 # Authenticate with provided phone number
-                if not await self.authenticate_user(phone_number):
+                if not await self.authenticate_user(phone_number, auth_callback):
                     return False
             else:
                 logger.error("No phone number provided and not already authenticated")
@@ -427,19 +442,20 @@ class TelethonMonitorClient:
                 logger.error(f"Heartbeat error: {e}")
                 await asyncio.sleep(self.ping_interval)
 
-    async def start_with_monitoring(self, phone_number: Optional[str] = None) -> bool:
+    async def start_with_monitoring(self, phone_number: Optional[str] = None, auth_callback: Optional[Callable[[str], str]] = None) -> bool:
         """
         Start the client with robust monitoring and auto-reconnection.
         
         Args:
             phone_number: Phone number for authentication (optional if already authenticated)
+            auth_callback: Optional callback function to get auth codes/passwords asynchronously
             
         Returns:
             bool: True if started successfully, False otherwise
         """
         try:
             # Start the basic client
-            if not await self.start(phone_number):
+            if not await self.start(phone_number, auth_callback):
                 return False
             
             self.is_running = True

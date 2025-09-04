@@ -388,9 +388,24 @@ class ChannelMonitoringOrchestrator:
     
     def _setup_signal_handlers(self):
         """Setup signal handlers for graceful shutdown."""
+        # Capture event loop to schedule thread-safely
+        try:
+            self._loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self._loop = None
+
         def signal_handler(signum, frame):
             logger.info(f"Received signal {signum}, initiating graceful shutdown...")
-            asyncio.create_task(self.stop())
+            if hasattr(self, "_loop") and self._loop is not None:
+                try:
+                    asyncio.run_coroutine_threadsafe(self.stop(), self._loop)
+                except Exception as e:
+                    logger.error(f"Error scheduling shutdown: {e}")
+            else:
+                try:
+                    asyncio.get_event_loop().call_soon_threadsafe(lambda: asyncio.create_task(self.stop()))
+                except Exception as e:
+                    logger.error(f"Fallback scheduling failed: {e}")
         
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
@@ -522,7 +537,10 @@ class ChannelMonitoringOrchestrator:
         stats["system_status"] = {
             "is_running": self.is_running,
             "is_stopping": self.is_stopping,
-            "telethon_connected": self.telethon_client.client.is_connected() if self.telethon_client else False,
+            "telethon_connected": (
+                (lambda c: (callable(getattr(c, "is_connected", None)) and c.is_connected()) or False)
+                (getattr(self.telethon_client, "client", None))
+            ) if self.telethon_client else False,
             "redis_connected": redis_service.is_running if redis_service else False
         }
         

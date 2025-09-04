@@ -135,7 +135,11 @@ class TelethonRedisIntegration:
         
         try:
             # Remove message handlers
-            self.telethon_client.client.remove_event_handler(self._handle_telegram_message)
+            if self.telethon_client and getattr(self.telethon_client, 'client', None):
+                try:
+                    self.telethon_client.client.remove_event_handler(self._handle_telegram_message)
+                except AttributeError:
+                    pass
             
             # Stop Telethon client
             if self.telethon_client.client and self.telethon_client.client.is_connected():
@@ -334,7 +338,7 @@ class TelethonRedisIntegration:
                 "edit_date": message.edit_date.isoformat() if message.edit_date else None,
                 "views": getattr(message, 'views', None),
                 "forwards": getattr(message, 'forwards', None),
-                "replies": getattr(message, 'replies', {}).messages if hasattr(message, 'replies') and message.replies else 0,
+                "replies": (getattr(message.replies, 'replies', 0) if hasattr(message, 'replies') and message.replies else 0),
                 "is_reply": message.reply_to is not None,
                 "reply_to_message_id": message.reply_to.reply_to_msg_id if message.reply_to else None,
                 "has_media": message.media is not None,
@@ -397,10 +401,10 @@ class TelethonRedisIntegration:
         views = message_data.get('views', 0) or 0
         forwards = message_data.get('forwards', 0) or 0
         
-        if views > 10000 or forwards > 100:
-            priority = Priority.HIGH
-        elif views > 100000 or forwards > 1000:
+        if views > 100000 or forwards > 1000:
             priority = Priority.CRITICAL
+        elif views > 10000 or forwards > 100:
+            priority = Priority.HIGH
         
         return priority
     

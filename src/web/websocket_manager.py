@@ -302,7 +302,18 @@ class EnhancedConnectionManager:
         try:
             if self.redis_subscription_task:
                 self.redis_subscription_task.cancel()
-                self.redis_subscription_task = None
+                try:
+                    # Wait for the task to complete with timeout
+                    await asyncio.wait_for(self.redis_subscription_task, timeout=5.0)
+                except asyncio.CancelledError:
+                    # Task was cancelled as expected
+                    pass
+                except asyncio.TimeoutError:
+                    logger.warning("Redis subscription task did not complete within timeout")
+                except Exception as e:
+                    logger.error(f"Error during Redis subscription task cleanup: {e}")
+                finally:
+                    self.redis_subscription_task = None
                 
             self.is_redis_connected = False
             logger.info("Redis subscription stopped for WebSocket broadcast")
@@ -353,12 +364,34 @@ class EnhancedConnectionManager:
                 
         # Check priority level
         if filters.priority_level:
-            message_priority = redis_message.priority.value
-            priority_levels = ["low", "medium", "high", "critical"]
-            min_level_index = priority_levels.index(filters.priority_level)
-            message_level_index = priority_levels.index(message_priority)
-            if message_level_index < min_level_index:
-                return False
+            try:
+                # Create mapping from Priority enum to string names
+                priority_mapping = {
+                    Priority.LOW: "low",
+                    Priority.MEDIUM: "medium", 
+                    Priority.HIGH: "high",
+                    Priority.CRITICAL: "critical"
+                }
+                
+                # Get message priority as string
+                message_priority_str = priority_mapping.get(redis_message.priority, "low")
+                
+                # Validate filter priority level
+                valid_priorities = ["low", "medium", "high", "critical"]
+                if filters.priority_level not in valid_priorities:
+                    logger.warning(f"Invalid priority level filter: {filters.priority_level}, treating as lowest priority")
+                    filters.priority_level = "low"
+                
+                # Compare priority levels using enum values
+                min_level_value = Priority[filters.priority_level.upper()].value
+                message_level_value = redis_message.priority.value
+                
+                if message_level_value < min_level_value:
+                    return False
+                    
+            except (KeyError, AttributeError) as e:
+                logger.warning(f"Error comparing priority levels: {e}, allowing message through")
+                # Allow message through if there's an error in priority comparison
                 
         return True
 
