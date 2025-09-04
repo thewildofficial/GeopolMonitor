@@ -13,6 +13,7 @@ sys.path.insert(0, str(project_root))
 # Import our database configuration and models
 from src.database.telegram_db import get_sync_database_url
 from src.database.models.telegram_models import TelegramBase
+from src.database.models.news_models import NewsBase
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -23,8 +24,12 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Set our target metadata from the Telegram models Base
-target_metadata = TelegramBase.metadata
+# Combine metadata for all models
+from sqlalchemy import MetaData
+target_metadata = MetaData()
+for base in (TelegramBase, NewsBase):
+    for table in base.metadata.tables.values():
+        target_metadata._add_table(table.name, table.schema, table)
 
 def get_url():
     """Get database URL using our existing configuration."""

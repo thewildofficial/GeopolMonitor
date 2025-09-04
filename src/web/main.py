@@ -20,6 +20,8 @@ from ..database.models import (
     init_db, get_db, cleanup_db, 
     get_article_tags, search_articles_by_tags
 )
+from ..database.news_db import init_news_db, get_news_paginated
+from ..database.models.news_models import NewsEntry
 from ..database.models.briefing_models import init_briefing_tables
 from ..core.processor import ImageExtractor
 from ..utils.text import clean_text
@@ -36,6 +38,7 @@ async def lifespan(app: FastAPI):
     """Handle application startup and shutdown events."""
     # Startup
     init_db()
+    await init_news_db()
     await init_briefing_tables()
     yield
     # Shutdown
@@ -272,119 +275,58 @@ def create_app():
 
     @app.get("/api/news")
     async def get_news(
-        tags: Optional[str] = None, 
-        page: int = Query(1, ge=1), 
+        tags: Optional[str] = None,
+        page: int = Query(1, ge=1),
         page_size: int = Query(20, ge=1, le=100)
     ):
         try:
-            print(f"Fetching news with params: tags={tags}, page={page}, page_size={page_size}")
-            
-            # Calculate offset for pagination
-            offset = (page - 1) * page_size
-            total_count = 0
+            tag_list = [t.strip() for t in tags.split(',')] if tags else None
+            total_count, rows = await get_news_paginated(page=page, page_size=page_size, tag_names=tag_list)
+
+            # Transform ORM objects to dicts resembling prior shape
             news_items = []
-            
-            with get_db() as conn:
+            for r in rows:
+                item = {
+                    'id': r.id,
+                    'title': r.title,
+                    'description': r.description,
+                    'content': r.content,
+                    'link': r.link,
+                    'pub_date': r.pub_date.isoformat() if r.pub_date else None,
+                    'feed_url': r.feed_url,
+                    'image_url': r.image_url,
+                    'message': r.message,
+                    'emoji1': r.emoji1,
+                    'emoji2': r.emoji2,
+                    'sentiment_score': r.sentiment_score,
+                    'bias_category': r.bias_category,
+                    'bias_score': r.bias_score,
+                }
+                news_items.append(item)
+
+            formatted_news = []
+            for item in news_items:
                 try:
-                    # Get total count first
-                    if tags:
-                        tag_list = [t.strip() for t in tags.split(',')]
-                        placeholders = ','.join('?' * len(tag_list))
-                        count_sql = f'''
-                            SELECT COUNT(DISTINCT ne.id)
-                            FROM news_entries ne
-                            JOIN article_tags at ON ne.id = at.article_id
-                            JOIN tags t ON at.tag_id = t.id
-                            WHERE t.name IN ({placeholders})
-                        '''
-                        print(f"Executing count query: {count_sql} with params {tag_list}")
-                        count_cursor = conn.execute(count_sql, tag_list)
-                    else:
-                        print("Executing simple count query")
-                        count_cursor = conn.execute('SELECT COUNT(*) FROM news_entries')
-                    
-                    total_count = count_cursor.fetchone()[0] or 0
-                    print(f"Total count: {total_count}")
+                    formatted = format_news_item(item)
+                    if formatted:
+                        formatted_news.append(formatted)
+                except Exception:
+                    continue
 
-                    # Then get the paginated results
-                    if tags:
-                        tag_list = [t.strip() for t in tags.split(',')]
-                        print(f"Fetching news items with tags: {tag_list}")
-                        news_items = search_articles_by_tags(
-                            tag_list, 
-                            limit=page_size, 
-                            offset=offset
-                        )
-                    else:
-                        select_sql = '''
-                            SELECT 
-                                id, title, description, content, link, pub_date,
-                                feed_url, image_url, message, emoji1, emoji2,
-                                sentiment_score, bias_category, bias_score
-                            FROM news_entries
-                            ORDER BY pub_date DESC
-                            LIMIT ? OFFSET ?
-                        '''
-                        print(f"Executing select query: {select_sql} with params {(page_size, offset)}")
-                        cursor = conn.execute(select_sql, (page_size, offset))
-                        columns = [column[0] for column in cursor.description]
-                        news_items = [dict(zip(columns, row)) for row in cursor]
-
-                    print(f"Found {len(news_items)} news items")
-
-                except Exception as db_error:
-                    print(f"Database error in get_news: {str(db_error)}")
-                    raise HTTPException(
-                        status_code=500,
-                        detail=f"Database error: {str(db_error)}"
-                    )
-
-                # Format news items
-                formatted_news = []
-                for item in news_items:
-                    if item:
-                        try:
-                            formatted = format_news_item(item)
-                            if formatted:
-                                formatted_news.append(formatted)
-                        except Exception as format_error:
-                            print(f"Error formatting news item {item.get('id')}: {str(format_error)}")
-                            continue
-
-                # Always include pagination metadata
-                total_pages = max(1, (total_count + page_size - 1) // page_size)
-                response = {
-                    "news": formatted_news,
-                    "pagination": {
-                        "page": page,
-                        "page_size": page_size,
-                        "total_count": total_count,
-                        "total_pages": total_pages,
-                        "has_next": page * page_size < total_count,
-                        "has_prev": page > 1
-                    }
+            total_pages = max(1, (total_count + page_size - 1) // page_size)
+            return {
+                "news": formatted_news,
+                "pagination": {
+                    "page": page,
+                    "page_size": page_size,
+                    "total_count": total_count,
+                    "total_pages": total_pages,
+                    "has_next": page * page_size < total_count,
+                    "has_prev": page > 1
                 }
-                return response
-
-        except HTTPException:
-            raise
+            }
         except Exception as e:
-            print(f"Unexpected error in get_news: {str(e)}")
-            return JSONResponse(
-                status_code=500,
-                content={
-                    "detail": f"Unexpected error: {str(e)}",
-                    "news": [],
-                    "pagination": {
-                        "page": page,
-                        "page_size": page_size,
-                        "total_count": 0,
-                        "total_pages": 1,
-                        "has_next": False,
-                        "has_prev": False
-                    }
-                }
-            )
+            return JSONResponse(status_code=500, content={"detail": str(e)})
 
     @app.get("/api/tags")
     async def get_tags(limit: int = 100, offset: int = 0):
