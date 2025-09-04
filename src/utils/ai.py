@@ -7,7 +7,7 @@ import logging
 from datetime import datetime
 from typing import Dict, Tuple, Optional, List
 from google import genai
-from config.settings import GEMINI_API_KEYS
+from config.settings import GEMINI_API_KEYS, RPM_LIMIT, RPD_LIMIT, MINUTE_WINDOW, DAY_WINDOW
 
 # Configure logging
 logging.basicConfig(
@@ -16,11 +16,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Rate limiting constants
-RPM_LIMIT = 60  # Requests per minute
-RPD_LIMIT = 1500  # Requests per day
-MINUTE_WINDOW = 60  # Window size in seconds
-DAY_WINDOW = 86400  # 24 hours in seconds
+# Rate limiting constants (centralized in config.settings)
 
 # Initialize rate limiting variables
 last_request_time = time.time()

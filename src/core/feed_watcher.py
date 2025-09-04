@@ -9,7 +9,7 @@ from typing import Dict, Set, Optional, Tuple, List
 from email.utils import parsedate_to_datetime
 from time import mktime
 from .priority_feed_processor import PriorityFeedProcessor, ArticleEntry
-from config.settings import API_CALLS_PER_MINUTE, API_CALLS_PER_DAY
+from config.settings import API_CALLS_PER_MINUTE, API_CALLS_PER_DAY, INSECURE_FEED_WHITELIST
 
 logger = logging.getLogger(__name__)
 
@@ -114,14 +114,22 @@ class FeedWatcher:
         max_retries = 3
         retry_delay = 5
             
+        # Prepare SSL contexts
+        default_ssl = ssl.create_default_context()
+        insecure_ssl = ssl.create_default_context()
+        insecure_ssl.check_hostname = False
+        insecure_ssl.verify_mode = ssl.CERT_NONE
+
         for attempt in range(max_retries):
             try:
                 timeout = aiohttp.ClientTimeout(
                     connect=self.config.connect_timeout,
                     total=self.config.total_timeout
                 )
+                # Choose SSL context per feed based on whitelist
+                ssl_ctx = insecure_ssl if any(feed_url.startswith(w) for w in INSECURE_FEED_WHITELIST) else default_ssl
                 
-                async with self.session.get(feed_url, headers=headers, timeout=timeout, ssl=self.ssl_context) as response:
+                async with self.session.get(feed_url, headers=headers, timeout=timeout, ssl=ssl_ctx) as response:
                     if response.status == 304:  # Not modified
                         return ""
                     

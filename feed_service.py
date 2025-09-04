@@ -10,7 +10,8 @@ from src.core.services.briefing_scheduler import BriefingScheduler, BriefingSche
 from config.settings import (
     FEED_POLL_INTERVAL, MAX_CONCURRENT_FEEDS,
     BATCH_SIZE, MAX_ENTRIES_PER_FEED,
-    API_CALLS_PER_MINUTE, API_CALLS_PER_DAY
+    API_CALLS_PER_MINUTE, API_CALLS_PER_DAY,
+    INSECURE_FEED_WHITELIST
 )
 from src.database.models import init_db, init_briefing_tables
 
@@ -98,24 +99,15 @@ async def run_feed_watcher():
     - Briefing refresh: Every {scheduler_config.refresh_interval_seconds//60} minutes
     - New briefing: Every {scheduler_config.generation_interval_hours} hours""")
     
-    # Configure SSL context with more lenient verification for RSS feeds
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False  # Many RSS feeds have mismatched hostnames
-    ssl_context.verify_mode = ssl.CERT_NONE  # Temporarily disable strict cert verification
-    
-    # Note: In production, you should use proper certificate verification
-    # This is a temporary solution to handle feeds with SSL issues
-    logger.warning("⚠️ SSL certificate verification disabled for testing")
-    
-    # Load system root certificates
-    try:
-        ssl_context.load_default_certs()
-    except Exception as e:
-        logger.warning(f"⚠️ Could not load system certificates: {e}")
+    # Configure SSL contexts
+    default_ssl = ssl.create_default_context()
+    insecure_ssl = ssl.create_default_context()
+    insecure_ssl.check_hostname = False
+    insecure_ssl.verify_mode = ssl.CERT_NONE
     
     for attempt in range(max_retries):
         try:
-            feed_watcher = FeedWatcher(config, ssl_context=ssl_context)
+            feed_watcher = FeedWatcher(config)
             await feed_watcher.init()
             
             # Initialize briefing system
@@ -138,7 +130,11 @@ async def run_feed_watcher():
             # Start feed watching tasks
             feed_tasks = []
             for url in feed_urls:
+                # Select SSL context per-feed (whitelist for insecure hosts)
+                ssl_ctx = insecure_ssl if any(url.startswith(w) for w in INSECURE_FEED_WHITELIST) else default_ssl
                 task = asyncio.create_task(feed_watcher.watch_feed(url))
+                # Attach chosen SSL context per feed
+                feed_watcher.ssl_context = ssl_ctx
                 feed_tasks.append(task)
             
             logger.info(f"✨ Feed watcher initialized with {len(feed_urls)} feeds")

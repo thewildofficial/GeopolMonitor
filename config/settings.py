@@ -43,9 +43,9 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 # API Configuration
 GEMINI_API_KEYS = get_api_keys()
 
-# Rate Limiting
-RPM_LIMIT = 15  # Requests per minute
-RPD_LIMIT = 1500  # Requests per day
+# Rate Limiting (single source of truth)
+RPM_LIMIT = int(os.getenv("RPM_LIMIT", "15"))  # Requests per minute
+RPD_LIMIT = int(os.getenv("RPD_LIMIT", "1500"))  # Requests per day
 MINUTE_WINDOW = 60  # Time window in seconds for RPM
 DAY_WINDOW = 86400  # Time window in seconds for RPD
 
@@ -61,3 +61,12 @@ BATCH_SIZE: int = 3  # Reduced batch size for more manageable processing
 MAX_ENTRIES_PER_FEED: int = 10  # Reduced max entries to process per feed
 API_CALLS_PER_MINUTE: int = 15 # Adjusted to stay well within Gemini API limits
 API_CALLS_PER_DAY: int = 1500  # Conservative daily limit to ensure stability
+
+# Feed SSL handling
+INSECURE_FEED_WHITELIST: List[str] = [
+    url.strip() for url in os.getenv("INSECURE_FEED_WHITELIST", "").split(",") if url.strip()
+]
+
+# Configuration validation for required secrets (fail fast)
+if TELEGRAM_API_ID == 0 or not TELEGRAM_API_HASH:
+    raise ValueError("TELEGRAM_API_ID and TELEGRAM_API_HASH must be set")
