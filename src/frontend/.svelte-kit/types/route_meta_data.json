@@ -1,8 +1,0 @@
-{
-	"/": [
-		"src/routes/+page.js"
-	],
-	"/telegram": [
-		"src/routes/telegram/+page.js"
-	]
-}

@@ -965,6 +965,273 @@ def create_app():
         """Get WebSocket connection statistics."""
         return manager.get_connection_stats()
 
+    @app.get("/api/telegram/messages")
+    async def get_telegram_messages(
+        page: int = Query(1, ge=1),
+        page_size: int = Query(50, ge=1, le=100),
+        channel_id: Optional[int] = None,
+        urgency_min: Optional[float] = Query(None, ge=0.0, le=1.0),
+        relevance_min: Optional[float] = Query(None, ge=0.0, le=1.0),
+        location: Optional[str] = None,
+        time_sensitivity: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ):
+        """Get Telegram messages with filtering and pagination."""
+        try:
+            # Calculate offset for pagination
+            offset = (page - 1) * page_size
+            
+            # Build query conditions
+            conditions = []
+            params = []
+            
+            if channel_id:
+                conditions.append("tm.channel_id = ?")
+                params.append(channel_id)
+                
+            if urgency_min is not None:
+                conditions.append("tm.urgency_score >= ?")
+                params.append(urgency_min)
+                
+            if relevance_min is not None:
+                conditions.append("tm.relevance_score >= ?")
+                params.append(relevance_min)
+                
+            if location:
+                conditions.append("tm.detected_locations LIKE ?")
+                params.append(f"%{location}%")
+                
+            if time_sensitivity:
+                conditions.append("tm.time_sensitivity = ?")
+                params.append(time_sensitivity)
+                
+            if start_date:
+                conditions.append("tm.date >= ?")
+                params.append(start_date)
+                
+            if end_date:
+                conditions.append("tm.date <= ?")
+                params.append(end_date)
+            
+            where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
+            
+            with get_db() as conn:
+                # Get total count
+                count_sql = f"""
+                    SELECT COUNT(*)
+                    FROM telegram_messages tm
+                    JOIN telegram_channels tc ON tm.channel_id = tc.channel_id
+                    {where_clause}
+                """
+                count_cursor = conn.execute(count_sql, params)
+                total_count = count_cursor.fetchone()[0] or 0
+                
+                # Get messages
+                messages_sql = f"""
+                    SELECT 
+                        tm.message_id,
+                        tm.channel_id,
+                        tm.text,
+                        tm.date,
+                        tm.urgency_score,
+                        tm.relevance_score,
+                        tm.sentiment_score,
+                        tm.detected_locations,
+                        tm.categories,
+                        tm.time_sensitivity,
+                        tm.views,
+                        tm.forwards,
+                        tm.has_media,
+                        tm.media_type,
+                        tc.title as channel_title,
+                        tc.username as channel_username
+                    FROM telegram_messages tm
+                    JOIN telegram_channels tc ON tm.channel_id = tc.channel_id
+                    {where_clause}
+                    ORDER BY tm.date DESC
+                    LIMIT ? OFFSET ?
+                """
+                
+                cursor = conn.execute(messages_sql, params + [page_size, offset])
+                columns = [column[0] for column in cursor.description]
+                messages = [dict(zip(columns, row)) for row in cursor.fetchall()]
+                
+                # Format messages
+                formatted_messages = []
+                for msg in messages:
+                    formatted_msg = {
+                        "message_id": msg["message_id"],
+                        "channel_id": msg["channel_id"],
+                        "text": msg["text"],
+                        "date": msg["date"],
+                        "channel_title": msg["channel_title"],
+                        "channel_username": msg["channel_username"],
+                        "urgency_score": msg["urgency_score"],
+                        "relevance_score": msg["relevance_score"],
+                        "sentiment_score": msg["sentiment_score"],
+                        "detected_locations": json.loads(msg["detected_locations"]) if msg["detected_locations"] else [],
+                        "categories": json.loads(msg["categories"]) if msg["categories"] else [],
+                        "time_sensitivity": msg["time_sensitivity"],
+                        "views": msg["views"],
+                        "forwards": msg["forwards"],
+                        "has_media": msg["has_media"],
+                        "media_type": msg["media_type"]
+                    }
+                    formatted_messages.append(formatted_msg)
+                
+                # Calculate pagination
+                total_pages = max(1, (total_count + page_size - 1) // page_size)
+                
+                return {
+                    "messages": formatted_messages,
+                    "pagination": {
+                        "page": page,
+                        "page_size": page_size,
+                        "total_count": total_count,
+                        "total_pages": total_pages,
+                        "has_next": page * page_size < total_count,
+                        "has_prev": page > 1
+                    }
+                }
+                
+        except Exception as e:
+            print(f"Error in get_telegram_messages: {str(e)}")
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "detail": str(e),
+                    "messages": [],
+                    "pagination": {
+                        "page": page,
+                        "page_size": page_size,
+                        "total_count": 0,
+                        "total_pages": 1,
+                        "has_next": False,
+                        "has_prev": False
+                    }
+                }
+            )
+
+    @app.get("/api/telegram/channels")
+    async def get_telegram_channels():
+        """Get all monitored Telegram channels."""
+        try:
+            with get_db() as conn:
+                cursor = conn.execute("""
+                    SELECT 
+                        channel_id,
+                        username,
+                        title,
+                        description,
+                        region,
+                        country,
+                        language,
+                        category,
+                        credibility_score,
+                        priority_level,
+                        is_active,
+                        member_count
+                    FROM telegram_channels
+                    WHERE is_active = 1
+                    ORDER BY priority_level DESC, credibility_score DESC
+                """)
+                
+                columns = [column[0] for column in cursor.description]
+                channels = [dict(zip(columns, row)) for row in cursor.fetchall()]
+                
+                return {"channels": channels}
+                
+        except Exception as e:
+            print(f"Error in get_telegram_channels: {str(e)}")
+            return JSONResponse(
+                status_code=500,
+                content={"detail": str(e), "channels": []}
+            )
+
+    @app.get("/api/telegram/stats")
+    async def get_telegram_stats():
+        """Get Telegram monitoring statistics."""
+        try:
+            with get_db() as conn:
+                # Get basic stats
+                stats_cursor = conn.execute("""
+                    SELECT 
+                        COUNT(DISTINCT tm.channel_id) as active_channels,
+                        COUNT(tm.message_id) as total_messages,
+                        COUNT(CASE WHEN tm.urgency_score >= 0.7 THEN 1 END) as high_urgency_count,
+                        COUNT(CASE WHEN tm.date >= datetime('now', '-1 hour') THEN 1 END) as messages_last_hour,
+                        MAX(tm.date) as last_message_time
+                    FROM telegram_messages tm
+                    JOIN telegram_channels tc ON tm.channel_id = tc.channel_id
+                    WHERE tc.is_active = 1
+                """)
+                
+                stats_row = stats_cursor.fetchone()
+                stats = {
+                    "active_channels": stats_row[0] or 0,
+                    "total_messages": stats_row[1] or 0,
+                    "high_urgency_count": stats_row[2] or 0,
+                    "messages_last_hour": stats_row[3] or 0,
+                    "last_message_time": stats_row[4]
+                }
+                
+                # Get top channels by message count
+                top_channels_cursor = conn.execute("""
+                    SELECT 
+                        tc.title,
+                        tc.username,
+                        COUNT(tm.message_id) as message_count,
+                        AVG(tm.urgency_score) as avg_urgency
+                    FROM telegram_channels tc
+                    LEFT JOIN telegram_messages tm ON tc.channel_id = tm.channel_id
+                    WHERE tc.is_active = 1
+                    GROUP BY tc.channel_id
+                    ORDER BY message_count DESC
+                    LIMIT 10
+                """)
+                
+                top_channels = []
+                for row in top_channels_cursor.fetchall():
+                    top_channels.append({
+                        "title": row[0],
+                        "username": row[1],
+                        "message_count": row[2],
+                        "avg_urgency": row[3]
+                    })
+                
+                # Get geographic distribution
+                geo_cursor = conn.execute("""
+                    SELECT 
+                        tc.region,
+                        COUNT(tm.message_id) as message_count
+                    FROM telegram_channels tc
+                    LEFT JOIN telegram_messages tm ON tc.channel_id = tm.channel_id
+                    WHERE tc.is_active = 1 AND tc.region IS NOT NULL
+                    GROUP BY tc.region
+                    ORDER BY message_count DESC
+                """)
+                
+                geographic_distribution = []
+                for row in geo_cursor.fetchall():
+                    geographic_distribution.append({
+                        "region": row[0],
+                        "message_count": row[1]
+                    })
+                
+                return {
+                    "stats": stats,
+                    "top_channels": top_channels,
+                    "geographic_distribution": geographic_distribution
+                }
+                
+        except Exception as e:
+            print(f"Error in get_telegram_stats: {str(e)}")
+            return JSONResponse(
+                status_code=500,
+                content={"detail": str(e)}
+            )
+
     return app
 
 app = create_app()

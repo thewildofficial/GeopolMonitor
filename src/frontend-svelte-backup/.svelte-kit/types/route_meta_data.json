@@ -1,0 +1,10 @@
+{
+	"/": [
+		"src/routes/+page.js"
+	],
+	"/analytics": [],
+	"/map": [],
+	"/telegram": [
+		"src/routes/telegram/+page.js"
+	]
+}
