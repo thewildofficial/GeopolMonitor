@@ -1,0 +1,199 @@
+/* Responsive Styling for Briefing Components */
+
+/* Large Desktop */
+@media screen and (max-width: 1440px) {
+  .briefing-container {
+    padding: var(--spacing-md);
+  }
+
+  .analytics-panel {
+    grid-column: span 2;
+  }
+}
+
+/* Desktop and Smaller */
+@media screen and (max-width: 1200px) {
+  .briefing-flex-container {
+    grid-template-columns: 1fr;
+  }
+  
+  .summary-tier,
+  .context-tier {
+    grid-column: 1 / -1;
+  }
+
+  .mini-map {
+    height: 300px;
+  }
+  
+  .tier-items.tiles-view {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  }
+}
+
+/* Tablets */
+@media screen and (max-width: 768px) {
+  .briefing-container {
+    padding: var(--spacing-sm);
+  }
+
+  .briefing-title {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-sm);
+  }
+  
+  .briefing-meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-sm);
+  }
+  
+  .view-controls {
+    align-self: flex-end;
+  }
+  
+  .executive-summary {
+    font-size: 1rem;
+  }
+  
+  .tier-items.tiles-view {
+    grid-template-columns: 1fr;
+  }
+
+  .news-item {
+    flex-direction: column;
+  }
+
+  .news-image-container {
+    width: 100%;
+    height: 200px;
+  }
+}
+
+/* Mobile */
+@media screen and (max-width: 480px) {
+  .briefing-title h1 {
+    font-size: 1.6rem;
+  }
+  
+  .glass-panel {
+    padding: var(--spacing-sm);
+  }
+  
+  .tier-content {
+    padding: var(--spacing-sm);
+  }
+  
+  .mini-map {
+    height: 200px;
+  }
+}
+
+/* Dark Mode Adjustments */
+@media (prefers-color-scheme: dark) {
+  .mini-map {
+    background-color: #2d2d2f;
+  }
+  
+  .chart-loading {
+    background-color: rgba(29, 29, 31, 0.7);
+  }
+}
+
+/* High Contrast Mode */
+@media (prefers-contrast: high) {
+  :root {
+    --border-color: rgba(0, 0, 0, 0.3);
+    --shadow-color: rgba(0, 0, 0, 0.2);
+    --glass-bg: rgba(255, 255, 255, 0.95);
+    --glass-border: rgba(0, 0, 0, 0.5);
+  }
+  
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --border-color: rgba(255, 255, 255, 0.3);
+      --shadow-color: rgba(0, 0, 0, 0.3);
+      --glass-bg: rgba(29, 29, 31, 0.95);
+      --glass-border: rgba(255, 255, 255, 0.5);
+    }
+  }
+  
+  .glass-panel {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* Print Styles */
+@media print {
+  .briefing-container {
+    padding: 0;
+  }
+  
+  .glass-panel {
+    box-shadow: none;
+    border: 1px solid #ddd;
+    break-inside: avoid;
+  }
+  
+  .tier-toggle,
+  .panel-toggle,
+  .view-controls,
+  .refresh-button {
+    display: none;
+  }
+  
+  .tier-content,
+  .panel-content {
+    max-height: none;
+    overflow: visible;
+  }
+  
+  .key-point-bullet {
+    border: 1px solid #000;
+  }
+  
+  .mini-map {
+    height: 200px;
+    page-break-inside: avoid;
+    border: 1px solid #ddd;
+  }
+  
+  .tier-badge,
+  .region-count,
+  .category-count,
+  .hotspot-count {
+    border: 1px solid #000;
+    color: #000;
+    background-color: transparent;
+  }
+}
+
+/* Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Touch Devices */
+@media (pointer: coarse) {
+  .region-tab,
+  .category-tab,
+  .tier-toggle,
+  .panel-toggle,
+  .refresh-button,
+  .toggle-button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  .region-tabs,
+  .category-tabs {
+    padding-bottom: var(--spacing-md);
+  }
+}

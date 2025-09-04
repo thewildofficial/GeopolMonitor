@@ -13,6 +13,7 @@
     <link rel="stylesheet" href="/static/css/modules/theme.css">
     <link rel="stylesheet" href="/static/css/modules/about.css">
     <link rel="stylesheet" href="/static/css/modules/scroll-button.css">
+    <link rel="stylesheet" href="/static/css/modules/footer.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌍</text></svg>">
 </head>
@@ -151,6 +152,14 @@
             </div>
         </section>
     </main>
+
+    <footer class="site-footer">
+        <div class="palestine-link-container">
+            <a href="{{ free_palestine_link.url }}" target="_blank" class="palestine-link">
+                {{ free_palestine_link.text }}
+            </a>
+        </div>
+    </footer>
 
     <script type="module" src="/static/app.js"></script>
 </body>

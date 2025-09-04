@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="/static/css/modules/theme.css">
     <link rel="stylesheet" href="/static/css/modules/map.css">
     <link rel="stylesheet" href="/static/css/modules/heatmap.css">
+    <link rel="stylesheet" href="/static/css/modules/footer.css">
     <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌍</text></svg>">
@@ -66,7 +67,7 @@
                 <div class="country-news-panel" style="display: none;">
                     <div class="country-news-header">
                         <h2><span class="country-flag"></span> <span id="selectedCountry">Country</span></h2>
-                        <button class="close-btn" id="closeCountryNews" title="Close">
+                        <button class="close-btn" id="closeCountryNews" title="Close panel">
                             <i class="fas fa-times"></i>
                         </button>
                     </div>
@@ -80,6 +81,14 @@
             </div>
         </div>
     </main>
+
+    <footer class="site-footer">
+        <div class="palestine-link-container">
+            <a href="{{ free_palestine_link.url }}" target="_blank" class="palestine-link">
+                {{ free_palestine_link.text }}
+            </a>
+        </div>
+    </footer>
 
     <script type="module" src="/static/js/modules/countries.js"></script>
     <script type="module" src="/static/js/modules/map-styles.js"></script>

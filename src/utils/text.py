@@ -1,10 +1,9 @@
 """Text processing utilities."""
-import html
+import logging
 import re
 from dataclasses import dataclass
 from typing import List, Optional
 from urllib.parse import urlparse, urlunparse
-import logging
 
 # Configure logging
 logging.basicConfig(
@@ -16,140 +15,88 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TextCleanerConfig:
     """Configuration for text cleaning."""
-    min_line_length: int = 30
-    max_paragraph_length: int = 500
-    max_paragraphs: int = 3
-    endmatter_patterns: List[str] = None
-
-    def __post_init__(self):
-        if self.endmatter_patterns is None:
-            self.endmatter_patterns = [
-                r'Continue reading.*$',
-                r'Read more.*$',
-                r'Click here to read.*$',
-                r'Source:.*$',
-                r'Originally published.*$',
-                r'Follow us on.*$',
-                r'For more information.*$',
-                r'Read the full article.*$',
-                r'Subscribe to.*$',
-                r'Published by.*$',
-                r'This article appeared in.*$',
-                r'Share this:.*$',
-                r'Good morning\.',
-                r'In today\'s newsletter:',
-                r'Over the weekend,',
-            ]
+    remove_html: bool = True
+    normalize_whitespace: bool = True
+    min_length: int = 10
+    max_length: int = 100000
+    remove_urls: bool = True
+    remove_emails: bool = True
 
 class TextCleaner:
     """Handles text cleaning and normalization."""
     
     def __init__(self, config: Optional[TextCleanerConfig] = None):
         self.config = config or TextCleanerConfig()
-    
+        
     def clean_text(self, text: str) -> str:
-        """Clean and normalize text while preserving paragraphs."""
-        if not text:
-            return ""
-        
-        # Basic cleaning
-        text = self._basic_clean(text)
-        
-        # Special case for test phrase
-        if "This is a test" in text:
-            return "This is a test."
-            
-        # Split into lines and process each one independently
-        valid_lines = []
-        
-        for line in text.split('\n'):
-            line = line.strip()
-            if not line:
-                continue
-                
-            # Special case: Important news should always be kept
-            if "Important news" in line:
-                return "Important news"
-                
-            # Skip endmatter lines
-            if self._is_endmatter(line):
-                continue
-                
-            # Only keep lines that meet the minimum length requirement
-            if len(line) >= self.config.min_line_length:
-                valid_lines.append(line)
-        
-        if not valid_lines:
+        """Clean and normalize text content."""
+        if not text or not isinstance(text, str):
             return ""
             
-        # Take up to max_paragraphs lines
-        valid_lines = valid_lines[:self.config.max_paragraphs]
+        # Remove HTML tags
+        if self.config.remove_html:
+            text = re.sub(r'<[^>]+>', ' ', text)
         
-        # Return lines properly separated
-        return '\n\n'.join(valid_lines)
-
-    def _basic_clean(self, text: str) -> str:
-        """Perform basic text cleaning."""
-        text = str(text)
-        text = html.unescape(text).strip()
+        # Remove URLs if configured
+        if self.config.remove_urls:
+            text = re.sub(r'http[s]?://\S+', '', text)
         
-        # Remove HTML tags but preserve line breaks
-        text = re.sub(r'<br\s*/?>|</p>|</div>', '\n', text, flags=re.IGNORECASE)
-        text = re.sub(r'<[^>]+>', '', text)
+        # Remove email addresses if configured
+        if self.config.remove_emails:
+            text = re.sub(r'\S+@\S+\.\S+', '', text)
         
-        # Clean up whitespace while preserving line breaks
-        lines = []
-        for line in text.split('\n'):
-            line = re.sub(r'\s+', ' ', line.strip())
-            if line:
-                lines.append(line)
-                
-        return '\n'.join(lines)
-
-    def _is_endmatter(self, text: str) -> bool:
-        """Check if text matches any endmatter patterns."""
-        return any(re.search(pattern, text, re.IGNORECASE)
-                  for pattern in self.config.endmatter_patterns)
+        # Normalize whitespace
+        if self.config.normalize_whitespace:
+            # Replace newlines and tabs with spaces
+            text = re.sub(r'[\n\t\r]+', ' ', text)
+            # Remove multiple spaces
+            text = re.sub(r'\s+', ' ', text)
+            text = text.strip()
+        
+        # Enforce length limits
+        if len(text) < self.config.min_length:
+            return ""
+        if len(text) > self.config.max_length:
+            text = text[:self.config.max_length] + "..."
+            
+        return text
 
 class URLCleaner:
-    """Handles URL cleaning and validation."""
+    """Clean and normalize URLs."""
     
-    @staticmethod
-    def clean_url(url: str) -> str:
-        """Clean and validate URL."""
-        if not url:
+    def clean_url(self, url: str) -> str:
+        """Clean and normalize a URL."""
+        if not url or not isinstance(url, str):
             return ""
             
         try:
-            # Remove whitespace
-            url = url.strip()
-            
             # Parse URL
             parsed = urlparse(url)
             
             # Ensure scheme is present
             if not parsed.scheme:
-                url = 'https://' + url
-                parsed = urlparse(url)
+                parsed = urlparse(f"https://{url}")
             
-            # Clean the netloc (remove auth)
-            netloc = parsed.netloc.split('@')[-1]
+            # Remove fragments
+            cleaned = parsed._replace(fragment="")
             
-            # Rebuild URL with cleaned components
-            cleaned = urlunparse((
-                parsed.scheme,
-                netloc,
-                parsed.path,
-                parsed.params,
-                parsed.query,
-                ''  # Remove fragment
-            ))
+            # Remove default ports
+            if cleaned.port in (80, 443):
+                netloc = cleaned.netloc.replace(f":{cleaned.port}", "")
+                cleaned = cleaned._replace(netloc=netloc)
             
-            return cleaned
+            # Convert to string
+            cleaned_url = urlunparse(cleaned)
+            
+            # Remove trailing slash if present
+            if cleaned_url.endswith("/"):
+                cleaned_url = cleaned_url[:-1]
+                
+            return cleaned_url
             
         except Exception as e:
             logger.error(f"Error cleaning URL {url}: {e}")
-            return url or ""
+            return url
 
 # Create singleton instances
 text_cleaner = TextCleaner()

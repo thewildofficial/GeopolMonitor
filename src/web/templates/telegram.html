@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram Intelligence Feed - GeopolMonitor 🌍</title>
+    <script>
+        // Set theme immediately before page renders
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+    </script>
+    <link rel="stylesheet" href="/static/css/modules/base.css">
+    <link rel="stylesheet" href="/static/css/modules/theme.css">
+    <link rel="stylesheet" href="/static/css/modules/telegram.css">
+    <link rel="stylesheet" href="/static/css/design-tokens.css">
+    <link rel="stylesheet" href="/static/css/modules/footer.css">
+    <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌍</text></svg>">
+</head>
+<body>
+    <header>
+        <div class="header-left">
+            <a href="/" class="nav-brand">GeopolMonitor 🌍</a>
+            <nav class="main-nav">
+                <a href="/" class="nav-link">News</a>
+                <a href="/map" class="nav-link">Map</a>
+                <a href="/telegram" class="nav-link active">Telegram</a>
+                <a href="/about" class="nav-link">About</a>
+            </nav>
+        </div>
+        <div class="header-controls">
+            <button id="themeToggle" class="theme-toggle" title="Toggle theme">
+                <i class="fas fa-sun"></i>
+            </button>
+            <div class="live-indicator">
+                <span class="pulse"></span>
+                <span>LIVE</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="telegram-dashboard">
+        <!-- Left Sidebar: Filters & Analytics -->
+        <aside class="left-sidebar">
+            <div class="filter-panel">
+                <h3 class="filter-title">
+                    <i class="fas fa-filter"></i>
+                    Smart Filters
+                </h3>
+                <div class="filter-group">
+                    <label>Continent</label>
+                    <select id="continentFilter">
+                        <option value="">All Continents</option>
+                        <option value="europe">Europe</option>
+                        <option value="asia">Asia</option>
+                        <option value="africa">Africa</option>
+                        <option value="americas">Americas</option>
+                        <option value="oceania">Oceania</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Channel Source</label>
+                    <select id="channelFilter">
+                        <option value="">All Channels</option>
+                        <option value="military">Military Intel</option>
+                        <option value="osint">OSINT</option>
+                        <option value="breaking">Breaking News</option>
+                        <option value="geopolitics">Geopolitics</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Threat Level</label>
+                    <select id="threatFilter">
+                        <option value="">All Levels</option>
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                        <option value="low">Low</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Time Range</label>
+                    <select id="timeFilter">
+                        <option value="1h">Last Hour</option>
+                        <option value="6h">Last 6 Hours</option>
+                        <option value="24h">Last 24 Hours</option>
+                        <option value="7d">Last 7 Days</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="live-status">
+                <div class="status-header">
+                    <i class="fas fa-satellite-dish"></i>
+                    <span>Live Status</span>
+                    <div class="status-dot active"></div>
+                </div>
+                <div class="status-items">
+                    <div class="status-item">
+                        <span>Active Channels</span>
+                        <span class="status-value" id="activeChannels">127</span>
+                    </div>
+                    <div class="status-item">
+                        <span>Messages/Hour</span>
+                        <span class="status-value" id="messagesPerHour">1,234</span>
+                    </div>
+                    <div class="status-item">
+                        <span>High Priority</span>
+                        <span class="status-value threat-high" id="highPriority">12</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="analytics-graphs">
+                <h4 class="analytics-title">Analytics</h4>
+                <div class="graph-container">
+                    <div class="graph-header">
+                        <span>Message Volume</span>
+                        <span class="graph-trend">+24%</span>
+                    </div>
+                    <canvas id="messageVolumeChart" width="200" height="80"></canvas>
+                </div>
+                <div class="graph-container">
+                    <div class="graph-header">
+                        <span>AI Analysis</span>
+                        <span class="graph-trend">Real-time</span>
+                    </div>
+                    <canvas id="aiAnalysisChart" width="200" height="80"></canvas>
+                </div>
+            </div>
+
+            <div class="monitoring-metrics">
+                <h4 class="analytics-title">Monitoring</h4>
+                <div class="metric-item">
+                    <div class="metric-icon">
+                        <i class="fas fa-shield-alt"></i>
+                    </div>
+                    <div class="metric-content">
+                        <span class="metric-label">Security Alerts</span>
+                        <span class="metric-value">3 Active</span>
+                    </div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-icon">
+                        <i class="fas fa-globe"></i>
+                    </div>
+                    <div class="metric-content">
+                        <span class="metric-label">Global Coverage</span>
+                        <span class="metric-value">98%</span>
+                    </div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-icon">
+                        <i class="fas fa-brain"></i>
+                    </div>
+                    <div class="metric-content">
+                        <span class="metric-label">AI Processing</span>
+                        <span class="metric-value">Normal</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Feed Area -->
+        <main class="main-feed">
+            <div class="feed-header">
+                <div class="feed-title">
+                    <h1>
+                        <i class="fab fa-telegram"></i>
+                        OSINT Intelligence Feed
+                    </h1>
+                    <div class="feed-stats">
+                        <span id="totalMessages">1,247</span> messages
+                        <span class="separator">•</span>
+                        <span id="lastUpdate">Updated 12s ago</span>
+                    </div>
+                </div>
+                <div class="feed-controls">
+                    <button class="control-btn" id="pauseFeed" title="Pause feed">
+                        <i class="fas fa-pause"></i>
+                    </button>
+                    <button class="control-btn" id="refreshFeed" title="Refresh">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                    <button class="control-btn" id="exportData" title="Export data">
+                        <i class="fas fa-download"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="message-stream" id="messageStream">
+                <!-- Empty state -->
+                <div class="empty-state" id="emptyState">
+                    <div class="empty-icon">🛰️</div>
+                    <h3>Monitoring Global Channels</h3>
+                    <p>Real-time intelligence feed will appear here</p>
+                </div>
+            </div>
+        </main>
+
+        <!-- Right Panel: AI Analysis & World Map -->
+        <aside class="right-panel">
+            <div class="ai-analysis-panel">
+                <h4 class="panel-title">
+                    <i class="fas fa-brain"></i>
+                    AI Analysis
+                </h4>
+                <div class="analysis-cards" id="analysisCards">
+                    <!-- AI analysis cards will be inserted here -->
+                </div>
+            </div>
+
+            <div class="world-heatmap">
+                <h4 class="panel-title">
+                    <i class="fas fa-globe-americas"></i>
+                    Activity Heatmap
+                </h4>
+                <div class="heatmap-container">
+                    <canvas id="worldHeatmap" width="300" height="200"></canvas>
+                    <div class="activity-legend">
+                        <div class="legend-item">
+                            <div class="legend-dot high"></div>
+                            <span>High Activity</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-dot medium"></div>
+                            <span>Medium</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-dot low"></div>
+                            <span>Low</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="recent-hotspots">
+                <h4 class="panel-title">Recent Hotspots</h4>
+                <div class="hotspot-list">
+                    <div class="hotspot-item">
+                        <div class="hotspot-location">
+                            <i class="fas fa-map-marker-alt"></i>
+                            <span>Eastern Europe</span>
+                        </div>
+                        <div class="hotspot-activity">
+                            <span class="activity-count">247</span>
+                            <div class="activity-trend up">
+                                <i class="fas fa-arrow-up"></i>
+                                <span>+18%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="hotspot-item">
+                        <div class="hotspot-location">
+                            <i class="fas fa-map-marker-alt"></i>
+                            <span>Middle East</span>
+                        </div>
+                        <div class="hotspot-activity">
+                            <span class="activity-count">189</span>
+                            <div class="activity-trend up">
+                                <i class="fas fa-arrow-up"></i>
+                                <span>+7%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="hotspot-item">
+                        <div class="hotspot-location">
+                            <i class="fas fa-map-marker-alt"></i>
+                            <span>Pacific Region</span>
+                        </div>
+                        <div class="hotspot-activity">
+                            <span class="activity-count">92</span>
+                            <div class="activity-trend down">
+                                <i class="fas fa-arrow-down"></i>
+                                <span>-3%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Toast notification container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Message Templates -->
+    <template id="messageCardTemplate">
+        <div class="message-card">
+            <div class="message-header">
+                <div class="channel-info">
+                    <img class="channel-avatar" src="" alt="">
+                    <div class="channel-details">
+                        <span class="channel-name"></span>
+                        <span class="channel-type"></span>
+                    </div>
+                </div>
+                <div class="message-meta">
+                    <span class="message-time"></span>
+                    <span class="threat-badge"></span>
+                </div>
+            </div>
+            <div class="message-content">
+                <p class="message-text"></p>
+                <div class="message-location" style="display: none;">
+                    <i class="fas fa-map-marker-alt"></i>
+                    <span class="location-text"></span>
+                </div>
+            </div>
+            <div class="message-footer">
+                <div class="message-tags"></div>
+                <div class="message-actions">
+                    <button class="action-btn" title="Save">
+                        <i class="fas fa-bookmark"></i>
+                    </button>
+                    <button class="action-btn" title="Share">
+                        <i class="fas fa-share"></i>
+                    </button>
+                    <button class="action-btn" title="Analyze">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <template id="analysisCardTemplate">
+        <div class="analysis-card">
+            <div class="analysis-header">
+                <div class="analysis-type"></div>
+                <div class="analysis-confidence"></div>
+            </div>
+            <div class="analysis-content">
+                <p class="analysis-text"></p>
+                <div class="analysis-tags"></div>
+            </div>
+        </div>
+    </template>
+
+    <footer class="site-footer">
+        <div class="palestine-link-container">
+            <a href="{{ free_palestine_link.url }}" target="_blank" class="palestine-link">
+                {{ free_palestine_link.text }}
+            </a>
+        </div>
+    </footer>
+
+    <script type="module" src="/static/js/modules/telegram-feed.js"></script>
+</body>
+</html> 

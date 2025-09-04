@@ -6,6 +6,7 @@ import re
 import html
 import urllib.parse
 import feedparser
+from bs4 import BeautifulSoup
 
 from ..database.models import get_db, add_tag, tag_article
 from ..utils.text import clean_text, clean_url
@@ -37,66 +38,110 @@ class ProcessedContent(NamedTuple):
     bias_category: str
     bias_score: float
 
+"""Image extraction and processing utilities."""
+import re
+from bs4 import BeautifulSoup
+from typing import List, Optional
+from urllib.parse import urljoin, urlparse
+
 class ImageExtractor:
-    """Handles extraction of images from feed entries."""
+    """Extract images from article content."""
     
-    @staticmethod
-    def extract_images(entry: Any) -> List[str]:
-        """Extract images from feed entry using multiple methods."""
-        image_urls = []
+    def __init__(self):
+        # Enhanced image patterns
+        self.image_patterns = [
+            r'https?://\S+?(?:jpg|jpeg|png|gif|webp|svg)',  # Added svg and webp
+            r'data:image/\S+?;base64,\S+',
+            r'https?://[^\s<>"\']+?/(?:media|images|img)/[^\s<>"\']+'  # Generic media paths
+        ]
+        self.logger = logging.getLogger(__name__)
+
+    def extract_images(self, article) -> List[str]:
+        """Extract image URLs from an article entry."""
+        images = []
         
-        # Check for og:image meta tag first (highest quality usually)
-        if hasattr(entry, 'content'):
-            for content in entry.content:
-                if isinstance(content, dict) and 'value' in content:
-                    og_images = re.findall(r'<meta property="og:image" content="([^"]+)"', content['value'])
-                    image_urls.extend(og_images)
+        try:
+            # Try to get image from media content
+            if hasattr(article, 'media_content'):
+                for media in article.media_content:
+                    if 'url' in media and self._is_valid_image_url(media['url']):
+                        self.logger.info(f"Found media content image: {media['url']}")
+                        images.append(media['url'])
+            
+            # Try enclosures
+            if hasattr(article, 'enclosures'):
+                for enclosure in article.enclosures:
+                    if hasattr(enclosure, 'href') and self._is_valid_image_url(enclosure.href):
+                        self.logger.info(f"Found enclosure image: {enclosure.href}")
+                        images.append(enclosure.href)
+            
+            # Try to find image in content
+            if not images and hasattr(article, 'content'):
+                content_image = self.extract_first_image_from_content(article.content)
+                if content_image:
+                    self.logger.info(f"Found content image: {content_image}")
+                    images.append(content_image)
 
-        # Extract from media_thumbnail
-        if hasattr(entry, 'media_thumbnail'):
-            image_urls.extend([t['url'] for t in entry.media_thumbnail if 'url' in t])
+        except Exception as e:
+            self.logger.error(f"Error extracting images: {str(e)}")
+            
+        return images
 
-        # Extract from media content
-        if hasattr(entry, 'media_content'):
-            image_urls.extend([m['url'] for m in entry.media_content if 'url' in m])
-
-        # Extract from description with improved pattern matching
-        if hasattr(entry, 'description') and entry.description:
-            # Look for both standard img tags and direct URLs
-            img_tags = re.findall(r'<img[^>]+src=[\'"]([^\'"]+)[\'"]', entry.description)
-            direct_urls = re.findall(r'(https?://[^\s]+(?:jpg|jpeg|png|gif|bmp|svg|webp))', entry.description)
-            image_urls.extend(img_tags + direct_urls)
-
-        # Extract from enclosures
-        if hasattr(entry, 'enclosures'):
-            image_urls.extend([e['href'] for e in entry.enclosures 
-                             if e.get('href', '').lower().endswith(
-                                 ('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.webp'))])
-
-        # Remove duplicates and validate URLs
-        valid_urls = []
-        seen = set()
-        for url in image_urls:
-            url = url.strip()
-            if url and url not in seen:
-                try:
-                    # Basic URL validation
-                    urllib.parse.urlparse(url)
-                    valid_urls.append(url)
-                    seen.add(url)
-                except ValueError:
-                    continue
-
-        return valid_urls
-
-    @staticmethod
-    def extract_first_image_from_content(content: Optional[str]) -> Optional[str]:
-        """Extract first valid image URL from content."""
+    def extract_first_image_from_content(self, content: Optional[str]) -> Optional[str]:
+        """Extract the first valid image URL from HTML content."""
         if not content:
+            self.logger.debug("No content provided for image extraction")
             return None
             
-        urls = re.findall(r'(https?://[^\s]+(?:jpg|jpeg|png|gif|bmp|svg|webp))', content)
-        return urls[0] if urls else None
+        try:
+            # First try to parse as HTML
+            soup = BeautifulSoup(content, 'html.parser')
+            
+            # Look for img tags
+            for img in soup.find_all('img'):
+                src = img.get('src')
+                if src:
+                    # Handle relative URLs by checking common base URL patterns
+                    if not urlparse(src).scheme:
+                        # Try to find base URL in HTML
+                        base_tag = soup.find('base', href=True)
+                        if base_tag:
+                            src = urljoin(base_tag['href'], src)
+                    
+                    if self._is_valid_image_url(src):
+                        self.logger.info(f"Found valid image in HTML: {src}")
+                        return src
+            
+            # If no img tags found, try regex patterns
+            for pattern in self.image_patterns:
+                matches = re.findall(pattern, content)
+                if matches:
+                    self.logger.info(f"Found image using pattern: {matches[0]}")
+                    return matches[0]
+            
+        except Exception as e:
+            self.logger.error(f"Error extracting image from content: {str(e)}")
+            
+        return None
+
+    def _is_valid_image_url(self, url: str) -> bool:
+        """Check if URL is a valid image URL."""
+        if not url:
+            return False
+            
+        try:
+            # Check if URL is absolute
+            parsed = urlparse(url)
+            if not parsed.scheme:
+                return False
+                
+            # Check file extension
+            path = parsed.path.lower()
+            return any(path.endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'])
+            
+        except Exception as e:
+            self.logger.error(f"Error validating image URL {url}: {str(e)}")
+            return False
 
 class ArticleProcessor:
     """Processes articles from feed entries."""
@@ -111,7 +156,7 @@ class ArticleProcessor:
             # Extract images with improved method
             images = self.image_extractor.extract_images(entry)
             
-           # Get article link
+            # Get article link
             link = clean_url(getattr(entry, 'link', ''))
             if not link:
                 logger.error("No valid link found in entry")
@@ -121,29 +166,24 @@ class ArticleProcessor:
             title_cleaned = self._clean_html(getattr(entry, 'title', 'Untitled'))
             description_cleaned = self._clean_html(getattr(entry, 'description', ''))
             
-            # Process with AI and get tags
-            emojis, description_processed, topics, geography, events = await self.content_processor.process_content_with_tags(
-                description_cleaned, 
+            # Combine title and description for single API call
+            combined_text = f"Title: {title_cleaned}\n\nContent: {description_cleaned}"
+            
+            # Process combined content with AI and get tags
+            emojis, processed_text, topics, geography, events = await self.content_processor.process_content_with_tags(
+                combined_text,
                 url=link,
                 is_title=False,
-                instruction="Summarize in clear English, focusing on key points."
+                instruction="Process title and content: Extract a clear title from the 'Title:' section and summarize the content in three paragraphs."
             )
 
-            # Process title and get additional tags
-            _, title_processed, title_topics, title_geo, title_events = await self.content_processor.process_content_with_tags(
-                title_cleaned,
-                url=link,
-                is_title=True,
-                instruction="Translate to clear English title if needed."
-            )
+            # Split processed text into title and description
+            processed_parts = processed_text.split('\n\n', 1)
+            title_processed = processed_parts[0] if len(processed_parts) > 0 else title_cleaned
+            description_processed = processed_parts[1] if len(processed_parts) > 1 else description_cleaned
 
             # Get sentiment and bias analysis
             sentiment_score, bias_category, bias_score = await self.content_processor.analyze_sentiment_and_bias(description_processed)
-
-            # Combine and deduplicate tags
-            topic_tags = list(set(topics + title_topics))
-            geography_tags = list(set(geography + title_geo))
-            event_tags = list(set(events + title_events))
 
             # Process emojis and content
             content = getattr(entry, 'description', '')
@@ -172,9 +212,9 @@ class ArticleProcessor:
                 emoji2=emoji2,
                 image_url=images[0] if images else None,
                 content=content,
-                topic_tags=topic_tags,
-                geography_tags=geography_tags,
-                event_tags=event_tags,
+                topic_tags=topics,
+                geography_tags=geography,
+                event_tags=events,
                 sentiment_score=sentiment_score,
                 bias_category=bias_category,
                 bias_score=bias_score

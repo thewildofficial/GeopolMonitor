@@ -24,9 +24,11 @@
     font-size: 3.5rem;
     font-weight: 700;
     margin-bottom: 1.5rem;
-    background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+    background: linear-gradient(135deg, var(--text-color), var(--accent-color));
     -webkit-background-clip: text;
+    background-clip: text;
     -webkit-text-fill-color: transparent;
+    color: var(--text-color); /* Fallback for browsers that don't support background-clip */
     animation: fadeInUp 0.8s ease backwards;
 }
 
@@ -263,4 +265,24 @@
     .about-content {
         padding: 0 1rem;
     }
+}
+
+[data-theme="dark"] .hero h1 {
+    background: linear-gradient(135deg, #ffffff, var(--accent-color));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+/* Improving other headings for dark mode visibility */
+[data-theme="dark"] .features-grid h2,
+[data-theme="dark"] .timeline h2,
+[data-theme="dark"] .connect-section h2 {
+    color: var(--text-color);
+}
+
+[data-theme="dark"] .feature h3,
+[data-theme="dark"] .timeline-item h3,
+[data-theme="dark"] .link-content h4 {
+    color: var(--text-color);
 }

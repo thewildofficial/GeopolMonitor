@@ -3,81 +3,99 @@
     position: sticky;
     top: 61px; /* Account for header height */
     z-index: 91;
-    margin-bottom: 1rem;
     background: var(--background-color);
     max-width: 1200px;
-    margin-left: auto;
-    margin-right: auto;
+    margin: 0 auto 1rem auto;
     width: 100%;
+    border-radius: 12px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .filters {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 1rem;
+    padding: 1.25rem;
     background: var(--filter-background);
     border: 1px solid var(--border-color);
-    border-radius: 8px;
+    border-radius: 12px;
     margin: 1rem;
+    gap: 1rem;
 }
 
 .filter-group {
     display: flex;
     gap: 1rem;
     flex-grow: 1;
+    align-items: center;
 }
 
 .filters input,
 .filters select {
-    padding: 0.5rem;
+    padding: 0.75rem 1rem;
     border: 1px solid var(--border-color);
-    border-radius: 4px;
-    font-size: 0.875rem;
+    border-radius: 8px;
+    font-size: 0.925rem;
     background: var(--card-background);
     color: var(--text-color);
+    transition: all 0.2s ease;
+}
+
+.filters input:focus,
+.filters select:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px rgba(var(--accent-color-rgb), 0.1);
 }
 
 .filters input {
     flex: 1;
+    min-width: 200px;
 }
 
+.filters select {
+    min-width: 140px;
+}
+
+/* View toggle improvements */
 .view-toggle {
     display: flex;
     gap: 0.5rem;
     background: var(--card-background);
     border-radius: 8px;
     padding: 4px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    border: 1px solid var(--border-color);
 }
 
 .view-btn {
     background: transparent;
     border: none;
-    padding: 8px 12px;
-    color: #666;
+    padding: 8px 16px;
+    color: var(--text-color-secondary);
     transition: all 0.2s ease;
     cursor: pointer;
+    border-radius: 6px;
 }
 
 .view-btn:hover {
     color: var(--accent-color);
+    background: rgba(var(--accent-color-rgb), 0.05);
 }
 
 .view-btn.active {
     background: var(--accent-color);
     color: white;
-    border-radius: 6px;
 }
 
+/* Filter toggle button */
 .filter-toggle {
-    background: transparent;
+    background: var(--card-background);
     border: 1px solid var(--border-color);
     color: var(--text-color);
-    padding: 0.5rem;
-    width: 40px;
-    height: 36px;
-    border-radius: 4px;
+    padding: 0.75rem;
+    min-width: 42px;
+    height: 42px;
+    border-radius: 8px;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -87,28 +105,28 @@
 }
 
 .filter-toggle:hover {
-    background: var(--accent-color);
-    color: white;
     border-color: var(--accent-color);
+    background: rgba(var(--accent-color-rgb), 0.05);
+    color: var(--accent-color);
 }
 
 .filter-toggle .filter-count {
     position: absolute;
-    top: -8px;
-    right: -8px;
+    top: -6px;
+    right: -6px;
     background: var(--accent-color);
     color: white;
     font-size: 0.7rem;
-    min-width: 18px;
-    height: 18px;
-    padding: 0 4px;
-    border-radius: 9px;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 10px;
     display: flex;
     align-items: center;
     justify-content: center;
     opacity: 0;
     transform: scale(0.8);
-    transition: all 0.2s ease;
+    transition: all 0.3s var(--spring-timing);
 }
 
 .filter-toggle .filter-count.active {
@@ -134,14 +152,25 @@
 /* Mobile responsive adjustments */
 @media (max-width: 768px) {
     .filters-wrapper {
+        position: sticky;
         top: 57px; /* Adjust for smaller mobile header */
+        margin: 0;
+        border-radius: 0;
     }
 
     .filters {
         flex-direction: column;
         padding: 1rem;
-        margin: 0.5rem;
-        border-radius: 6px;
+        margin: 0;
+        border-radius: 0;
+        border-left: none;
+        border-right: none;
+    }
+    
+    .filter-group {
+        width: 100%;
+        flex-direction: column;
+        gap: 0.75rem;
     }
     
     .filters input,
@@ -149,16 +178,9 @@
         width: 100%;
     }
 
-    .filter-group {
-        gap: 0.5rem;
-        flex-direction: column;
-    }
-
     .view-toggle {
-        margin-top: 1rem;
         width: 100%;
-        display: flex;
-        justify-content: space-between;
+        margin-top: 0.5rem;
     }
 
     .view-btn {

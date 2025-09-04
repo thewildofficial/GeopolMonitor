@@ -75,21 +75,20 @@
     margin-left: 0.2rem;
 }
 
-/* Tag filters section */
+/* Tag filters panel */
 .tag-filters {
-    position: relative;
-    background: var(--card-background);
-    border: 0.5px solid rgba(255, 255, 255, 0.2);
+    background: var(--filter-background);
+    border: 1px solid var(--border-color);
+    border-radius: 0 0 12px 12px;
     box-shadow: 
-        0 8px 32px rgba(0, 0, 0, 0.08),
+        0 4px 12px rgba(0, 0, 0, 0.05),
         0 4px 8px rgba(0, 0, 0, 0.04);
     z-index: 90;
-    transition: all 0.3s var(--spring-timing);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     opacity: 1;
     transform-origin: top center;
-    max-height: 400px;
+    max-height: 500px;
     margin: -1px 1rem 1rem 1rem;
-    border-radius: 0 0 8px 8px;
     overflow: hidden;
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
@@ -105,33 +104,32 @@
 }
 
 .tag-sections-wrapper {
-    max-height: 350px;
+    max-height: 400px;
     overflow-y: auto;
-    padding: 1rem;
+    padding: 1.25rem;
     scrollbar-width: thin;
-    scrollbar-color: var(--accent-color) var(--filter-background);
+    scrollbar-color: var(--accent-color) transparent;
 }
 
 /* Tag sections layout */
 .tag-sections {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 2rem;
-    padding: 0.5rem;
 }
 
 .tag-section {
-    flex: 1;
     min-width: 200px;
 }
 
 .tag-heading {
-    font-size: 0.95rem;
+    font-size: 0.875rem;
     color: var(--text-color);
-    margin-bottom: 1.2rem;
+    margin-bottom: 1rem;
     font-weight: 600;
     opacity: 0.9;
     padding-left: 0.5rem;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.01em;
 }
 
 .tag-container {
@@ -142,17 +140,15 @@
 
 .tag-search {
     width: 100%;
-    padding: 1.2rem;
+    padding: 1rem 1.25rem;
     border: none;
-    border-bottom: 0.5px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid var(--border-color);
     background: var(--card-background);
     color: var(--text-color);
     font-size: 0.95rem;
-    margin-bottom: 10px;
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
-    letter-spacing: -0.02em;
-    transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+    transition: all 0.2s ease;
 }
 
 .tag-search:focus {
@@ -183,16 +179,18 @@
         border-top: 1px solid var(--border-color);
         border-radius: 16px 16px 0 0;
         box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
-        transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+        transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
     .tag-search {
         position: sticky;
         top: 0;
         z-index: 1;
+        padding: 1rem;
     }
 
     .tag-sections {
+        display: flex;
         flex-direction: column;
         gap: 1.5rem;
     }
@@ -203,6 +201,10 @@
 
     .tag-filters.collapsed {
         transform: translateY(100%);
+    }
+    
+    .tag-sections-wrapper {
+        padding: 1rem;
     }
 }
 
@@ -239,4 +241,87 @@
         opacity: 1;
         transform: scale(1);
     }
+}
+
+/* Individual tag styling */
+.tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    background: var(--card-background);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: all 0.2s var(--spring-timing);
+    user-select: none;
+}
+
+.tag:hover {
+    border-color: var(--accent-color);
+    background: rgba(var(--accent-color-rgb), 0.05);
+    transform: translateY(-1px);
+}
+
+.tag.selected {
+    background: var(--accent-color);
+    color: white;
+    border-color: var(--accent-color);
+    font-weight: 500;
+}
+
+.tag .count {
+    margin-left: 6px;
+    padding: 2px 6px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    background: rgba(125, 125, 125, 0.1);
+    color: inherit;
+}
+
+/* Category-specific tag colors */
+.tag[data-category="geography"] {
+    --tag-color: rgb(0, 120, 255);
+    border-color: rgba(0, 120, 255, 0.2);
+}
+
+.tag[data-category="events"] {
+    --tag-color: rgb(255, 100, 0);
+    border-color: rgba(255, 100, 0, 0.2);
+}
+
+.tag[data-category="topic"] {
+    --tag-color: rgb(100, 200, 0);
+    border-color: rgba(100, 200, 0, 0.2);
+}
+
+.tag[data-category="source"] {
+    --tag-color: rgb(150, 100, 255);
+    border-color: rgba(150, 100, 255, 0.2);
+}
+
+/* Category-specific selected states */
+.tag[data-category="geography"].selected {
+    background: var(--tag-color);
+    border-color: var(--tag-color);
+    color: white;
+}
+
+.tag[data-category="events"].selected {
+    background: var(--tag-color);
+    border-color: var(--tag-color);
+    color: white;
+}
+
+.tag[data-category="topic"].selected {
+    background: var(--tag-color);
+    border-color: var(--tag-color);
+    color: white;
+}
+
+.tag[data-category="source"].selected {
+    background: var(--tag-color);
+    border-color: var(--tag-color);
+    color: white;
 }

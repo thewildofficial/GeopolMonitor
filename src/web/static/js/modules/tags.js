@@ -4,9 +4,38 @@ import { fetchNews, filterNews, updateNewsList } from './news.js';
 let activeTags = new Set();
 let relatedTags = new Map();
 
+// Export the toggleTag function
+export function toggleTag(tagName) {
+    const countryData = normalizeCountry(tagName);
+    const normalizedTagName = countryData.name;
+    
+    if (activeTags.has(normalizedTagName)) {
+        activeTags.delete(normalizedTagName);
+    } else {
+        activeTags.add(normalizedTagName);
+    }
+    updateFilterCount();
+    
+    // Update tag visual states
+    document.querySelectorAll('.tag').forEach(tag => {
+        if (tag.dataset.tagName === normalizedTagName) {
+            tag.classList.toggle('active');
+        }
+    });
+    
+    // Update news list with new filter
+    window.updateNews();
+}
+
+// Also make it available globally for legacy support
+window.toggleTag = toggleTag;
+
 export async function loadTags() {
     try {
         const response = await fetch('/api/tags');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
         const tags = await response.json();
         
         const sourceContainer = document.getElementById('sourceTags');
@@ -29,35 +58,62 @@ export async function loadTags() {
         };
 
         // Build tag relationships based on co-occurrence in articles
-        buildTagRelationships();
+        await buildTagRelationships();
         
         // Initialize tag search and render
         const tagSearch = document.getElementById('tagSearch');
-        tagSearch.addEventListener('input', (e) => {
-            renderTags(e.target.value);
-        });
+        if (tagSearch) {
+            tagSearch.addEventListener('input', (e) => {
+                renderTags(e.target.value);
+            });
+        }
         
         renderTags();
         updateFilterCount();
     } catch (error) {
         console.error('Error loading tags:', error);
+        // Initialize with empty tags on error
+        window.allTags = {
+            source: [],
+            topic: [],
+            geography: [],
+            events: []
+        };
+        updateFilterCount();
     }
 }
 
 async function buildTagRelationships() {
     try {
-        const response = await fetch('/api/news');
-        const { news } = await response.json();
-        
+        // Initialize empty relationships map
         relatedTags.clear();
+
+        const response = await fetch('/api/news');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        const newsItems = data?.news || [];
+        
+        // Skip if no news items
+        if (!newsItems.length) {
+            console.warn('No news items to build relationships from');
+            return;
+        }
         
         // Build relationships based on co-occurrence
-        news.forEach(item => {
-            if (!item.tags) return;
+        newsItems.forEach(item => {
+            if (!item?.tags || !Array.isArray(item.tags)) {
+                console.warn('Missing or invalid tags for item:', item?.title);
+                return;
+            }
             
             item.tags.forEach(tag1 => {
+                if (!tag1?.name) return;
+                
                 item.tags.forEach(tag2 => {
-                    if (tag1.name === tag2.name) return;
+                    if (!tag2?.name || tag1.name === tag2.name) return;
                     
                     const key1 = tag1.name;
                     if (!relatedTags.has(key1)) {
@@ -69,8 +125,13 @@ async function buildTagRelationships() {
                 });
             });
         });
+
+        // Debug output
+        console.log('Successfully built tag relationships for', newsItems.length, 'items');
     } catch (error) {
         console.error('Error building tag relationships:', error);
+        // Clear relationships on error but continue execution
+        relatedTags.clear();
     }
 }
 
@@ -268,29 +329,6 @@ function renderTags(searchTerm = '') {
         }
     });
 }
-
-// Make toggleTag available globally
-window.toggleTag = (tagName) => {
-    const countryData = normalizeCountry(tagName);
-    const normalizedTagName = countryData.name;
-    
-    if (activeTags.has(normalizedTagName)) {
-        activeTags.delete(normalizedTagName);
-    } else {
-        activeTags.add(normalizedTagName);
-    }
-    updateFilterCount();
-    
-    // Update tag visual states
-    document.querySelectorAll('.tag').forEach(tag => {
-        if (tag.dataset.tagName === normalizedTagName) {
-            tag.classList.toggle('active');
-        }
-    });
-    
-    // Update news list with new filter
-    window.updateNews();
-};
 
 export async function updateNews() {
     try {
