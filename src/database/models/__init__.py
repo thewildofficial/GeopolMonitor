@@ -1,6 +1,7 @@
 """
-Database models initialization.
-Core database functionality is defined here.
+Deprecated legacy SQLite helpers.
+Kept as thin shims to avoid import errors. Prefer async Postgres via
+`src/database/news_db.py` and `src/database/telegram_db.py`.
 """
 
 # All exports from this module
@@ -29,100 +30,19 @@ __all__ = [
     'get_news_in_timespan'
 ]
 
-import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
-import os
-from pathlib import Path
 from typing import Optional, List, Dict
-import atexit
 import logging
 
 # Get project root directory and set database path
-PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.absolute()
-DB_PATH = os.path.join(PROJECT_ROOT, 'data', 'news_monitor.db')
-
 _connection = None
 _last_backup = datetime.now()
 logger = logging.getLogger(__name__)
 
 def init_db(connection=None):
-    """Initialize SQLite database with required tables."""
-    # Ensure data directory exists
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    
-    if connection:
-        conn = connection
-    else:
-        conn = sqlite3.connect(DB_PATH)
-
-    # Create tables
-    conn.execute('''
-        CREATE TABLE IF NOT EXISTS feed_cache (
-            url TEXT PRIMARY KEY,
-            last_check TEXT,
-            etag TEXT,
-            last_modified TEXT,
-            update_frequency INTEGER DEFAULT 3600,
-            last_success_time TEXT,
-            consecutive_failures INTEGER DEFAULT 0,
-            source_priority INTEGER DEFAULT 100
-        )
-    ''')
-    
-    conn.execute('''
-        CREATE TABLE IF NOT EXISTS news_entries (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            content TEXT,
-            link TEXT UNIQUE NOT NULL,
-            guid TEXT NOT NULL,
-            pub_date TEXT NOT NULL,
-            processed_date TEXT NOT NULL,
-            feed_url TEXT NOT NULL,
-            emoji1 TEXT,
-            emoji2 TEXT,
-            image_url TEXT,
-            sentiment_score REAL DEFAULT 0.0,
-            bias_category TEXT DEFAULT 'neutral',
-            bias_score REAL DEFAULT 0.0,
-            description TEXT,
-            message TEXT
-        )
-    ''')
-
-    conn.execute('''
-        CREATE TABLE IF NOT EXISTS tags (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE NOT NULL,
-            category TEXT NOT NULL,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-
-    conn.execute('''
-        CREATE TABLE IF NOT EXISTS article_tags (
-            article_id INTEGER,
-            tag_id INTEGER,
-            PRIMARY KEY (article_id, tag_id),
-            FOREIGN KEY (article_id) REFERENCES news_entries(id),
-            FOREIGN KEY (tag_id) REFERENCES tags(id)
-        )
-    ''')
-
-    # Create indices
-    conn.execute('CREATE INDEX IF NOT EXISTS idx_link ON news_entries(link)')
-    conn.execute('CREATE INDEX IF NOT EXISTS idx_feed_url ON news_entries(feed_url)')
-    conn.execute('CREATE INDEX IF NOT EXISTS idx_pub_date ON news_entries(pub_date)')
-    conn.execute('CREATE INDEX IF NOT EXISTS idx_guid ON news_entries(guid)')
-    conn.execute('CREATE INDEX IF NOT EXISTS idx_tag_name ON tags(name)')
-    conn.execute('CREATE INDEX IF NOT EXISTS idx_tag_category ON tags(category)')
-    conn.execute('CREATE INDEX IF NOT EXISTS idx_article_tags ON article_tags(article_id)')
-
-    conn.commit()
-    
-    if not connection:
-        conn.close()
+    """No-op legacy initializer (use Postgres migrations instead)."""
+    logger.info("init_db() legacy call ignored; use Alembic migrations on Postgres")
 
 def exists_in_db(link: str) -> bool:
     """Check if an entry with this link already exists in the database."""
@@ -133,15 +53,8 @@ def exists_in_db(link: str) -> bool:
 
 @contextmanager
 def get_db():
-    """Context manager for database connections."""
-    conn = None
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        conn.row_factory = sqlite3.Row
-        yield conn
-    finally:
-        if conn:
-            conn.close()
+    """Legacy no-op context manager to avoid import breakage."""
+    yield None
 
 def cleanup_db():
     """Cleanup function to be called on program exit."""
@@ -153,47 +66,58 @@ def cleanup_db():
             logger.error(f"Error during database cleanup: {e}")
         _connection = None
 
-atexit.register(cleanup_db)
+try:
+    import atexit
+    atexit.register(cleanup_db)
+except Exception:
+    pass
 
 def load_feed_cache():
     """Load feed cache from database."""
-    with get_db() as conn:
-        cursor = conn.execute('''
+    # Legacy path not supported; return defaults
+    try:
+        with get_db() as conn:
+            cursor = conn.execute('''
             SELECT url, last_check, etag, last_modified, update_frequency 
             FROM feed_cache
-        ''')
-        cache = {}
-        for row in cursor:
-            try:
-                cache[row[0]] = {
-                    'last_check': datetime.fromisoformat(row[1]) if row[1] else None,
-                    'etag': row[2],
-                    'last_modified': row[3],
-                    'update_frequency': row[4] or 3600
-                }
-            except (ValueError, TypeError):
-                continue
-        return cache
+            ''')
+            cache = {}
+            for row in cursor:
+                try:
+                    cache[row[0]] = {
+                        'last_check': datetime.fromisoformat(row[1]) if row[1] else None,
+                        'etag': row[2],
+                        'last_modified': row[3],
+                        'update_frequency': row[4] or 3600
+                    }
+                except (ValueError, TypeError):
+                    continue
+            return cache
+    except Exception:
+        return {}
 
 def update_feed_cache(url: str, data: dict):
     """Update feed cache with new metrics."""
-    with get_db() as conn:
-        conn.execute('''
+    try:
+        with get_db() as conn:
+            conn.execute('''
             INSERT OR REPLACE INTO feed_cache 
             (url, last_check, etag, last_modified, update_frequency, 
              last_success_time, consecutive_failures, source_priority)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            url,
-            data.get('last_check', '').isoformat() if data.get('last_check') else None,
-            data.get('etag'),
-            data.get('last_modified'),
-            data.get('update_frequency', 3600),
-            data.get('last_success_time', '').isoformat() if data.get('last_success_time') else None,
-            data.get('consecutive_failures', 0),
-            data.get('source_priority', 100)
-        ))
-        conn.commit()
+            ''', (
+                url,
+                data.get('last_check', '').isoformat() if data.get('last_check') else None,
+                data.get('etag'),
+                data.get('last_modified'),
+                data.get('update_frequency', 3600),
+                data.get('last_success_time', '').isoformat() if data.get('last_success_time') else None,
+                data.get('consecutive_failures', 0),
+                data.get('source_priority', 100)
+            ))
+            conn.commit()
+    except Exception:
+        return
 
 def get_feed_metrics(url: str) -> dict:
     """Get feed metrics for adaptive polling."""

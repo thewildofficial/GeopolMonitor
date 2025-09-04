@@ -67,6 +67,4 @@ INSECURE_FEED_WHITELIST: List[str] = [
     url.strip() for url in os.getenv("INSECURE_FEED_WHITELIST", "").split(",") if url.strip()
 ]
 
-# Configuration validation for required secrets (fail fast)
-if TELEGRAM_API_ID == 0 or not TELEGRAM_API_HASH:
-    raise ValueError("TELEGRAM_API_ID and TELEGRAM_API_HASH must be set")
+# Telegram credentials are validated at runtime by the Telegram client

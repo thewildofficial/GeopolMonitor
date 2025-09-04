@@ -108,6 +108,9 @@ class TelegramMonitorClient:
     async def initialize(self) -> bool:
         """Initialize the Telegram client and Redis connection"""
         try:
+            # Validate Telegram credentials at runtime
+            if TELEGRAM_API_ID == 0 or not TELEGRAM_API_HASH:
+                raise ValueError("TELEGRAM_API_ID and TELEGRAM_API_HASH must be set")
             # Initialize Redis for message buffering
             self.redis_client = redis.from_url(
                 REDIS_URL, 
