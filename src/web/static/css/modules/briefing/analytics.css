@@ -1,0 +1,332 @@
+/* Analytics Panel Styling */
+
+.analytics-panel {
+  grid-column: 1 / -1;  /* Full width */
+}
+
+/* Mini map section */
+.mini-map {
+  height: 240px;
+  margin-bottom: var(--spacing-lg);
+  border-radius: var(--border-radius-md);
+  overflow: hidden;
+  background-color: #f0f0f0;
+  box-shadow: inset 0 0 10px var(--shadow-color);
+  position: relative;
+}
+
+/* Hotspot list section */
+.hotspot-list {
+  margin-bottom: var(--spacing-lg);
+}
+
+.hotspot-list h3 {
+  font-size: 1.1rem;
+  margin-bottom: var(--spacing-md);
+  font-weight: 600;
+}
+
+.hotspot-item {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--border-radius-sm);
+  background-color: var(--bg-secondary);
+  margin-bottom: var(--spacing-xs);
+  transition: transform var(--transition-speed) var(--transition-timing);
+  cursor: pointer;
+}
+
+.hotspot-item:hover {
+  transform: translateX(4px);
+}
+
+.hotspot-name {
+  flex-grow: 1;
+  font-weight: 500;
+}
+
+.hotspot-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 var(--spacing-xs);
+  border-radius: 12px;
+  background-color: var(--accent-blue);
+  color: white;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-right: var(--spacing-md);
+}
+
+.hotspot-trend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8rem;
+}
+
+.trend-indicator {
+  display: inline-block;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+}
+
+.trend-indicator.up {
+  border-bottom: 5px solid var(--accent-green);
+}
+
+.trend-indicator.down {
+  border-top: 5px solid var(--accent-red);
+}
+
+.trend-indicator.stable {
+  width: 10px;
+  height: 2px;
+  background-color: var(--text-secondary);
+}
+
+.trend-value.up {
+  color: var(--accent-green);
+}
+
+.trend-value.down {
+  color: var(--accent-red);
+}
+
+.trend-value.stable {
+  color: var(--text-secondary);
+}
+
+/* Coverage stats section */
+.coverage-stats, .sentiment-trends {
+  margin-bottom: var(--spacing-lg);
+}
+
+.coverage-stats h3, .sentiment-trends h3 {
+  font-size: 1.1rem;
+  margin-bottom: var(--spacing-md);
+  font-weight: 600;
+}
+
+.chart-container {
+  height: 200px;
+  position: relative;
+}
+
+/* Stats grid layout */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+}
+
+.stat-card {
+  padding: var(--spacing-md);
+  border-radius: var(--border-radius-md);
+  background-color: var(--bg-secondary);
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--accent-blue);
+  margin-bottom: var(--spacing-xs);
+}
+
+.stat-label {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+/* Sentiment indicator */
+.sentiment-indicator {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+}
+
+.sentiment-bar {
+  flex-grow: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(to right, var(--accent-red), #dddddd, var(--accent-green));
+}
+
+.sentiment-marker {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: var(--text-primary);
+  border: 2px solid white;
+  box-shadow: 0 0 4px var(--shadow-color);
+  position: relative;
+  left: 50%;  /* Default neutral position */
+  transform: translateX(-50%);
+  transition: left var(--transition-speed) var(--transition-timing);
+}
+
+.sentiment-label {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+/* Coverage breakdown */
+.coverage-breakdown {
+  display: flex;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.coverage-item {
+  flex: 1;
+  text-align: center;
+}
+
+.coverage-value {
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.flash-value {
+  color: var(--accent-red);
+}
+
+.summary-value {
+  color: var(--accent-blue);
+}
+
+.context-value {
+  color: var(--accent-green);
+}
+
+.coverage-label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+/* Timeline for changes */
+.timeline {
+  position: relative;
+  padding-left: 20px;
+  margin-bottom: var(--spacing-lg);
+}
+
+.timeline::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  background-color: var(--border-color);
+}
+
+.timeline-item {
+  position: relative;
+  margin-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-md);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.timeline-item::before {
+  content: "";
+  position: absolute;
+  left: -24px;
+  top: 5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: var(--accent-blue);
+}
+
+.timeline-time {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-xs);
+}
+
+.timeline-content {
+  font-size: 0.9rem;
+}
+
+/* Changes highlight */
+.change-highlight {
+  padding: var(--spacing-sm);
+  background-color: rgba(255, 214, 10, 0.1);
+  border-radius: var(--border-radius-sm);
+  margin-bottom: var(--spacing-md);
+}
+
+.change-highlight-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-xs);
+}
+
+.change-highlight-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--accent-yellow);
+}
+
+.change-highlight-time {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.change-highlight-content {
+  font-size: 0.9rem;
+}
+
+/* Loading state for charts */
+.chart-loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(255, 255, 255, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10;
+}
+
+/* Interactive elements */
+.interactive-control {
+  display: flex;
+  justify-content: center;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+}
+
+.time-selector {
+  display: flex;
+  border-radius: var(--border-radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+}
+
+.time-selector-option {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background-color: transparent;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.time-selector-option.active {
+  background-color: var(--accent-blue);
+  color: white;
+}

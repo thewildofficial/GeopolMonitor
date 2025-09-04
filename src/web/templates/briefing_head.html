@@ -1,0 +1,18 @@
+{% block styles %}
+<link rel="stylesheet" href="/static/css/modules/briefing/base.css">
+<link rel="stylesheet" href="/static/css/modules/briefing/tiers.css">
+<link rel="stylesheet" href="/static/css/modules/briefing/analytics.css">
+<link rel="stylesheet" href="/static/css/modules/briefing/responsive.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous">
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
+<script src="/static/js/modules/briefing/BriefingSocket.js"></script>
+<script src="/static/js/modules/briefing/TierManager.js"></script>
+<script src="/static/js/modules/briefing/RefreshManager.js"></script>
+<script src="/static/js/modules/briefing/AnalyticsPanel.js"></script>
+<script src="/static/js/modules/briefing/MiniMap.js"></script>
+<script src="/static/js/modules/briefing/BriefingPage.js"></script>
+{% endblock %}

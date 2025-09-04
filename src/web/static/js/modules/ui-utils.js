@@ -129,3 +129,152 @@ function getLoadingPhrase(step) {
     ];
     return phrases[Math.min(step, phrases.length - 1)];
 }
+
+/**
+ * Date formatting utilities to handle UTC dates consistently across the application
+ */
+
+/**
+ * Format a UTC ISO date string to the user's local timezone
+ * @param {string} isoDateString - ISO datetime string in UTC
+ * @param {object} options - Formatting options
+ * @returns {string} Formatted date string in local timezone
+ */
+export function formatDate(isoDateString, options = {}) {
+    if (!isoDateString) return '';
+    
+    try {
+        const date = new Date(isoDateString);
+        
+        // Check if date is valid
+        if (isNaN(date.getTime())) {
+            console.warn('Invalid date:', isoDateString);
+            return '';
+        }
+        
+        const defaultOptions = {
+            dateStyle: 'medium',
+            timeStyle: 'short'
+        };
+        
+        const mergedOptions = { ...defaultOptions, ...options };
+        return new Intl.DateTimeFormat(navigator.language, mergedOptions).format(date);
+    } catch (error) {
+        console.error('Error formatting date:', error);
+        return isoDateString;
+    }
+}
+
+/**
+ * Format a UTC ISO date string as a relative time (e.g., "2 hours ago")
+ * @param {string} isoDateString - ISO datetime string in UTC
+ * @returns {string} Relative time string
+ */
+export function formatRelativeTime(isoDateString) {
+    if (!isoDateString) return '';
+    
+    try {
+        const date = new Date(isoDateString);
+        const now = new Date();
+        const diffMs = now - date;
+        const diffSec = Math.floor(diffMs / 1000);
+        const diffMin = Math.floor(diffSec / 60);
+        const diffHour = Math.floor(diffMin / 60);
+        const diffDay = Math.floor(diffHour / 24);
+        const diffMonth = Math.floor(diffDay / 30);
+        const diffYear = Math.floor(diffDay / 365);
+        
+        if (diffSec < 60) {
+            return 'just now';
+        } else if (diffMin < 60) {
+            return `${diffMin} minute${diffMin > 1 ? 's' : ''} ago`;
+        } else if (diffHour < 24) {
+            return `${diffHour} hour${diffHour > 1 ? 's' : ''} ago`;
+        } else if (diffDay < 30) {
+            return `${diffDay} day${diffDay > 1 ? 's' : ''} ago`;
+        } else if (diffMonth < 12) {
+            return `${diffMonth} month${diffMonth > 1 ? 's' : ''} ago`;
+        } else {
+            return `${diffYear} year${diffYear > 1 ? 's' : ''} ago`;
+        }
+    } catch (error) {
+        console.error('Error formatting relative time:', error);
+        return '';
+    }
+}
+
+/**
+ * Add a clock element that updates with the current time
+ * @param {string} elementId - ID of the element to insert the clock
+ * @returns {function} Function to stop the clock
+ */
+export function startLiveClock(elementId) {
+    const clockElement = document.getElementById(elementId);
+    if (!clockElement) return () => {};
+    
+    const updateClock = () => {
+        const now = new Date();
+        const options = {
+            hour: 'numeric',
+            minute: 'numeric',
+            second: 'numeric',
+            hour12: true,
+            timeZoneName: 'short'
+        };
+        clockElement.textContent = new Intl.DateTimeFormat(navigator.language, options).format(now);
+    };
+    
+    // Update immediately and then every second
+    updateClock();
+    const interval = setInterval(updateClock, 1000);
+    
+    // Return a function to stop the clock
+    return () => clearInterval(interval);
+}
+
+/**
+ * Initialize all date elements in the document
+ * Finds elements with data-utc-date attribute and formats them
+ */
+export function initializeDateElements() {
+    const dateElements = document.querySelectorAll('[data-utc-date]');
+    
+    dateElements.forEach(element => {
+        const isoDate = element.getAttribute('data-utc-date');
+        const format = element.getAttribute('data-date-format') || 'full';
+        const relative = element.hasAttribute('data-relative');
+        
+        if (relative) {
+            element.textContent = formatRelativeTime(isoDate);
+            // Update relative time periodically
+            setInterval(() => {
+                element.textContent = formatRelativeTime(isoDate);
+            }, 60000); // Every minute
+        } else {
+            let options = {};
+            
+            // Handle different preset formats
+            switch (format) {
+                case 'date-only':
+                    options = { dateStyle: 'medium', timeStyle: undefined };
+                    break;
+                case 'time-only':
+                    options = { dateStyle: undefined, timeStyle: 'medium' };
+                    break;
+                case 'short':
+                    options = { dateStyle: 'short', timeStyle: 'short' };
+                    break;
+                case 'full':
+                default:
+                    options = { dateStyle: 'full', timeStyle: 'medium' };
+                    break;
+            }
+            
+            element.textContent = formatDate(isoDate, options);
+        }
+        
+        // Add title with both absolute and relative time for hover
+        element.title = `${formatDate(isoDate, { dateStyle: 'full', timeStyle: 'long' })}
+${formatRelativeTime(isoDate)}`;
+    });
+}

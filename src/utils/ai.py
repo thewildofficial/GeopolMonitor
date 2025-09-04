@@ -7,20 +7,16 @@ import logging
 from datetime import datetime
 from typing import Dict, Tuple, Optional, List
 from google import genai
-from config.settings import GEMINI_API_KEYS
+from config.settings import GEMINI_API_KEYS, RPM_LIMIT, RPD_LIMIT, MINUTE_WINDOW, DAY_WINDOW
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,  # Changed from INFO to WARNING to filter out AFC messages
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# Rate limiting constants
-RPM_LIMIT = 60  # Requests per minute
-RPD_LIMIT = 1500  # Requests per day
-MINUTE_WINDOW = 60  # Window size in seconds
-DAY_WINDOW = 86400  # 24 hours in seconds
+# Rate limiting constants (centralized in config.settings)
 
 # Initialize rate limiting variables
 last_request_time = time.time()
@@ -121,19 +117,15 @@ class ContentProcessor:
                 logger.error(f"Invalid URL provided: {url}")
                 raise ValueError(f"Invalid URL format: {url}")
 
-            # Always scrape full article content from URL
-            from .scraper import scrape_article
-            logger.info(f"Attempting to scrape article content from: {url}")
-            article_data = await scrape_article(url)
-            if article_data and article_data.get('text'):
-                logger.info(f"Successfully scraped article content from: {url}")
-                text = f"{article_data.get('title', '')}\n\n{article_data['text']}"
-            else:
-                logger.error(f"Failed to scrape required article content from: {url}")
-                raise ValueError(f"Could not scrape content from {url}")
+            # Only scrape article content if text is too short
+            if len(text.strip()) < 100:
+                from .scraper import scrape_article
+                logger.info(f"Content too short, attempting to scrape article from: {url}")
+                article_data = await scrape_article(url)
+                if (article_data and article_data.get('text')):
+                    logger.info(f"Successfully scraped article content from: {url}")
+                    text = f"{article_data.get('title', '')}\n\n{article_data['text']}"
 
-            await wait_for_rate_limit()
-            
             prompt = f"""Analyze this text and provide three things:
 
 1. TRANSLATION & FORMATTING:
@@ -258,9 +250,29 @@ TEXT: [processed text]"""
 
     async def process_content_with_tags(self, text: str, url: str, is_title: bool = False, instruction: Optional[str] = None) -> Tuple[str, str, list[str], list[str], list[str]]:
         """Process content and generate tags with Gemini API."""
-        emoji_str, processed_text = await self.process_content(text, url, is_title, instruction)
-        topics, geography, events = await generate_tags(text)
-        return emoji_str, processed_text, topics, geography, events
+        try:
+            # First get emojis and processed text
+            emoji_str, processed_text = await self.process_content(text, url, is_title, instruction)
+            
+            # Then get tags from the full text for better context
+            if not is_title and len(text.strip()) < 100:
+                from .scraper import scrape_article
+                article_data = await scrape_article(url)
+                if article_data and article_data.get('text'):
+                    text = f"{article_data.get('title', '')}\n\n{article_data['text']}"
+            
+            # Generate and clean tags
+            topics, geography, events = await generate_tags(text)
+            
+            # Ensure unique tags per category
+            topics = list(dict.fromkeys(topics))
+            geography = list(dict.fromkeys(geography))
+            events = list(dict.fromkeys(events))
+            
+            return emoji_str, processed_text, topics, geography, events
+        except Exception as e:
+            logger.error(f"Error in process_content_with_tags: {str(e)}")
+            return emoji_str, processed_text, [], [], []
 
     async def analyze_sentiment_and_bias(self, text: str) -> Tuple[float, str, float]:
         """Analyze sentiment and bias of content using Gemini API."""
@@ -289,21 +301,27 @@ TEXT: [processed text]"""
    0.3 to 0.6: Moderately positive (progress, improvement, cooperation)
    0.7 to 1.0: Highly positive (breakthrough, success, strong growth)
 
-2. BIAS CATEGORY:
-   Identify the dominant geopolitical perspective:
-   - western (US/EU/NATO aligned)
-   - russian (Russia/CIS aligned)
-   - Ukranian (Heavily ukrainian aligned)
-   - chinese (China/SCO aligned)
-   - israeli (Pro-Israel/Jewish perspective)
-   - Palestinian (Pro-Palestinian)
-   - turkish (Turkey/Neo-Ottoman perspective)
-   - arab (Arab/Gulf states perspective)
-   - indian (India/South Asian perspective)
-   - african (Pan-African/Regional perspective)
-   - iranian (Iran/Shiite aligned)
-   - latin-american (Latin American perspective)
-   - neutral (No clear geopolitical bias)
+2. BIAS PERSPECTIVE:
+   Provide 2-3 thoughtful, neutral sentences that highlight specific framing choices or perspective biases in the text. Your analysis should:
+   - Identify specific examples of language, quotes, or narrative structures that reveal potential bias
+   - Point to particular sentences or word choices that may subtly direct readers toward a viewpoint
+   - Use strictly neutral language that does not favor any political position
+   - Avoid making judgment calls about whether the bias is "good" or "bad"
+   - Frame observations as helpful context for critical reading, not accusations
+   
+   Consider these aspects:
+   - Dominant geopolitical perspectives (Western, Eastern, Regional)
+   - Source diversity and representation of different viewpoints
+   - Use of emotionally charged language or persuasive techniques
+   - Selective presentation of facts or absence of key context
+   - Historical or cultural framing choices
+   - Economic or political perspectives that may influence the narrative
+   - Which viewpoints benefit from the framing and which may be minimized
+   
+   Example analyses:
+   - "This text frames economic policies using terms like 'reckless spending' rather than neutral alternatives like 'increased expenditure,' potentially directing readers toward a specific fiscal perspective. The article primarily quotes business leaders while government officials' perspectives appear briefly in the final paragraph."
+   - "The reporting presents regional tensions primarily through a Western security framework, using terms like 'aggression' for one side while describing similar actions by allied nations as 'defensive positioning.' Consider how this framing might influence interpretation of the events described."
+   - "While covering the diplomatic negotiations, the article dedicates significantly more space to one party's concerns (8 paragraphs) compared to the other's perspective (2 paragraphs). This structural choice, though subtle, may shape how readers understand the relative importance of each position."
 
 3. BIAS SCORE (0.0 to 1.0):
    Evaluate these factors:
@@ -326,7 +344,7 @@ Text to analyze: {text}
 
 Respond exactly in this format:
 SENTIMENT: [score]
-BIAS_CATEGORY: [category]
+BIAS_CATEGORY: [2-3 sentence analysis of specific bias elements in the text, using neutral language]
 BIAS_SCORE: [score]"""
 
             response = self.client.models.generate_content(
@@ -376,11 +394,431 @@ BIAS_SCORE: [score]"""
         sentiment_score, bias_category, bias_score = await self.analyze_sentiment_and_bias(full_article_text)
         return emoji_str, processed_text, sentiment_score, bias_category, bias_score
 
+    async def process_telegram_message(
+        self, 
+        message_text: str, 
+        analysis_type: str = "relevance",
+        channel_context: Optional[str] = None,
+        metadata: Optional[Dict] = None
+    ) -> Dict[str, any]:
+        """
+        Process raw Telegram message content for geopolitical analysis.
+        
+        Args:
+            message_text: Raw text content from Telegram message
+            analysis_type: Type of analysis ("relevance", "entities", "summary", "full")
+            channel_context: Optional context about the channel source
+            metadata: Optional metadata about the message (timestamp, author, etc.)
+            
+        Returns:
+            Dict containing analysis results based on analysis_type
+        """
+        try:
+            # Input validation
+            if not message_text or not isinstance(message_text, str):
+                raise ValueError("message_text must be a non-empty string")
+            
+            if analysis_type not in ["relevance", "entities", "summary", "full"]:
+                raise ValueError("analysis_type must be one of: relevance, entities, summary, full")
+            
+            # Handle rate limiting and key rotation
+            rotate_needed = await self.key_manager.wait_for_rate_limit()
+            if rotate_needed:
+                await self.key_manager.rotate_key()
+                self._init_client()
+            
+            # Clean and prepare message text
+            cleaned_text = self._clean_telegram_text(message_text)
+            
+            # Select appropriate analysis based on type
+            if analysis_type == "relevance":
+                return await self._analyze_geopolitical_relevance(cleaned_text, channel_context, metadata)
+            elif analysis_type == "entities":
+                return await self._extract_entities(cleaned_text, channel_context, metadata)
+            elif analysis_type == "summary":
+                return await self._generate_summary(cleaned_text, channel_context, metadata)
+            elif analysis_type == "full":
+                return await self._full_analysis(cleaned_text, channel_context, metadata)
+                
+        except Exception as e:
+            logger.error(f"Error processing Telegram message: {str(e)}")
+            return {
+                "success": False,
+                "error": str(e),
+                "analysis_type": analysis_type,
+                "message_length": len(message_text) if message_text else 0
+            }
+    
+    def _clean_telegram_text(self, text: str) -> str:
+        """Clean and normalize Telegram message text."""
+        # Remove excessive whitespace and normalize
+        text = re.sub(r'\s+', ' ', text.strip())
+        
+        # Remove Telegram-specific formatting (but preserve links)
+        text = re.sub(r'@(\w+)', r'@\1', text)  # Keep username mentions
+        text = re.sub(r'#(\w+)', r'#\1', text)  # Keep hashtags
+        
+        # Remove excessive punctuation
+        text = re.sub(r'[.]{3,}', '...', text)
+        text = re.sub(r'[!]{2,}', '!', text)
+        text = re.sub(r'[?]{2,}', '?', text)
+        
+        return text
+    
+    async def process_telegram_batch(
+        self, 
+        messages: List[Dict[str, any]], 
+        analysis_type: str = "relevance",
+        batch_size: int = 10
+    ) -> List[Dict[str, any]]:
+        """
+        Process multiple Telegram messages in batches with load balancing.
+        
+        Args:
+            messages: List of message dictionaries with 'text' field required
+            analysis_type: Type of analysis to perform on each message
+            batch_size: Number of messages to process in parallel
+            
+        Returns:
+            List of analysis results in same order as input
+        """
+        results = []
+        
+        # Process messages in batches to respect rate limits
+        for i in range(0, len(messages), batch_size):
+            batch = messages[i:i + batch_size]
+            
+            # Create async tasks for batch processing
+            tasks = []
+            for msg in batch:
+                if isinstance(msg, dict) and 'text' in msg:
+                    task = self.process_telegram_message(
+                        message_text=msg['text'],
+                        analysis_type=analysis_type,
+                        channel_context=msg.get('channel_context'),
+                        metadata=msg.get('metadata')
+                    )
+                    tasks.append(task)
+                else:
+                    # Handle invalid message format
+                    error_result = {
+                        "success": False,
+                        "error": "Invalid message format - 'text' field required",
+                        "analysis_type": analysis_type
+                    }
+                    tasks.append(asyncio.create_task(self._return_async_result(error_result)))
+            
+            # Wait for batch completion
+            batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Handle exceptions in batch results
+            for result in batch_results:
+                if isinstance(result, Exception):
+                    results.append({
+                        "success": False,
+                        "error": str(result),
+                        "analysis_type": analysis_type
+                    })
+                else:
+                    results.append(result)
+            
+            # Small delay between batches to be respectful of rate limits
+            if i + batch_size < len(messages):
+                await asyncio.sleep(0.5)
+        
+        return results
+    
+    async def _return_async_result(self, result):
+        """Helper method to return a result asynchronously."""
+        return result
+
+    async def _analyze_geopolitical_relevance(self, text: str, channel_context: Optional[str], metadata: Optional[Dict]) -> Dict:
+        """Analyze message for geopolitical relevance."""
+        context_info = f"Channel: {channel_context}" if channel_context else ""
+        
+        prompt = f"""Analyze this Telegram message for geopolitical relevance and provide a structured assessment.
+
+{context_info}
+
+Message text: {text}
+
+Analyze the content and respond in this EXACT format:
+
+RELEVANCE_SCORE: [0.0-1.0 numeric score where 1.0 is highly relevant to geopolitics]
+RELEVANCE_CATEGORY: [high/medium/low/none]
+CONFIDENCE: [0.0-1.0 confidence in the assessment]
+PRIMARY_TOPICS: [comma-separated list of main geopolitical topics, max 3]
+GEOGRAPHIC_FOCUS: [main countries/regions mentioned, comma-separated]
+REASONING: [2-3 sentence explanation of the relevance assessment]
+
+Guidelines for scoring:
+- High (0.8-1.0): Direct government actions, international relations, conflicts, major policy changes
+- Medium (0.5-0.79): Economic policies with geopolitical impact, regional tensions, diplomatic news
+- Low (0.2-0.49): Local politics with broader implications, trade disputes, social movements
+- None (0.0-0.19): Personal messages, spam, irrelevant content, pure entertainment"""
+
+        try:
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents=prompt
+            )
+            
+            return self._parse_relevance_response(response.text.strip(), text)
+            
+        except Exception as e:
+            logger.error(f"Error in geopolitical relevance analysis: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "analysis_type": "relevance"
+            }
+
+    async def _extract_entities(self, text: str, channel_context: Optional[str], metadata: Optional[Dict]) -> Dict:
+        """Extract entities from the message."""
+        context_info = f"Channel: {channel_context}" if channel_context else ""
+        
+        prompt = f"""Extract key entities from this Telegram message and structure them appropriately.
+
+{context_info}
+
+Message text: {text}
+
+Extract entities and respond in this EXACT format:
+
+PEOPLE: [comma-separated list of people mentioned]
+ORGANIZATIONS: [comma-separated list of organizations, governments, companies]
+LOCATIONS: [comma-separated list of countries, cities, regions]
+EVENTS: [comma-separated list of specific events or situations]
+TOPICS: [comma-separated list of main subject areas]
+DATES_TIMES: [any dates or times mentioned]
+SUMMARY: [1-2 sentence summary of the message content]
+
+Guidelines:
+- Only include entities that are clearly mentioned or directly referenced
+- Use full names where possible (e.g., "United States" not "US")
+- For people, include titles if mentioned (e.g., "President Biden")
+- Keep each category to max 5 items, prioritize the most important"""
+
+        try:
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents=prompt
+            )
+            
+            return self._parse_entity_response(response.text.strip(), text)
+            
+        except Exception as e:
+            logger.error(f"Error in entity extraction: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "analysis_type": "entities"
+            }
+
+    async def _generate_summary(self, text: str, channel_context: Optional[str], metadata: Optional[Dict]) -> Dict:
+        """Generate summary of the message."""
+        context_info = f"Channel: {channel_context}" if channel_context else ""
+        
+        prompt = f"""Summarize this Telegram message and assess its key characteristics.
+
+{context_info}
+
+Message text: {text}
+
+Provide a summary in this EXACT format:
+
+SUMMARY: [2-3 sentence summary of the main content]
+KEY_POINTS: [comma-separated list of 2-4 key points]
+TONE: [professional/informal/urgent/neutral/other]
+LANGUAGE_QUALITY: [native/translated/poor/good/excellent]
+MESSAGE_TYPE: [news/opinion/announcement/discussion/spam/other]
+CREDIBILITY_INDICATORS: [factors that suggest reliability or lack thereof]
+
+Guidelines:
+- Keep summary concise but informative
+- Focus on factual content over opinions
+- Note if the message seems to be news, analysis, or personal commentary
+- Consider source reliability indicators (official accounts, verification, etc.)"""
+
+        try:
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents=prompt
+            )
+            
+            return self._parse_summary_response(response.text.strip(), text)
+            
+        except Exception as e:
+            logger.error(f"Error in summary generation: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "analysis_type": "summary"
+            }
+
+    async def _full_analysis(self, text: str, channel_context: Optional[str], metadata: Optional[Dict]) -> Dict:
+        """Perform comprehensive analysis combining all analysis types."""
+        try:
+            # Run all analyses concurrently
+            relevance_task = self._analyze_geopolitical_relevance(text, channel_context, metadata)
+            entities_task = self._extract_entities(text, channel_context, metadata)
+            summary_task = self._generate_summary(text, channel_context, metadata)
+            
+            relevance_result, entities_result, summary_result = await asyncio.gather(
+                relevance_task, entities_task, summary_task, return_exceptions=True
+            )
+            
+            # Combine results
+            full_result = {
+                "success": True,
+                "analysis_type": "full",
+                "message_text": text[:100] + "..." if len(text) > 100 else text,
+                "relevance": relevance_result if not isinstance(relevance_result, Exception) else {"error": str(relevance_result)},
+                "entities": entities_result if not isinstance(entities_result, Exception) else {"error": str(entities_result)},
+                "summary": summary_result if not isinstance(summary_result, Exception) else {"error": str(summary_result)},
+                "channel_context": channel_context,
+                "metadata": metadata
+            }
+            
+            return full_result
+            
+        except Exception as e:
+            logger.error(f"Error in full analysis: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "analysis_type": "full"
+            }
+
+    def _parse_relevance_response(self, response_text: str, original_text: str) -> Dict:
+        """Parse the geopolitical relevance analysis response."""
+        result = {
+            "success": True,
+            "analysis_type": "relevance",
+            "relevance_score": 0.0,
+            "relevance_category": "none",
+            "confidence": 0.0,
+            "primary_topics": [],
+            "geographic_focus": [],
+            "reasoning": "",
+            "message_text": original_text[:100] + "..." if len(original_text) > 100 else original_text
+        }
+        
+        lines = response_text.split('\n')
+        for line in lines:
+            line = line.strip()
+            try:
+                if line.startswith('RELEVANCE_SCORE:'):
+                    score = float(line.split('RELEVANCE_SCORE:')[1].strip())
+                    result["relevance_score"] = max(0.0, min(1.0, score))
+                elif line.startswith('RELEVANCE_CATEGORY:'):
+                    result["relevance_category"] = line.split('RELEVANCE_CATEGORY:')[1].strip().lower()
+                elif line.startswith('CONFIDENCE:'):
+                    conf = float(line.split('CONFIDENCE:')[1].strip())
+                    result["confidence"] = max(0.0, min(1.0, conf))
+                elif line.startswith('PRIMARY_TOPICS:'):
+                    topics = [t.strip() for t in line.split('PRIMARY_TOPICS:')[1].strip().split(',') if t.strip()]
+                    result["primary_topics"] = topics[:3]  # Max 3 topics
+                elif line.startswith('GEOGRAPHIC_FOCUS:'):
+                    geo = [g.strip() for g in line.split('GEOGRAPHIC_FOCUS:')[1].strip().split(',') if g.strip()]
+                    result["geographic_focus"] = geo[:5]  # Max 5 locations
+                elif line.startswith('REASONING:'):
+                    result["reasoning"] = line.split('REASONING:')[1].strip()
+            except (ValueError, IndexError) as e:
+                logger.warning(f"Error parsing relevance response line '{line}': {e}")
+                continue
+        
+        return result
+
+    def _parse_entity_response(self, response_text: str, original_text: str) -> Dict:
+        """Parse the entity extraction response."""
+        result = {
+            "success": True,
+            "analysis_type": "entities",
+            "people": [],
+            "organizations": [],
+            "locations": [],
+            "events": [],
+            "topics": [],
+            "dates_times": [],
+            "summary": "",
+            "message_text": original_text[:100] + "..." if len(original_text) > 100 else original_text
+        }
+        
+        lines = response_text.split('\n')
+        for line in lines:
+            line = line.strip()
+            try:
+                if line.startswith('PEOPLE:'):
+                    people = [p.strip() for p in line.split('PEOPLE:')[1].strip().split(',') if p.strip()]
+                    result["people"] = people[:5]
+                elif line.startswith('ORGANIZATIONS:'):
+                    orgs = [o.strip() for o in line.split('ORGANIZATIONS:')[1].strip().split(',') if o.strip()]
+                    result["organizations"] = orgs[:5]
+                elif line.startswith('LOCATIONS:'):
+                    locs = [l.strip() for l in line.split('LOCATIONS:')[1].strip().split(',') if l.strip()]
+                    result["locations"] = locs[:5]
+                elif line.startswith('EVENTS:'):
+                    events = [e.strip() for e in line.split('EVENTS:')[1].strip().split(',') if e.strip()]
+                    result["events"] = events[:5]
+                elif line.startswith('TOPICS:'):
+                    topics = [t.strip() for t in line.split('TOPICS:')[1].strip().split(',') if t.strip()]
+                    result["topics"] = topics[:5]
+                elif line.startswith('DATES_TIMES:'):
+                    dates = [d.strip() for d in line.split('DATES_TIMES:')[1].strip().split(',') if d.strip()]
+                    result["dates_times"] = dates[:3]
+                elif line.startswith('SUMMARY:'):
+                    result["summary"] = line.split('SUMMARY:')[1].strip()
+            except (ValueError, IndexError) as e:
+                logger.warning(f"Error parsing entity response line '{line}': {e}")
+                continue
+        
+        return result
+
+    def _parse_summary_response(self, response_text: str, original_text: str) -> Dict:
+        """Parse the summary generation response."""
+        result = {
+            "success": True,
+            "analysis_type": "summary",
+            "summary": "",
+            "key_points": [],
+            "tone": "",
+            "language_quality": "",
+            "message_type": "",
+            "credibility_indicators": "",
+            "message_text": original_text[:100] + "..." if len(original_text) > 100 else original_text
+        }
+        
+        lines = response_text.split('\n')
+        for line in lines:
+            line = line.strip()
+            try:
+                if line.startswith('SUMMARY:'):
+                    result["summary"] = line.split('SUMMARY:')[1].strip()
+                elif line.startswith('KEY_POINTS:'):
+                    points = [p.strip() for p in line.split('KEY_POINTS:')[1].strip().split(',') if p.strip()]
+                    result["key_points"] = points[:4]
+                elif line.startswith('TONE:'):
+                    result["tone"] = line.split('TONE:')[1].strip()
+                elif line.startswith('LANGUAGE_QUALITY:'):
+                    result["language_quality"] = line.split('LANGUAGE_QUALITY:')[1].strip()
+                elif line.startswith('MESSAGE_TYPE:'):
+                    result["message_type"] = line.split('MESSAGE_TYPE:')[1].strip()
+                elif line.startswith('CREDIBILITY_INDICATORS:'):
+                    result["credibility_indicators"] = line.split('CREDIBILITY_INDICATORS:')[1].strip()
+            except (ValueError, IndexError) as e:
+                logger.warning(f"Error parsing summary response line '{line}': {e}")
+                continue
+        
+        return result
+
 # Create singleton instance
 content_processor = ContentProcessor()
 
 # Update singleton instance methods
 process_with_analysis = content_processor.process_content_with_analysis
+process_telegram_message = content_processor.process_telegram_message
+process_telegram_batch = content_processor.process_telegram_batch
 
 async def wait_for_rate_limit():
     """Implements rate limiting according to free tier limits."""
@@ -425,31 +863,37 @@ async def generate_tags(text: str) -> Tuple[list[str], list[str], list[str]]:
     try:
         await wait_for_rate_limit()
         
-        prompt = """Analyze this text and generate three sets of tags:
+        # Clean and shorten text if needed
+        text = text[:4000] if len(text) > 4000 else text
+        
+        prompt = """Analyze this text and generate only relevant tags in three categories:
 
-1. TOPICS (e.g., Politics, Economy, Technology, etc.)
-2. GEOGRAPHY (Countries, Regions, Cities mentioned)
-3. EVENT TYPES (e.g., Election, Conflict, Treaty, Summit, etc.)
+1. TOPICS: Generate 2-3 specific topic tags that represent the main subjects
+2. GEOGRAPHY: List only countries, regions, or cities that are directly mentioned or central to the story
+3. EVENTS: Create 1-2 specific event-type tags that describe what's happening
 
-Rules for tag generation:
-- Each tag should be a single word or hyphenated phrase
-- Convert multi-word concepts into hyphenated form (e.g., "artificial intelligence" → "artificial-intelligence")
-- Use lowercase for all tags
-- Include only tags that are explicitly or strongly implied in the text
-- Maximum 5 tags per category
-- For geography, prefer country names over city names unless the city is the main focus
+STRICT FORMAT RULES:
+- Each tag must be lowercase, hyphenated if multiple words
+- NO special characters or brackets
+- NO generic terms like "news", "update", "development"
+- Each tag must be directly relevant to the article content
+- DO NOT repeat tags across categories
+- Keep tags concise and specific
+- Use ISO country names for geography tags
+- Add country context for cities (e.g., "paris", "france" as seperate tags)
+- Maximum 5 tags per category, fewer is better
 
-Example response format:
-TOPICS: economy, technology, cybersecurity
-GEOGRAPHY: united-states, china, european-union
-EVENTS: trade-agreement, diplomatic-summit
+Example of good tags:
+TOPICS: economy,defense,trade,politics,technology 
+GEOGRAPHY: united-states, south-korea
+EVENTS: budget-cut, diplomatic-visit
 
-Text to analyze: {text}
+Analyze this text: {text}
 
-Respond exactly in this format:
-TOPICS: [comma-separated tags]
-GEOGRAPHY: [comma-separated tags]
-EVENTS: [comma-separated tags]"""
+Respond EXACTLY in this format:
+TOPICS: tag1, tag2
+GEOGRAPHY: tag1, tag2
+EVENTS: tag1, tag2"""
 
         response = content_processor.client.models.generate_content(
             model=content_processor.model,
@@ -465,12 +909,52 @@ EVENTS: [comma-separated tags]"""
         for line in result:
             line = line.strip()
             if line.startswith('TOPICS:'):
-                topics = [t.strip() for t in line.split('TOPICS:')[1].strip().split(',')]
+                topics = [t.strip() for t in line.split('TOPICS:')[1].strip().split(',') if t.strip()]
             elif line.startswith('GEOGRAPHY:'):
-                geography = [t.strip() for t in line.split('GEOGRAPHY:')[1].strip().split(',')]
+                geography = [t.strip() for t in line.split('GEOGRAPHY:')[1].strip().split(',') if t.strip()]
             elif line.startswith('EVENTS:'):
-                events = [t.strip() for t in line.split('EVENTS:')[1].strip().split(',')]
+                events = [t.strip() for t in line.split('EVENTS:')[1].strip().split(',') if t.strip()]
         
+        def clean_tag_list(tags):
+            cleaned = []
+            seen = set()  # Track seen tags to avoid duplicates
+            
+            for tag in tags:
+                # Skip if empty or already seen
+                if not tag or tag in seen:
+                    continue
+                
+                # Normalize and clean the tag
+                tag = tag.strip().lower()
+                tag = tag.replace(' ', '-')  # Convert spaces to hyphens
+                
+                # Skip invalid tags
+                if (len(tag) < 2 or len(tag) > 50 or
+                    any(char in tag for char in '[]()<>"\',') or
+                    any(term in tag for term in ['tag', 'etc', 'other', 'news', 'update'])):
+                    continue
+                
+                seen.add(tag)
+                cleaned.append(tag)
+            
+            # Limit number of tags per category
+            return cleaned[:5]
+
+        # Clean and deduplicate tags
+        topics = clean_tag_list(topics)
+        geography = clean_tag_list(geography)
+        events = clean_tag_list(events)
+        
+        # Ensure no tag appears in multiple categories
+        all_tags = set()
+        for tag_list in [topics, geography, events]:
+            new_tags = []
+            for tag in tag_list:
+                if tag not in all_tags:
+                    all_tags.add(tag)
+                    new_tags.append(tag)
+            tag_list[:] = new_tags
+
         return topics, geography, events
 
     except Exception as e:

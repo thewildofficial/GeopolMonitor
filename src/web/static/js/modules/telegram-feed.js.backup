@@ -1,0 +1,596 @@
+/**
+ * Telegram Feed Component - Table-based Professional Interface
+ * Handles real-time Telegram message display with sophisticated data management UI
+ */
+
+class TelegramFeed {
+    constructor(options = {}) {
+        this.container = typeof options.container === 'string' 
+            ? document.querySelector(options.container) 
+            : options.container;
+        this.emptyStateEl = typeof options.emptyState === 'string'
+            ? document.querySelector(options.emptyState)
+            : options.emptyState;
+        
+        this.messages = [];
+        this.filteredMessages = [];
+        this.currentPage = 1;
+        this.pageSize = 25;
+        this.relevanceThreshold = 0.3;
+        this.connectionStatus = 'disconnected';
+        this.maxMessages = 500;
+        this.layout = options.layout || 'table';
+        this.enableToasts = options.enableToasts || false;
+        
+        this.stats = {
+            total: 0,
+            relevant: 0,
+            channels: new Set(),
+            avgRelevance: 0
+        };
+        
+        this.initializeComponent();
+        this.bindEvents();
+        this.showEmptyState();
+        
+        // Initialize WebSocket if URL provided
+        if (options.websocketUrl) {
+            this.websocket = new TelegramWebSocket(this, options.websocketUrl);
+        }
+    }
+
+    initializeComponent() {
+        // Initialize stats elements
+        this.statsElements = {
+            total: document.getElementById('totalMessages'),
+            relevant: document.getElementById('relevantMessages'),
+            channels: document.getElementById('activeChannels'),
+            avgRelevance: document.getElementById('avgRelevance')
+        };
+        
+        // Initialize pagination
+        this.paginationInfo = document.getElementById('paginationInfo');
+        this.prevPageBtn = document.getElementById('prevPage');
+        this.nextPageBtn = document.getElementById('nextPage');
+        
+        // Initialize connection status
+        this.updateConnectionStatus('connecting');
+    }
+
+    bindEvents() {
+        // Pagination controls
+        if (this.prevPageBtn) {
+            this.prevPageBtn.addEventListener('click', () => this.previousPage());
+        }
+        if (this.nextPageBtn) {
+            this.nextPageBtn.addEventListener('click', () => this.nextPage());
+        }
+        
+        // Table interactions
+        if (this.container) {
+            this.container.addEventListener('click', (e) => this.handleTableInteraction(e));
+        }
+    }
+
+    addMessage(messageData) {
+        const message = this.processMessage(messageData);
+        
+        // Add to messages array (newest first)
+        this.messages.unshift(message);
+        this.stats.channels.add(message.channelName);
+        
+        // Limit messages for performance
+        if (this.messages.length > this.maxMessages) {
+            this.messages = this.messages.slice(0, this.maxMessages);
+        }
+        
+        this.updateStats();
+        this.filterAndRender();
+        
+        if (this.enableToasts) {
+            this.showToast(`New message from ${message.channelName}`, 'info');
+        }
+    }
+
+    processMessage(messageData) {
+        return {
+            id: messageData.message_id || Math.random().toString(36).substr(2, 9),
+            channelId: messageData.channel_id,
+            channelName: messageData.channel?.title || messageData.channel_name || 'Unknown Channel',
+            channelUsername: messageData.channel?.username || messageData.channel_username || '',
+            text: messageData.text || messageData.raw_text || messageData.message || '',
+            date: new Date(messageData.date || messageData.timestamp || Date.now()),
+            relevanceScore: parseFloat(messageData.relevance_score) || Math.random() * 0.5 + 0.2, // Mock data
+            sentimentScore: messageData.sentiment_score || 0,
+            urgencyScore: messageData.urgency_score || 0,
+            entities: messageData.entities || {},
+            detectedLocations: messageData.detected_locations || [],
+            views: messageData.views || Math.floor(Math.random() * 1000),
+            forwards: messageData.forwards || Math.floor(Math.random() * 50),
+            replies: messageData.replies || Math.floor(Math.random() * 20),
+            mediaType: messageData.media_type,
+            hasMedia: messageData.has_media || false,
+            status: this.getMessageStatus(messageData),
+            isNew: true
+        };
+    }
+
+    getMessageStatus(messageData) {
+        if (messageData.processed) return 'processed';
+        if (messageData.analyzing) return 'analyzing';
+        return 'pending';
+    }
+
+    filterAndRender() {
+        // Filter messages based on relevance threshold
+        this.filteredMessages = this.messages.filter(msg => 
+            msg.relevanceScore >= this.relevanceThreshold
+        );
+        
+        this.renderCurrentPage();
+        this.updatePagination();
+    }
+
+    renderCurrentPage() {
+        if (this.filteredMessages.length === 0) {
+            this.showEmptyState();
+            return;
+        }
+        
+        this.hideEmptyState();
+        
+        const startIndex = (this.currentPage - 1) * this.pageSize;
+        const endIndex = startIndex + this.pageSize;
+        const pageMessages = this.filteredMessages.slice(startIndex, endIndex);
+        
+        this.container.innerHTML = pageMessages.map(msg => this.createTableRow(msg)).join('');
+    }
+
+    createTableRow(message) {
+        const channelInitials = this.generateChannelInitials(message.channelName);
+        const timeAgo = this.formatTimeAgo(message.date);
+        const relevanceClass = this.getRelevanceClass(message.relevanceScore);
+        const entities = this.extractEntities(message);
+        
+        return `
+            <tr class="message-row" data-message-id="${message.id}">
+                <td class="checkbox-column">
+                    <input type="checkbox" class="checkbox" value="${message.id}">
+                </td>
+                <td>
+                    <div class="channel-name">
+                        <div class="channel-avatar">${channelInitials}</div>
+                        <div>
+                            <div class="channel-title">${this.escapeHtml(message.channelName)}</div>
+                            <div class="channel-username">@${message.channelUsername}</div>
+                        </div>
+                    </div>
+                </td>
+                <td>
+                    <span class="source-badge">${this.getSourceType(message)}</span>
+                </td>
+                <td>
+                    <div class="message-content">
+                        <div class="message-preview">${this.escapeHtml(this.truncateText(message.text, 120))}</div>
+                        ${entities.length > 0 ? `
+                            <div class="message-entities">
+                                ${entities.map(entity => `<span class="entity-tag">${entity}</span>`).join('')}
+                            </div>
+                        ` : ''}
+                    </div>
+                </td>
+                <td>
+                    <div class="relevance-cell">
+                        <span class="relevance-score">${(message.relevanceScore * 100).toFixed(0)}%</span>
+                        <div class="relevance-bar">
+                            <div class="relevance-fill ${relevanceClass}" style="width: ${message.relevanceScore * 100}%"></div>
+                        </div>
+                    </div>
+                </td>
+                <td>
+                    <span class="status-badge ${message.status}">${this.formatStatus(message.status)}</span>
+                </td>
+                <td>
+                    <span class="timestamp" title="${message.date.toLocaleString()}">${timeAgo}</span>
+                </td>
+                <td class="actions-column">
+                    <div class="row-actions">
+                        <button class="action-btn" data-action="view" title="View Details">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2"/>
+                                <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+                            </svg>
+                        </button>
+                        <button class="action-btn" data-action="more" title="More Options">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <circle cx="12" cy="12" r="1" stroke="currentColor" stroke-width="2"/>
+                                <circle cx="19" cy="12" r="1" stroke="currentColor" stroke-width="2"/>
+                                <circle cx="5" cy="12" r="1" stroke="currentColor" stroke-width="2"/>
+                            </svg>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }
+
+    generateChannelInitials(channelName) {
+        return channelName
+            .split(' ')
+            .map(word => word.charAt(0).toUpperCase())
+            .slice(0, 2)
+            .join('');
+    }
+
+    getSourceType(message) {
+        if (message.channelUsername) return 'Channel';
+        if (message.hasMedia) return 'Media';
+        return 'Text';
+    }
+
+    extractEntities(message) {
+        const entities = [];
+        
+        // Extract locations
+        if (message.detectedLocations && message.detectedLocations.length > 0) {
+            entities.push(...message.detectedLocations.slice(0, 3));
+        }
+        
+        // Extract other entities from text (basic implementation)
+        const text = message.text.toLowerCase();
+        if (text.includes('ukraine')) entities.push('Ukraine');
+        if (text.includes('russia')) entities.push('Russia');
+        if (text.includes('nato')) entities.push('NATO');
+        if (text.includes('military')) entities.push('Military');
+        
+        return [...new Set(entities)].slice(0, 4); // Unique entities, max 4
+    }
+
+    getRelevanceClass(score) {
+        if (score >= 0.7) return 'high';
+        if (score >= 0.4) return 'medium';
+        return 'low';
+    }
+
+    formatStatus(status) {
+        switch (status) {
+            case 'processed': return 'Processed';
+            case 'analyzing': return 'Analyzing';
+            case 'pending': return 'Pending';
+            default: return 'Unknown';
+        }
+    }
+
+    formatTimeAgo(date) {
+        const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / (1000 * 60));
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        
+        if (diffMins < 1) return 'Just now';
+        if (diffMins < 60) return `${diffMins}m ago`;
+        if (diffHours < 24) return `${diffHours}h ago`;
+        return `${diffDays}d ago`;
+    }
+
+    truncateText(text, maxLength) {
+        if (text.length <= maxLength) return text;
+        return text.substr(0, maxLength - 3) + '...';
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    updateStats() {
+        this.stats.total = this.messages.length;
+        this.stats.relevant = this.messages.filter(msg => msg.relevanceScore >= this.relevanceThreshold).length;
+        this.stats.avgRelevance = this.messages.length > 0 
+            ? this.messages.reduce((sum, msg) => sum + msg.relevanceScore, 0) / this.messages.length 
+            : 0;
+        
+        // Update DOM
+        if (this.statsElements.total) this.statsElements.total.textContent = this.stats.total;
+        if (this.statsElements.relevant) this.statsElements.relevant.textContent = this.stats.relevant;
+        if (this.statsElements.channels) this.statsElements.channels.textContent = this.stats.channels.size;
+        if (this.statsElements.avgRelevance) this.statsElements.avgRelevance.textContent = this.stats.avgRelevance.toFixed(1);
+    }
+
+    updatePagination() {
+        const totalPages = Math.ceil(this.filteredMessages.length / this.pageSize);
+        
+        if (this.paginationInfo) {
+            this.paginationInfo.textContent = `Page ${this.currentPage} of ${totalPages}`;
+        }
+        
+        if (this.prevPageBtn) {
+            this.prevPageBtn.disabled = this.currentPage <= 1;
+        }
+        if (this.nextPageBtn) {
+            this.nextPageBtn.disabled = this.currentPage >= totalPages;
+        }
+    }
+
+    previousPage() {
+        if (this.currentPage > 1) {
+            this.currentPage--;
+            this.renderCurrentPage();
+            this.updatePagination();
+        }
+    }
+
+    nextPage() {
+        const totalPages = Math.ceil(this.filteredMessages.length / this.pageSize);
+        if (this.currentPage < totalPages) {
+            this.currentPage++;
+            this.renderCurrentPage();
+            this.updatePagination();
+        }
+    }
+
+    showEmptyState() {
+        if (this.emptyStateEl) {
+            this.emptyStateEl.classList.add('visible');
+        }
+        if (this.container) {
+            this.container.innerHTML = '';
+        }
+    }
+
+    hideEmptyState() {
+        if (this.emptyStateEl) {
+            this.emptyStateEl.classList.remove('visible');
+        }
+    }
+
+    handleTableInteraction(event) {
+        const messageRow = event.target.closest('.message-row');
+        if (!messageRow) return;
+        
+        const messageId = messageRow.dataset.messageId;
+        const message = this.messages.find(msg => msg.id === messageId);
+        if (!message) return;
+        
+        const action = event.target.closest('[data-action]')?.dataset.action;
+        
+        switch (action) {
+            case 'view':
+                this.showMessageModal(message);
+                break;
+            case 'more':
+                this.showContextMenu(event, message);
+                break;
+        }
+    }
+
+    showMessageModal(message) {
+        const modal = document.getElementById('messageModal');
+        const modalContent = document.getElementById('modalContent');
+        
+        if (!modal || !modalContent) return;
+        
+        modalContent.innerHTML = `
+            <div class="message-details">
+                <div class="detail-section">
+                    <h4>Channel Information</h4>
+                    <p><strong>Name:</strong> ${this.escapeHtml(message.channelName)}</p>
+                    <p><strong>Username:</strong> @${message.channelUsername}</p>
+                    <p><strong>Channel ID:</strong> ${message.channelId}</p>
+                </div>
+                
+                <div class="detail-section">
+                    <h4>Message Content</h4>
+                    <div class="full-message">${this.escapeHtml(message.text)}</div>
+                </div>
+                
+                <div class="detail-section">
+                    <h4>Analytics</h4>
+                    <div class="analytics-grid">
+                        <div class="analytics-item">
+                            <span class="label">Relevance Score</span>
+                            <span class="value">${(message.relevanceScore * 100).toFixed(1)}%</span>
+                        </div>
+                        <div class="analytics-item">
+                            <span class="label">Views</span>
+                            <span class="value">${message.views || 0}</span>
+                        </div>
+                        <div class="analytics-item">
+                            <span class="label">Forwards</span>
+                            <span class="value">${message.forwards || 0}</span>
+                        </div>
+                        <div class="analytics-item">
+                            <span class="label">Date</span>
+                            <span class="value">${message.date.toLocaleString()}</span>
+                        </div>
+                    </div>
+                </div>
+                
+                ${message.detectedLocations.length > 0 ? `
+                    <div class="detail-section">
+                        <h4>Detected Locations</h4>
+                        <div class="location-tags">
+                            ${message.detectedLocations.map(loc => `<span class="location-tag">${loc}</span>`).join('')}
+                        </div>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+        
+        modal.style.display = 'block';
+    }
+
+    updateConnectionStatus(status) {
+        this.connectionStatus = status;
+        const statusElement = document.getElementById('connectionStatusText');
+        const statusDot = document.querySelector('.connection-status-chip .status-dot');
+        
+        if (statusElement) {
+            statusElement.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+        }
+        
+        if (statusDot) {
+            statusDot.className = `status-dot status-${status}`;
+        }
+    }
+
+    showToast(message, type = 'info') {
+        if (!this.enableToasts) return;
+        
+        const toastContainer = document.getElementById('toastContainer');
+        if (!toastContainer) return;
+        
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.innerHTML = `
+            <div class="toast-content">
+                <span>${this.escapeHtml(message)}</span>
+                <button class="toast-close">×</button>
+            </div>
+        `;
+        
+        toastContainer.appendChild(toast);
+        
+        // Auto remove after 5 seconds
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.parentNode.removeChild(toast);
+            }
+        }, 5000);
+        
+        // Close button
+        toast.querySelector('.toast-close').addEventListener('click', () => {
+            if (toast.parentNode) {
+                toast.parentNode.removeChild(toast);
+            }
+        });
+    }
+
+    // Add some demo data for testing
+    addDemoData() {
+        const demoMessages = [
+            {
+                message_id: 'demo1',
+                channel: { title: 'Global News', username: 'globalnews' },
+                text: 'Breaking: Major diplomatic meeting scheduled between world leaders to discuss current geopolitical tensions.',
+                date: new Date(Date.now() - 5 * 60 * 1000),
+                relevance_score: 0.85,
+                detected_locations: ['Washington', 'Moscow'],
+                views: 1250,
+                processed: true
+            },
+            {
+                message_id: 'demo2',
+                channel: { title: 'Defense Updates', username: 'defenseupdate' },
+                text: 'Military exercise begins in Eastern Europe with participation from multiple NATO member countries.',
+                date: new Date(Date.now() - 15 * 60 * 1000),
+                relevance_score: 0.72,
+                detected_locations: ['Poland', 'Baltic States'],
+                views: 890,
+                analyzing: true
+            },
+            {
+                message_id: 'demo3',
+                channel: { title: 'Economic Watch', username: 'econwatch' },
+                text: 'Market analysis shows significant shifts in energy sector due to recent political developments.',
+                date: new Date(Date.now() - 30 * 60 * 1000),
+                relevance_score: 0.45,
+                detected_locations: ['Europe'],
+                views: 564
+            }
+        ];
+        
+        demoMessages.forEach(msg => this.addMessage(msg));
+    }
+}
+
+/**
+ * WebSocket Handler for Real-time Updates
+ */
+class TelegramWebSocket {
+    constructor(telegramFeed, websocketUrl) {
+        this.telegramFeed = telegramFeed;
+        this.websocketUrl = websocketUrl;
+        this.ws = null;
+        this.reconnectInterval = 5000;
+        this.maxReconnectAttempts = 10;
+        this.reconnectAttempts = 0;
+        
+        this.connect();
+    }
+
+    connect() {
+        try {
+            this.telegramFeed.updateConnectionStatus('connecting');
+            this.ws = new WebSocket(this.websocketUrl);
+            
+            this.ws.onopen = () => {
+                console.log('WebSocket connected');
+                this.telegramFeed.updateConnectionStatus('connected');
+                this.reconnectAttempts = 0;
+            };
+            
+            this.ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    this.handleMessage(data);
+                } catch (error) {
+                    console.error('Error parsing WebSocket message:', error);
+                }
+            };
+            
+            this.ws.onclose = () => {
+                console.log('WebSocket disconnected');
+                this.telegramFeed.updateConnectionStatus('disconnected');
+                this.attemptReconnect();
+            };
+            
+            this.ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                this.telegramFeed.updateConnectionStatus('error');
+            };
+            
+        } catch (error) {
+            console.error('WebSocket connection failed:', error);
+            this.telegramFeed.updateConnectionStatus('error');
+            this.attemptReconnect();
+        }
+    }
+
+    handleMessage(data) {
+        if (data.type === 'telegram_message') {
+            this.telegramFeed.addMessage(data);
+        } else if (data.type === 'connection_stats') {
+            // Handle connection statistics updates
+            console.log('Connection stats:', data);
+        }
+    }
+
+    attemptReconnect() {
+        if (this.reconnectAttempts < this.maxReconnectAttempts) {
+            this.reconnectAttempts++;
+            console.log(`Attempting to reconnect... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+            
+            setTimeout(() => {
+                this.connect();
+            }, this.reconnectInterval);
+        } else {
+            console.error('Max reconnection attempts reached');
+            this.telegramFeed.updateConnectionStatus('failed');
+        }
+    }
+
+    disconnect() {
+        if (this.ws) {
+            this.ws.close();
+            this.ws = null;
+        }
+    }
+}
+
+// Export for use in other modules
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { TelegramFeed, TelegramWebSocket };
+} 

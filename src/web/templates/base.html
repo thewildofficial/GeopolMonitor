@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}GeopolMonitor - Intelligence Analytics Platform{% endblock %}</title>
+    
+    <!-- Preload critical fonts -->
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" as="style">
+    
+    <!-- CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', path='css/base.css') }}">
+    
+    <!-- Meta tags for PWA and SEO -->
+    <meta name="description" content="Professional intelligence analytics platform for geopolitical monitoring and data analysis">
+    <meta name="theme-color" content="hsl(222, 47%, 11%)">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', path='favicon.ico') }}">
+    
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header Navigation -->
+        <header class="app-header">
+            <div class="header-container">
+                <!-- Brand -->
+                <a href="{{ url_for('index') }}" class="header-brand">
+                    <div class="header-logo">
+                        GM
+                    </div>
+                    <span>GeopolMonitor</span>
+                </a>
+                
+                <!-- Navigation -->
+                <nav class="header-nav">
+                    <a href="{{ url_for('index') }}" class="nav-link {% if request.url.path == '/' %}active{% endif %}">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5v4"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v4"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 5v4"></path>
+                        </svg>
+                        <span>Dashboard</span>
+                    </a>
+                    
+                    <a href="{{ url_for('telegram_page') }}" class="nav-link {% if request.url.path == '/telegram' %}active{% endif %}">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                        </svg>
+                        <span>Messages</span>
+                    </a>
+                    
+                    <a href="{{ url_for('map_page') }}" class="nav-link {% if request.url.path == '/map' %}active{% endif %}">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path>
+                        </svg>
+                        <span>Map</span>
+                    </a>
+                    
+                    <a href="{{ url_for('briefing_page') }}" class="nav-link {% if request.url.path == '/briefing' %}active{% endif %}">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                        <span>Briefing</span>
+                    </a>
+                    
+                    <a href="{{ url_for('about') }}" class="nav-link {% if request.url.path == '/about' %}active{% endif %}">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span>About</span>
+                    </a>
+                </nav>
+            </div>
+        </header>
+        
+        <!-- Main Content -->
+        <main class="app-main">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+    
+    <!-- WebSocket Status Indicator -->
+    <div class="websocket-status-container">
+        <div id="websocket-status" class="websocket-status disconnected">
+            <div class="status-indicator"></div>
+            <span class="status-text">Disconnected</span>
+        </div>
+    </div>
+    
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toastContainer"></div>
+    
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+    </div>
+    
+    <!-- JavaScript -->
+    <script>
+        // Global application state
+        window.AppState = {
+            websocketConnected: false,
+            toastQueue: [],
+            currentPage: '{{ request.url.path }}'
+        };
+        
+        // WebSocket Management
+        class WebSocketManager {
+            constructor() {
+                this.ws = null;
+                this.reconnectAttempts = 0;
+                this.maxReconnectAttempts = 5;
+                this.reconnectDelay = 1000;
+                this.statusElement = document.getElementById('websocket-status');
+                this.init();
+            }
+            
+            init() {
+                this.connect();
+                this.setupHeartbeat();
+            }
+            
+            connect() {
+                try {
+                    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                    const wsUrl = `${protocol}//${window.location.host}/ws`;
+                    
+                    this.ws = new WebSocket(wsUrl);
+                    
+                    this.ws.onopen = () => {
+                        console.log('WebSocket connected');
+                        this.onConnect();
+                    };
+                    
+                    this.ws.onmessage = (event) => {
+                        this.handleMessage(JSON.parse(event.data));
+                    };
+                    
+                    this.ws.onclose = () => {
+                        console.log('WebSocket disconnected');
+                        this.onDisconnect();
+                    };
+                    
+                    this.ws.onerror = (error) => {
+                        console.error('WebSocket error:', error);
+                        this.onError();
+                    };
+                } catch (error) {
+                    console.error('Failed to create WebSocket:', error);
+                    this.onError();
+                }
+            }
+            
+            onConnect() {
+                window.AppState.websocketConnected = true;
+                this.reconnectAttempts = 0;
+                this.updateStatus('connected', 'Connected');
+            }
+            
+            onDisconnect() {
+                window.AppState.websocketConnected = false;
+                this.updateStatus('disconnected', 'Disconnected');
+                this.attemptReconnect();
+            }
+            
+            onError() {
+                window.AppState.websocketConnected = false;
+                this.updateStatus('error', 'Connection Error');
+                this.attemptReconnect();
+            }
+            
+            attemptReconnect() {
+                if (this.reconnectAttempts < this.maxReconnectAttempts) {
+                    this.reconnectAttempts++;
+                    this.updateStatus('connecting', `Reconnecting... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+                    
+                    setTimeout(() => {
+                        this.connect();
+                    }, this.reconnectDelay * this.reconnectAttempts);
+                } else {
+                    this.updateStatus('failed', 'Connection Failed');
+                }
+            }
+            
+            updateStatus(status, text) {
+                if (this.statusElement) {
+                    this.statusElement.className = `websocket-status ${status}`;
+                    this.statusElement.querySelector('.status-text').textContent = text;
+                }
+            }
+            
+            handleMessage(data) {
+                // Handle different message types
+                switch (data.type) {
+                    case 'telegram_update':
+                        if (window.AppState.currentPage === '/telegram') {
+                            window.location.reload();
+                        } else {
+                            ToastManager.show('New telegram messages received', 'info');
+                        }
+                        break;
+                    case 'status_update':
+                        ToastManager.show(data.message, data.level || 'info');
+                        break;
+                    default:
+                        console.log('Unknown message type:', data.type);
+                }
+            }
+            
+            setupHeartbeat() {
+                setInterval(() => {
+                    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                        this.ws.send(JSON.stringify({ type: 'ping' }));
+                    }
+                }, 30000); // 30 seconds
+            }
+        }
+        
+        // Toast Notification Manager
+        class ToastManager {
+            static show(message, type = 'info', duration = 5000) {
+                const container = document.getElementById('toastContainer');
+                if (!container) return;
+                
+                const toast = document.createElement('div');
+                toast.className = `toast ${type}`;
+                toast.innerHTML = `
+                    <div class="toast-content">
+                        <div class="toast-message">${message}</div>
+                        <button class="toast-close" onclick="ToastManager.close(this.parentElement.parentElement)">×</button>
+                    </div>
+                `;
+                
+                container.appendChild(toast);
+                
+                // Trigger animation
+                setTimeout(() => toast.classList.add('show'), 100);
+                
+                // Auto-remove
+                setTimeout(() => ToastManager.close(toast), duration);
+            }
+            
+            static close(toast) {
+                toast.classList.remove('show');
+                setTimeout(() => {
+                    if (toast.parentElement) {
+                        toast.parentElement.removeChild(toast);
+                    }
+                }, 300);
+            }
+        }
+        
+        // Loading Manager
+        class LoadingManager {
+            static show() {
+                const overlay = document.getElementById('loadingOverlay');
+                if (overlay) {
+                    overlay.classList.add('active');
+                }
+            }
+            
+            static hide() {
+                const overlay = document.getElementById('loadingOverlay');
+                if (overlay) {
+                    overlay.classList.remove('active');
+                }
+            }
+        }
+        
+        // Initialize when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize WebSocket
+            window.wsManager = new WebSocketManager();
+            
+            // Expose managers globally
+            window.ToastManager = ToastManager;
+            window.LoadingManager = LoadingManager;
+            
+            // Add loading states to navigation links
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.addEventListener('click', function(e) {
+                    if (this.href !== window.location.href) {
+                        LoadingManager.show();
+                    }
+                });
+            });
+            
+            // Hide loading on page load complete
+            window.addEventListener('load', () => {
+                LoadingManager.hide();
+            });
+            
+            // Handle page visibility changes
+            document.addEventListener('visibilitychange', function() {
+                if (document.hidden) {
+                    // Page is hidden
+                    console.log('Page hidden');
+                } else {
+                    // Page is visible
+                    console.log('Page visible');
+                    // Refresh data if needed
+                }
+            });
+        });
+        
+        // Handle unload
+        window.addEventListener('beforeunload', function() {
+            if (window.wsManager && window.wsManager.ws) {
+                window.wsManager.ws.close();
+            }
+        });
+    </script>
+    
+    {% block scripts %}{% endblock %}
+</body>
+</html>

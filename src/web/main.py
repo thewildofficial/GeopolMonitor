@@ -1,16 +1,18 @@
 """FastAPI web interface for GeopolMonitor."""
 from pathlib import Path
-from fastapi import FastAPI, HTTPException, Request, WebSocket
+from fastapi import FastAPI, HTTPException, Request, WebSocket, Query
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from starlette.websockets import WebSocketDisconnect
 from typing import List, Optional
 import json
 import atexit
 from starlette.staticfiles import StaticFiles as StarletteStaticFiles
+from contextlib import asynccontextmanager
 
 from . import country_utils
 
@@ -18,13 +20,40 @@ from ..database.models import (
     init_db, get_db, cleanup_db, 
     get_article_tags, search_articles_by_tags
 )
+from ..database.news_db import init_news_db, get_news_paginated
+from ..database.models.news_models import NewsEntry
+from ..database.models.briefing_models import init_briefing_tables
 from ..core.processor import ImageExtractor
 from ..utils.text import clean_text
 from .websocket_manager import manager
+from .controllers.briefing_controller import router as briefing_router  # Import the briefing router
 from config.settings import STATIC_DIR, TEMPLATES_DIR, WEB_HOST
+from datetime import datetime, timedelta, timezone
+
+# Helper to safely parse JSON from DB fields
+def _safe_json_parse(data, default=None):
+    if not data:
+        return [] if default is None else default
+    try:
+        return json.loads(data)
+    except (json.JSONDecodeError, TypeError):
+        return [] if default is None else default
 
 # Ensure static directory exists
 STATIC_DIR.mkdir(exist_ok=True)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Handle application startup and shutdown events."""
+    try:
+        # Startup
+        init_db()
+        await init_news_db()
+        await init_briefing_tables()
+        yield
+    finally:
+        # Ensure DB cleanup on shutdown or on startup failure
+        cleanup_db()
 
 def is_local_environment():
     """Check if we're running in a local environment"""
@@ -43,7 +72,7 @@ class CompressedStaticFiles(StarletteStaticFiles):
 
 def create_app():
     """Create and configure FastAPI application"""
-    app = FastAPI(debug=True)
+    app = FastAPI(debug=True, lifespan=lifespan)
     
     # Configure CORS
     app.add_middleware(
@@ -55,7 +84,23 @@ def create_app():
     )
     # Mount static files normally without compression
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+    
+    # Create templates with footer context for all pages
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+    
+    # Register API routers
+    app.include_router(briefing_router)  # Add the briefing router
+    
+    # Remove the middleware that's causing the error
+    # @app.middleware("http")
+    # async def add_footer_context(request: Request, call_next):
+    #     response = await call_next(request)
+    #     if isinstance(response, templates.TemplateResponse):
+    #         response.context["free_palestine_link"] = {
+    #             "url": "https://www.pcrf.net/", 
+    #             "text": "Free Palestine"
+    #         }
+    #     return response
 
     # Add request middleware to ensure proper URL scheme
     @app.middleware("http")
@@ -65,16 +110,6 @@ def create_app():
             request.scope["scheme"] = "https"
         response = await call_next(request)
         return response
-
-    @app.on_event("startup")
-    async def startup_event():
-        """Initialize database on startup."""
-        init_db()
-
-    @app.on_event("shutdown")
-    async def shutdown_event():
-        """Clean up database on shutdown."""
-        cleanup_db()
 
     def ensure_source_tag_exists(conn, source_name):
         """Ensure a source tag exists in the database."""
@@ -95,7 +130,19 @@ def create_app():
 
     def format_news_item(item):
         """Format news item for API response"""
-        image_url = item.get('image_url') or ImageExtractor.extract_first_image_from_content(item.get('content', ''))
+        from ..utils.date_utils import format_iso_date, ensure_utc
+        from ..core.processor import ImageExtractor
+        from datetime import datetime, timezone
+        
+        # Extract image from content if no image_url is present
+        image_url = item.get('image_url')
+        if not image_url and item.get('content'):
+            try:
+                image_extractor = ImageExtractor()
+                image_url = image_extractor.extract_first_image_from_content(item.get('content', ''))
+            except Exception as e:
+                print(f"Error extracting image from content: {str(e)}")
+                image_url = None
         
         # Get tags for the article
         tags = get_article_tags(item.get('id')) if item.get('id') else []
@@ -103,6 +150,27 @@ def create_app():
         # Handle emojis
         emoji1 = item.get('emoji1', '')
         emoji2 = item.get('emoji2', '')
+        
+        # Format publication date consistently in UTC ISO format
+        timestamp = item.get('pub_date', '')
+        if timestamp:
+            try:
+                # Parse the date if it's a string
+                if isinstance(timestamp, str):
+                    try:
+                        timestamp = datetime.fromisoformat(timestamp)
+                    except ValueError:
+                        # If not ISO format, try a more flexible parser
+                        from dateparser import parse
+                        timestamp = parse(timestamp)
+                        
+                # Ensure the date is in UTC timezone
+                if timestamp:
+                    timestamp = ensure_utc(timestamp)
+                    # Format as ISO string with Z timezone indicator for consistency
+                    timestamp = format_iso_date(timestamp)
+            except Exception as e:
+                print(f"Error processing timestamp: {e}")
         
         # Extract source from feed_url and add as a tag if not already present
         feed_url = item.get('feed_url', '')
@@ -143,7 +211,7 @@ def create_app():
             'description': clean_text(item.get('description', '')),
             'content': item.get('content', ''),
             'link': item.get('link', ''),
-            'timestamp': item.get('pub_date', ''),
+            'timestamp': timestamp,
             'image_url': image_url,
             'feed_url': feed_url,
             'emoji1': emoji1,
@@ -179,52 +247,97 @@ def create_app():
             content={"detail": str(exc)},
         )
 
-    @app.get("/", response_class=HTMLResponse)
+    @app.get("/", response_class=HTMLResponse, name="index")
     async def root(request: Request):
         return templates.TemplateResponse(
             "index.html",
-            {"request": request}
+            {"request": request, "free_palestine_link": {"url": "https://www.pcrf.net/", "text": "Free Palestine"}}
         )
 
-    @app.get("/map", response_class=HTMLResponse)
+    @app.get("/map", response_class=HTMLResponse, name="map_page")
     async def map_page(request: Request):
         return templates.TemplateResponse(
             "map.html",
-            {"request": request}
+            {"request": request, "free_palestine_link": {"url": "https://www.pcrf.net/", "text": "Free Palestine"}}
         )
 
-    @app.get("/about", response_class=HTMLResponse)
+    @app.get("/about", response_class=HTMLResponse, name="about")
     async def about(request: Request):
         return templates.TemplateResponse(
             "about.html",
-            {"request": request}
+            {"request": request, "free_palestine_link": {"url": "https://www.pcrf.net/", "text": "Free Palestine"}}
+        )
+
+    # Add Briefing page route
+    @app.get("/briefing", response_class=HTMLResponse, name="briefing_page")
+    async def briefing_page(request: Request):
+        return templates.TemplateResponse(
+            "briefing.html",
+            {"request": request, "datetime": datetime, "free_palestine_link": {"url": "https://www.pcrf.net/", "text": "Free Palestine"}}
+        )
+
+    # Add Telegram feed page route
+    @app.get("/telegram", response_class=HTMLResponse, name="telegram_page")
+    async def telegram_feed_page(request: Request):
+        return templates.TemplateResponse(
+            "telegram.html",
+            {"request": request, "free_palestine_link": {"url": "https://www.pcrf.net/", "text": "Free Palestine"}}
         )
 
     @app.get("/api/news")
-    async def get_news(tags: Optional[str] = None):
+    async def get_news(
+        tags: Optional[str] = None,
+        page: int = Query(1, ge=1),
+        page_size: int = Query(20, ge=1, le=100)
+    ):
         try:
-            if (tags):
-                # Split tags string into list and search by tags
-                tag_list = [t.strip() for t in tags.split(',')]
-                news_items = search_articles_by_tags(tag_list)
-            else:
-                # Get all news items
-                with get_db() as conn:
-                    cursor = conn.execute('''
-                        SELECT 
-                            id, title, description, content, link, pub_date,
-                            feed_url, image_url, message, emoji1, emoji2,
-                            sentiment_score, bias_category, bias_score
-                        FROM news_entries
-                        ORDER BY pub_date DESC
-                    ''')
-                    columns = [column[0] for column in cursor.description]
-                    news_items = [dict(zip(columns, row)) for row in cursor]
-            
-            formatted_news = [format_news_item(item) for item in news_items]
-            return {"news": formatted_news}
+            tag_list = [t.strip() for t in tags.split(',')] if tags else None
+            total_count, rows = await get_news_paginated(page=page, page_size=page_size, tag_names=tag_list)
+
+            # Transform ORM objects to dicts resembling prior shape
+            news_items = []
+            for r in rows:
+                item = {
+                    'id': r.id,
+                    'title': r.title,
+                    'description': r.description,
+                    'content': r.content,
+                    'link': r.link,
+                    'pub_date': r.pub_date.isoformat() if r.pub_date else None,
+                    'feed_url': r.feed_url,
+                    'image_url': r.image_url,
+                    'message': r.message,
+                    'emoji1': r.emoji1,
+                    'emoji2': r.emoji2,
+                    'sentiment_score': r.sentiment_score,
+                    'bias_category': r.bias_category,
+                    'bias_score': r.bias_score,
+                }
+                news_items.append(item)
+
+            formatted_news = []
+            for item in news_items:
+                try:
+                    formatted = format_news_item(item)
+                    if formatted:
+                        formatted_news.append(formatted)
+                except Exception:
+                    continue
+
+            total_pages = max(1, (total_count + page_size - 1) // page_size)
+            return {
+                "news": formatted_news,
+                "pagination": {
+                    "page": page,
+                    "page_size": page_size,
+                    "total_count": total_count,
+                    "total_pages": total_pages,
+                    "has_next": page * page_size < total_count,
+                    "has_prev": page > 1
+                }
+            }
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            return JSONResponse(status_code=500, content={"detail": str(e)})
 
     @app.get("/api/tags")
     async def get_tags(limit: int = 100, offset: int = 0):
@@ -239,18 +352,35 @@ def create_app():
                     ORDER BY usage_count DESC, name ASC
                     LIMIT ? OFFSET ?
                 ''', (limit, offset))
-                tags = {}
+                
+                tags = {
+                    'source': [],
+                    'topic': [],
+                    'geography': [],
+                    'events': []
+                }
+                
                 for row in cursor.fetchall():
                     category = row[1]
-                    if category not in tags:
-                        tags[category] = []
-                    tags[category].append({
-                        'name': row[0],
-                        'count': row[2]
-                    })
+                    if category in tags:
+                        tags[category].append({
+                            'name': row[0],
+                            'count': row[2]
+                        })
+                
                 return tags
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            print(f"Error in get_tags: {str(e)}")
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "detail": str(e),
+                    "source": [],
+                    "topic": [],
+                    "geography": [],
+                    "events": []
+                }
+            )
 
     @app.get("/api/countries-lite")
     async def get_countries_lite():
@@ -283,14 +413,780 @@ def create_app():
             print(f"Error serving countries data: {str(e)}")
             raise HTTPException(status_code=500, detail=str(e))
 
-    @app.websocket("/ws")
-    async def websocket_endpoint(websocket: WebSocket):
+    @app.get("/api/news/stats")
+    async def get_news_stats(
+        tags: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ):
+        """Get aggregated geographic statistics for news articles.
+        
+        Args:
+            tags: Optional comma-separated list of tags to filter by
+            start_date: Optional start date in ISO format (YYYY-MM-DD)
+            end_date: Optional end date in ISO format (YYYY-MM-DD)
+            
+        Returns:
+            Dictionary with country statistics and metadata
+        """
+        try:
+            filter_conditions = []
+            query_params = []
+            
+            # Build date filters if provided
+            if start_date:
+                try:
+                    start = datetime.fromisoformat(start_date)
+                    filter_conditions.append("pub_date >= ?")
+                    query_params.append(start.isoformat())
+                except ValueError:
+                    # Invalid date format, ignore
+                    pass
+                    
+            if end_date:
+                try:
+                    end = datetime.fromisoformat(end_date)
+                    filter_conditions.append("pub_date <= ?")
+                    query_params.append(end.isoformat())
+                except ValueError:
+                    # Invalid date format, ignore
+                    pass
+                
+            # Build tag filter if provided
+            tag_filter_sql = ""
+            if tags:
+                tag_list = [t.strip() for t in tags.split(',')]
+                tag_placeholders = ','.join(['?'] * len(tag_list))
+                tag_filter_sql = f"""
+                    JOIN article_tags at ON ne.id = at.article_id
+                    JOIN tags t ON at.tag_id = t.id
+                    WHERE t.name IN ({tag_placeholders})
+                """
+                query_params.extend(tag_list)
+            
+            # Add WHERE clause if we have date filters
+            where_clause = ""
+            if filter_conditions:
+                connector = "AND" if tag_filter_sql else "WHERE"
+                where_clause = f"{connector} {' AND '.join(filter_conditions)}"
+                
+            with get_db() as conn:
+                # Query to get country counts from geography tags
+                country_sql = f"""
+                    SELECT t.name as country, COUNT(DISTINCT ne.id) as article_count
+                    FROM tags t
+                    JOIN article_tags at ON t.id = at.tag_id
+                    JOIN news_entries ne ON at.article_id = ne.id
+                    {tag_filter_sql}
+                    {where_clause}
+                    AND t.category = 'geography'
+                    GROUP BY t.name
+                    ORDER BY article_count DESC
+                """
+                
+                cursor = conn.execute(country_sql, query_params)
+                countries = [{"country": row[0], "count": row[1]} for row in cursor.fetchall()]
+                
+                # Get total articles count for this period
+                total_sql = f"""
+                    SELECT COUNT(DISTINCT ne.id) 
+                    FROM news_entries ne
+                    {tag_filter_sql}
+                    {where_clause}
+                """
+                
+                cursor = conn.execute(total_sql, query_params)
+                total_count = cursor.fetchone()[0] or 0
+                
+                # Get most recent article date
+                date_sql = f"""
+                    SELECT MAX(pub_date) 
+                    FROM news_entries ne
+                    {tag_filter_sql}
+                    {where_clause}
+                """
+                
+                cursor = conn.execute(date_sql, query_params)
+                latest_date = cursor.fetchone()[0]
+                
+                # Normalize country names and add codes
+                normalized_countries = []
+                for country_data in countries:
+                    try:
+                        country_name = country_data['country']
+                        normalized = country_utils.normalize_country(country_name)
+                        if normalized and normalized.get('code'):
+                            normalized_countries.append({
+                                "name": normalized.get('name'),
+                                "code": normalized.get('code'),
+                                "flag": normalized.get('flag', '🏳️'),
+                                "count": country_data['count']
+                            })
+                    except Exception as e:
+                        print(f"Error normalizing country {country_data['country']}: {str(e)}")
+                
+                response = {
+                    "countries": normalized_countries,
+                    "metadata": {
+                        "total_articles": total_count,
+                        "total_countries": len(normalized_countries),
+                        "latest_article_date": latest_date,
+                        "generated": datetime.now().isoformat()
+                    }
+                }
+                
+                return JSONResponse(
+                    content=response,
+                    headers={
+                        "Cache-Control": "max-age=3600",  # Cache for 1 hour
+                        "Access-Control-Allow-Origin": "*"
+                    }
+                )
+                
+        except Exception as e:
+            print(f"Error in get_news_stats: {str(e)}")
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "detail": str(e),
+                    "countries": [],
+                    "metadata": {
+                        "total_articles": 0,
+                        "total_countries": 0
+                    }
+                }
+            )
+
+    @app.get("/api/news/country/{country_name}")
+    async def get_news_by_country(
+        country_name: str,
+        page: int = Query(1, ge=1), 
+        page_size: int = Query(50, ge=1, le=100)
+    ):
+        """Get news specifically for a single country.
+        
+        Args:
+            country_name: The name of the country to get news for
+            page: Page number for pagination
+            page_size: Number of items per page
+            
+        Returns:
+            List of news articles related to the specified country
+        """
+        try:
+            # Normalize the country name
+            normalized_country = country_utils.normalize_country(country_name)
+            country_name_normalized = normalized_country.get('name') if normalized_country else country_name
+            
+            print(f"Fetching news for country: {country_name} (normalized to {country_name_normalized})")
+            
+            # Calculate offset for pagination
+            offset = (page - 1) * page_size
+            
+            with get_db() as conn:
+                # Query to get articles tagged with this country
+                # Using COLLATE NOCASE for case-insensitive comparison
+                query = """
+                    SELECT DISTINCT ne.id, ne.title, ne.description, ne.content, ne.link, 
+                           ne.pub_date, ne.feed_url, ne.image_url, ne.message, 
+                           ne.emoji1, ne.emoji2, ne.sentiment_score, ne.bias_category, ne.bias_score
+                    FROM news_entries ne
+                    JOIN article_tags at ON ne.id = at.article_id
+                    JOIN tags t ON at.tag_id = t.id
+                    WHERE t.category = 'geography' 
+                    AND (t.name = ? COLLATE NOCASE OR t.name LIKE ? COLLATE NOCASE)
+                    ORDER BY ne.pub_date DESC
+                    LIMIT ? OFFSET ?
+                """
+                
+                # Get count first
+                count_query = """
+                    SELECT COUNT(DISTINCT ne.id)
+                    FROM news_entries ne
+                    JOIN article_tags at ON ne.id = at.article_id
+                    JOIN tags t ON at.tag_id = t.id
+                    WHERE t.category = 'geography' 
+                    AND (t.name = ? COLLATE NOCASE OR t.name LIKE ? COLLATE NOCASE)
+                """
+                
+                count_cursor = conn.execute(
+                    count_query, 
+                    (country_name_normalized, f"%{country_name_normalized}%")
+                )
+                total_count = count_cursor.fetchone()[0] or 0
+                
+                cursor = conn.execute(
+                    query, 
+                    (country_name_normalized, f"%{country_name_normalized}%", page_size, offset)
+                )
+                
+                columns = [column[0] for column in cursor.description]
+                news_items = [dict(zip(columns, row)) for row in cursor.fetchall()]
+                
+                # Format news items
+                formatted_news = []
+                for item in news_items:
+                    if item:
+                        try:
+                            formatted = format_news_item(item)
+                            if formatted:
+                                formatted_news.append(formatted)
+                        except Exception as format_error:
+                            print(f"Error formatting news item {item.get('id')}: {str(format_error)}")
+                            continue
+                
+                # Include pagination metadata
+                total_pages = max(1, (total_count + page_size - 1) // page_size)
+                response = {
+                    "country": {
+                        "name": country_name_normalized,
+                        "code": normalized_country.get('code') if normalized_country else None,
+                        "flag": normalized_country.get('flag') if normalized_country else None
+                    },
+                    "news": formatted_news,
+                    "pagination": {
+                        "page": page,
+                        "page_size": page_size,
+                        "total_count": total_count,
+                        "total_pages": total_pages,
+                        "has_next": page * page_size < total_count,
+                        "has_prev": page > 1
+                    }
+                }
+                return response
+                
+        except Exception as e:
+            print(f"Error in get_news_by_country: {str(e)}")
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "detail": str(e),
+                    "news": [],
+                    "pagination": {
+                        "page": 1,
+                        "page_size": page_size,
+                        "total_count": 0,
+                        "total_pages": 1,
+                        "has_next": False,
+                        "has_prev": False
+                    }
+                }
+            )
+
+    @app.websocket("/ws/briefing")
+    async def briefing_websocket_endpoint(websocket: WebSocket):
         await manager.connect(websocket)
         try:
             while True:
                 await websocket.receive_text()  # Keep connection alive
-        except:
-            manager.disconnect(websocket)
+        except Exception as e:
+            try:
+                await manager.disconnect(websocket=websocket)
+            finally:
+                pass
+
+    @app.websocket("/ws/telegram")
+    async def telegram_websocket_endpoint(websocket: WebSocket):
+        """
+        Dedicated WebSocket endpoint for Telegram feed with optimized filtering.
+        
+        Query parameters:
+        - relevance_threshold: Minimum relevance score (0.0-1.0, default: 0.3)
+        - channels: Comma-separated list of Telegram channels to monitor
+        - locations: Comma-separated list of locations to filter by
+        - urgency_level: Minimum urgency level (normal, urgent, breaking)
+        """
+        from .websocket_manager import WebSocketFilter, MessageType
+        
+        # Parse query parameters for Telegram-specific filtering
+        query_params = websocket.query_params
+        
+        # Build filter configuration with Telegram defaults
+        filters = WebSocketFilter()
+        filters.message_types = {MessageType.TELEGRAM_MESSAGE, MessageType.CHANNEL_STATS}
+        
+        # Relevance threshold filter
+        if query_params.get("relevance_threshold"):
+            try:
+                filters.sentiment_threshold = float(query_params["relevance_threshold"])
+            except ValueError:
+                filters.sentiment_threshold = 0.3
+        else:
+            filters.sentiment_threshold = 0.3
+            
+        # Channel filter
+        if query_params.get("channels"):
+            filters.channels = set(ch.strip() for ch in query_params["channels"].split(","))
+            
+        # Location filter
+        if query_params.get("locations"):
+            filters.countries = set(loc.strip() for loc in query_params["locations"].split(","))
+            
+        # Urgency level filter
+        if query_params.get("urgency_level"):
+            urgency_level = query_params["urgency_level"].lower()
+            if urgency_level in ["normal", "urgent", "breaking"]:
+                if urgency_level == "urgent":
+                    filters.sentiment_threshold = max(filters.sentiment_threshold, 0.6)
+                elif urgency_level == "breaking":
+                    filters.sentiment_threshold = max(filters.sentiment_threshold, 0.8)
+                    
+        # Connect with Telegram-specific filtering
+        client_id = await manager.connect(websocket, filters=filters)
+        
+        try:
+            while True:
+                # Listen for client messages
+                data = await websocket.receive_text()
+                
+                try:
+                    message = json.loads(data)
+                    message_type = message.get("type")
+                    
+                    if message_type == "update_filters":
+                        # Update Telegram filters
+                        new_filters = WebSocketFilter()
+                        new_filters.message_types = {MessageType.TELEGRAM_MESSAGE, MessageType.CHANNEL_STATS}
+                        filter_data = message.get("data", {})
+                        
+                        if "relevance_threshold" in filter_data:
+                            new_filters.sentiment_threshold = filter_data["relevance_threshold"]
+                        if "channels" in filter_data:
+                            new_filters.channels = set(filter_data["channels"])
+                        if "locations" in filter_data:
+                            new_filters.countries = set(filter_data["locations"])
+                            
+                        await manager.update_client_filters(client_id, new_filters)
+                        
+                        # Send confirmation
+                        await websocket.send_text(json.dumps({
+                            "type": "filter_updated",
+                            "data": {
+                                "relevance_threshold": new_filters.sentiment_threshold,
+                                "channels": list(new_filters.channels) if new_filters.channels else [],
+                                "locations": list(new_filters.countries) if new_filters.countries else []
+                            },
+                            "timestamp": datetime.now(timezone.utc).isoformat()
+                        }))
+                        
+                    elif message_type == "ping":
+                        # Respond to ping with pong and connection stats
+                        await websocket.send_text(json.dumps({
+                            "type": "pong",
+                            "data": {
+                                "connected_clients": len(manager.active_connections),
+                                "filters_active": bool(filters.channels or filters.countries or filters.sentiment_threshold > 0)
+                            },
+                            "timestamp": datetime.now(timezone.utc).isoformat()
+                        }))
+                        
+                    elif message_type == "get_recent_messages":
+                        # Send recent Telegram messages if available
+                        # This would integrate with your existing Telegram storage
+                        with get_db() as conn:
+                            try:
+                                cursor = conn.execute('''
+                                    SELECT message_id, channel_id, text, date, relevance_score, 
+                                           sentiment_score, urgency_score, detected_locations
+                                    FROM telegram_messages 
+                                    WHERE relevance_score >= ?
+                                    ORDER BY date DESC 
+                                    LIMIT 20
+                                ''', (filters.sentiment_threshold,))
+                                
+                                columns = [column[0] for column in cursor.description]
+                                recent_messages = [dict(zip(columns, row)) for row in cursor.fetchall()]
+                                
+                                await websocket.send_text(json.dumps({
+                                    "type": "recent_messages",
+                                    "data": recent_messages,
+                                    "timestamp": datetime.now(timezone.utc).isoformat()
+                                }))
+                            except Exception as db_error:
+                                await websocket.send_text(json.dumps({
+                                    "type": "error",
+                                    "message": f"Failed to fetch recent messages: {str(db_error)}",
+                                    "timestamp": datetime.now(timezone.utc).isoformat()
+                                }))
+                        
+                except json.JSONDecodeError:
+                    # Ignore invalid JSON
+                    pass
+                    
+        except WebSocketDisconnect:
+            await manager.disconnect(client_id)
+        except Exception as e:
+            print(f"Telegram WebSocket error: {e}")
+            await manager.disconnect(client_id)
+
+    @app.websocket("/ws")
+    async def websocket_endpoint(websocket: WebSocket):
+        """
+        Enhanced WebSocket endpoint with filtering support.
+        
+        Query parameters:
+        - channels: Comma-separated list of Telegram channels to monitor
+        - countries: Comma-separated list of countries to filter by
+        - keywords: Comma-separated list of keywords to filter by
+        - sentiment_threshold: Minimum sentiment score (0.0-1.0)
+        - priority_level: Minimum priority level (low, medium, high, critical)
+        - message_types: Comma-separated message types (telegram_message, rss_update, channel_stats, system_status)
+        """
+        from .websocket_manager import WebSocketFilter, MessageType
+        
+        # Parse query parameters for filtering
+        query_params = websocket.query_params
+        
+        # Build filter configuration
+        filters = WebSocketFilter()
+        
+        if query_params.get("channels"):
+            filters.channels = set(ch.strip() for ch in query_params["channels"].split(","))
+            
+        if query_params.get("countries"):
+            filters.countries = set(country.strip() for country in query_params["countries"].split(","))
+            
+        if query_params.get("keywords"):
+            filters.keywords = set(kw.strip() for kw in query_params["keywords"].split(","))
+            
+        if query_params.get("sentiment_threshold"):
+            try:
+                filters.sentiment_threshold = float(query_params["sentiment_threshold"])
+            except ValueError:
+                pass
+                
+        if query_params.get("priority_level"):
+            priority_level = query_params["priority_level"].lower()
+            if priority_level in ["low", "medium", "high", "critical"]:
+                filters.priority_level = priority_level
+                
+        if query_params.get("message_types"):
+            try:
+                type_strings = [t.strip().upper() for t in query_params["message_types"].split(",")]
+                filters.message_types = {MessageType[t] for t in type_strings if hasattr(MessageType, t)}
+            except ValueError:
+                pass
+                
+        # Connect with filtering
+        client_id = await manager.connect(websocket, filters=filters)
+        
+        try:
+            while True:
+                # Listen for client messages (could be filter updates, pings, etc.)
+                data = await websocket.receive_text()
+                
+                try:
+                    message = json.loads(data)
+                    message_type = message.get("type")
+                    
+                    if message_type == "update_filters":
+                        # Update client filters
+                        new_filters = WebSocketFilter()
+                        filter_data = message.get("data", {})
+                        
+                        if "channels" in filter_data:
+                            new_filters.channels = set(filter_data["channels"])
+                        if "countries" in filter_data:
+                            new_filters.countries = set(filter_data["countries"])
+                        if "keywords" in filter_data:
+                            new_filters.keywords = set(filter_data["keywords"])
+                        if "sentiment_threshold" in filter_data:
+                            new_filters.sentiment_threshold = filter_data["sentiment_threshold"]
+                        if "priority_level" in filter_data:
+                            new_filters.priority_level = filter_data["priority_level"]
+                        if "message_types" in filter_data:
+                            new_filters.message_types = {MessageType(t) for t in filter_data["message_types"]}
+                            
+                        await manager.update_client_filters(client_id, new_filters)
+                        
+                    elif message_type == "ping":
+                        # Respond to ping with pong
+                        await websocket.send_text(json.dumps({
+                            "type": "pong",
+                            "timestamp": datetime.now(timezone.utc).isoformat()
+                        }))
+                        
+                except json.JSONDecodeError:
+                    # Ignore invalid JSON
+                    pass
+                    
+        except WebSocketDisconnect:
+            await manager.disconnect(client_id)
+        except Exception as e:
+            print(f"WebSocket error: {e}")
+            await manager.disconnect(client_id)
+
+    @app.get("/api/websocket/stats")
+    async def get_websocket_stats():
+        """Get WebSocket connection statistics."""
+        return manager.get_connection_stats()
+
+    @app.get("/api/telegram/messages")
+    async def get_telegram_messages(
+        page: int = Query(1, ge=1),
+        page_size: int = Query(50, ge=1, le=100),
+        channel_id: Optional[int] = None,
+        urgency_min: Optional[float] = Query(None, ge=0.0, le=1.0),
+        relevance_min: Optional[float] = Query(None, ge=0.0, le=1.0),
+        location: Optional[str] = None,
+        time_sensitivity: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ):
+        """Get Telegram messages with filtering and pagination."""
+        try:
+            # Calculate offset for pagination
+            offset = (page - 1) * page_size
+            
+            # Build query conditions
+            conditions = []
+            params = []
+            
+            if channel_id:
+                conditions.append("tm.channel_id = ?")
+                params.append(channel_id)
+                
+            if urgency_min is not None:
+                conditions.append("tm.urgency_score >= ?")
+                params.append(urgency_min)
+                
+            if relevance_min is not None:
+                conditions.append("tm.relevance_score >= ?")
+                params.append(relevance_min)
+                
+            if location:
+                conditions.append("tm.detected_locations LIKE ?")
+                params.append(f"%{location}%")
+                
+            if time_sensitivity:
+                conditions.append("tm.time_sensitivity = ?")
+                params.append(time_sensitivity)
+                
+            if start_date:
+                conditions.append("tm.date >= ?")
+                params.append(start_date)
+                
+            if end_date:
+                conditions.append("tm.date <= ?")
+                params.append(end_date)
+            
+            where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
+            
+            with get_db() as conn:
+                # Get total count
+                count_sql = f"""
+                    SELECT COUNT(*)
+                    FROM telegram_messages tm
+                    JOIN telegram_channels tc ON tm.channel_id = tc.channel_id
+                    {where_clause}
+                """
+                count_cursor = conn.execute(count_sql, params)
+                total_count = count_cursor.fetchone()[0] or 0
+                
+                # Get messages
+                messages_sql = f"""
+                    SELECT 
+                        tm.message_id,
+                        tm.channel_id,
+                        tm.text,
+                        tm.date,
+                        tm.urgency_score,
+                        tm.relevance_score,
+                        tm.sentiment_score,
+                        tm.detected_locations,
+                        tm.categories,
+                        tm.time_sensitivity,
+                        tm.views,
+                        tm.forwards,
+                        tm.has_media,
+                        tm.media_type,
+                        tc.title as channel_title,
+                        tc.username as channel_username
+                    FROM telegram_messages tm
+                    JOIN telegram_channels tc ON tm.channel_id = tc.channel_id
+                    {where_clause}
+                    ORDER BY tm.date DESC
+                    LIMIT ? OFFSET ?
+                """
+                
+                cursor = conn.execute(messages_sql, params + [page_size, offset])
+                columns = [column[0] for column in cursor.description]
+                messages = [dict(zip(columns, row)) for row in cursor.fetchall()]
+                
+                # Format messages
+                formatted_messages = []
+                for msg in messages:
+                    formatted_msg = {
+                        "message_id": msg["message_id"],
+                        "channel_id": msg["channel_id"],
+                        "text": msg["text"],
+                        "date": msg["date"],
+                        "channel_title": msg["channel_title"],
+                        "channel_username": msg["channel_username"],
+                        "urgency_score": msg["urgency_score"],
+                        "relevance_score": msg["relevance_score"],
+                        "sentiment_score": msg["sentiment_score"],
+                        "detected_locations": _safe_json_parse(msg["detected_locations"]),
+                        "categories": _safe_json_parse(msg["categories"]),
+                        "time_sensitivity": msg["time_sensitivity"],
+                        "views": msg["views"],
+                        "forwards": msg["forwards"],
+                        "has_media": msg["has_media"],
+                        "media_type": msg["media_type"]
+                    }
+                    formatted_messages.append(formatted_msg)
+                
+                # Calculate pagination
+                total_pages = max(1, (total_count + page_size - 1) // page_size)
+                
+                return {
+                    "messages": formatted_messages,
+                    "pagination": {
+                        "page": page,
+                        "page_size": page_size,
+                        "total_count": total_count,
+                        "total_pages": total_pages,
+                        "has_next": page * page_size < total_count,
+                        "has_prev": page > 1
+                    }
+                }
+                
+        except Exception as e:
+            print(f"Error in get_telegram_messages: {str(e)}")
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "detail": str(e),
+                    "messages": [],
+                    "pagination": {
+                        "page": page,
+                        "page_size": page_size,
+                        "total_count": 0,
+                        "total_pages": 1,
+                        "has_next": False,
+                        "has_prev": False
+                    }
+                }
+            )
+
+    @app.get("/api/telegram/channels")
+    async def get_telegram_channels():
+        """Get all monitored Telegram channels."""
+        try:
+            with get_db() as conn:
+                cursor = conn.execute("""
+                    SELECT 
+                        channel_id,
+                        username,
+                        title,
+                        description,
+                        region,
+                        country,
+                        language,
+                        category,
+                        credibility_score,
+                        priority_level,
+                        is_active,
+                        member_count
+                    FROM telegram_channels
+                    WHERE is_active = 1
+                    ORDER BY priority_level DESC, credibility_score DESC
+                """)
+                
+                columns = [column[0] for column in cursor.description]
+                channels = [dict(zip(columns, row)) for row in cursor.fetchall()]
+                
+                return {"channels": channels}
+                
+        except Exception as e:
+            print(f"Error in get_telegram_channels: {str(e)}")
+            return JSONResponse(
+                status_code=500,
+                content={"detail": str(e), "channels": []}
+            )
+
+    @app.get("/api/telegram/stats")
+    async def get_telegram_stats():
+        """Get Telegram monitoring statistics."""
+        try:
+            with get_db() as conn:
+                # Get basic stats
+                stats_cursor = conn.execute("""
+                    SELECT 
+                        COUNT(DISTINCT tm.channel_id) as active_channels,
+                        COUNT(tm.message_id) as total_messages,
+                        COUNT(CASE WHEN tm.urgency_score >= 0.7 THEN 1 END) as high_urgency_count,
+                        COUNT(CASE WHEN tm.date >= datetime('now', '-1 hour') THEN 1 END) as messages_last_hour,
+                        MAX(tm.date) as last_message_time
+                    FROM telegram_messages tm
+                    JOIN telegram_channels tc ON tm.channel_id = tc.channel_id
+                    WHERE tc.is_active = 1
+                """)
+                
+                stats_row = stats_cursor.fetchone()
+                stats = {
+                    "active_channels": stats_row[0] or 0,
+                    "total_messages": stats_row[1] or 0,
+                    "high_urgency_count": stats_row[2] or 0,
+                    "messages_last_hour": stats_row[3] or 0,
+                    "last_message_time": stats_row[4]
+                }
+                
+                # Get top channels by message count
+                top_channels_cursor = conn.execute("""
+                    SELECT 
+                        tc.title,
+                        tc.username,
+                        COUNT(tm.message_id) as message_count,
+                        AVG(tm.urgency_score) as avg_urgency
+                    FROM telegram_channels tc
+                    LEFT JOIN telegram_messages tm ON tc.channel_id = tm.channel_id
+                    WHERE tc.is_active = 1
+                    GROUP BY tc.channel_id
+                    ORDER BY message_count DESC
+                    LIMIT 10
+                """)
+                
+                top_channels = []
+                for row in top_channels_cursor.fetchall():
+                    top_channels.append({
+                        "title": row[0],
+                        "username": row[1],
+                        "message_count": row[2],
+                        "avg_urgency": row[3]
+                    })
+                
+                # Get geographic distribution
+                geo_cursor = conn.execute("""
+                    SELECT 
+                        tc.region,
+                        COUNT(tm.message_id) as message_count
+                    FROM telegram_channels tc
+                    LEFT JOIN telegram_messages tm ON tc.channel_id = tm.channel_id
+                    WHERE tc.is_active = 1 AND tc.region IS NOT NULL
+                    GROUP BY tc.region
+                    ORDER BY message_count DESC
+                """)
+                
+                geographic_distribution = []
+                for row in geo_cursor.fetchall():
+                    geographic_distribution.append({
+                        "region": row[0],
+                        "message_count": row[1]
+                    })
+                
+                return {
+                    "stats": stats,
+                    "top_channels": top_channels,
+                    "geographic_distribution": geographic_distribution
+                }
+                
+        except Exception as e:
+            print(f"Error in get_telegram_stats: {str(e)}")
+            return JSONResponse(
+                status_code=500,
+                content={"detail": str(e)}
+            )
 
     return app
 

@@ -16,6 +16,7 @@
     <link rel="stylesheet" href="/static/css/modules/filters.css">
     <link rel="stylesheet" href="/static/css/modules/scroll-button.css">
     <link rel="stylesheet" href="/static/css/modules/sentiment.css">
+    <link rel="stylesheet" href="/static/css/modules/footer.css">
     <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="/static/css/modules/loader.css">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌍</text></svg>">
@@ -111,34 +112,29 @@
         <div class="panel-header">
             <span class="country-flag"></span>
             <h2 id="selectedCountry"></h2>
-            <button id="closePanelBtn" class="close-panel-btn" title="Close panel">
-                <i class="fas fa-times"></i>
-            </button>
         </div>
         <div id="countryNewsList" class="news-list"></div>
     </div>
+    
     <main id="newsContainer" class="list-view">
         <!-- News items will be inserted here dynamically -->
     </main>
 
+    <!-- Updated template structure to ensure it matches what JS expects -->
     <template id="newsItemTemplate">
-        <article class="news-item">
+        <article>
             <div class="news-content">
                 <div class="news-image-container">
-                    <img class="news-image" src="" alt="" loading="lazy">
+                    <img class="news-image" alt="">
                 </div>
                 <div class="news-text">
                     <div class="news-header">
-                        <h2>
-                            <span class="sentiment-indicator" title="Sentiment score"></span>
-                            <span class="title-text"></span>
-                        </h2>
+                        <h2></h2>
                         <div class="tags"></div>
                     </div>
                     <p class="description"></p>
                     <div class="meta">
                         <span class="time"></span>
-                        <span class="bias-badge" title="Bias score"></span>
                     </div>
                 </div>
             </div>
@@ -148,5 +144,13 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
     <script type="module" src="/static/app.js"></script>
+    
+    <footer class="site-footer">
+        <div class="palestine-link-container">
+            <a href="{{ free_palestine_link.url }}" target="_blank" class="palestine-link">
+                {{ free_palestine_link.text }}
+            </a>
+        </div>
+    </footer>
 </body>
 </html>

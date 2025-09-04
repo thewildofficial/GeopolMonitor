@@ -1,10 +1,36 @@
 /* Theme variables and general theme transitions */
 :root {
-    --animation-timing: cubic-bezier(0.4, 0.0, 0.2, 1);
-    --spring-timing: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    /* Animation timing */
+    --animation-timing: cubic-bezier(0.4, 0, 0.2, 1);
+    --spring-timing: cubic-bezier(0.23, 1, 0.32, 1);
     --animation-duration: 0.5s;
     --fade-in-duration: 0.8s;
-    --background-color-rgb: 245, 246, 250;
+    
+    /* Light theme */
+    --background-color: #f8f9fb;
+    --background-color-rgb: 248, 249, 251;
+    --card-background: #ffffff;
+    --card-background-rgb: 255, 255, 255;
+    --text-color: #1a1a1a;
+    --text-color-rgb: 26, 26, 26;
+    --text-color-secondary: #666666;
+    --description-color: #4a4a4a;
+    --meta-color: #787878;
+    --border-color: #e1e4e8;
+    --border-color-rgb: 225, 228, 232;
+    --accent-color: #2d7ff9;
+    --accent-color-rgb: 45, 127, 249;
+    --accent-color-transparent: rgba(45, 127, 249, 0.08);
+    --filter-background: rgba(255, 255, 255, 0.8);
+    --sentiment-shadow: rgba(0, 0, 0, 0.1);
+    
+    /* Tag category colors */
+    --geography-tag-bg: rgba(0, 120, 255, 0.08);
+    --geography-tag-color: rgb(0, 120, 255);
+    --events-tag-bg: rgba(255, 100, 0, 0.08);
+    --events-tag-color: rgb(255, 100, 0);
+    --topic-tag-bg: rgba(100, 200, 0, 0.08);
+    --topic-tag-color: rgb(100, 200, 0);
 }
 
 :root[data-theme="light"] {
@@ -22,20 +48,31 @@
     --glass-shadow: rgba(0, 0, 0, 0.1);
 }
 
-:root[data-theme="dark"] {
-    --primary-color: #ecf0f1;
-    --background-color: #1a1a1a;
-    --text-color: #ecf0f1;
-    --accent-color: #3498db;
-    --card-background: #2c2c2c;
-    --border-color: #404040;
-    --filter-background: #2c2c2c;
-    --meta-color: #a0a0a0;
+[data-theme="dark"] {
+    --background-color: #131313;
+    --background-color-rgb: 19, 19, 19;
+    --card-background: #1c1c1c;
+    --card-background-rgb: 28, 28, 28;
+    --text-color: #e1e1e1;
+    --text-color-rgb: 225, 225, 225;
+    --text-color-secondary: #a0a0a0;
     --description-color: #b0b0b0;
-    --background-color-rgb: 26, 26, 26;
-    --glass-background: rgba(44, 44, 44, 0.7);
-    --glass-border: rgba(255, 255, 255, 0.05);
-    --glass-shadow: rgba(0, 0, 0, 0.2);
+    --meta-color: #888888;
+    --border-color: rgba(255, 255, 255, 0.1);
+    --border-color-rgb: 38, 38, 38;
+    --accent-color: #4d8efc;
+    --accent-color-rgb: 77, 142, 252;
+    --accent-color-transparent: rgba(77, 142, 252, 0.15);
+    --filter-background: rgba(28, 28, 28, 0.8);
+    --sentiment-shadow: rgba(0, 0, 0, 0.2);
+    
+    /* Dark theme tag colors */
+    --geography-tag-bg: rgba(0, 120, 255, 0.15);
+    --geography-tag-color: rgb(77, 142, 252);
+    --events-tag-bg: rgba(255, 100, 0, 0.15);
+    --events-tag-color: rgb(255, 140, 50);
+    --topic-tag-bg: rgba(100, 200, 0, 0.15);
+    --topic-tag-color: rgb(130, 220, 50);
 }
 
 /* Base theme transitions */
@@ -61,4 +98,70 @@ body, header, .news-item, .filters, .view-toggle {
 [data-theme="dark"] .view-btn.active {
     background: var(--accent-color);
     color: var(--card-background);
+}
+
+/* Global styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+}
+
+html {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    height: 100%;
+}
+
+body {
+    background-color: var(--background-color);
+    color: var(--text-color);
+    transition: background-color 0.3s var(--animation-timing);
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Modern scrollbar styling */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-color);
+}
+
+/* Focus styles */
+:focus {
+    outline: none;
+}
+
+:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
+}
+
+/* Selection styling */
+::selection {
+    background: var(--accent-color);
+    color: white;
+}
+
+/* Smooth transitions for theme changes */
+* {
+    transition-property: background-color, border-color, color, opacity, transform, box-shadow;
+    transition-duration: 0.3s;
+    transition-timing-function: var(--animation-timing);
 }

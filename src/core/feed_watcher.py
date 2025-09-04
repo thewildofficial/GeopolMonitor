@@ -1,555 +1,697 @@
-"""Feed watching and processing module."""
-import feedparser
 import asyncio
-import random
-import datetime
-from datetime import timezone
-import aiohttp
 import logging
-import traceback
-from typing import Set, Dict, Any, Optional, List, Callable
+import aiohttp
+import ssl
+import time
+from datetime import datetime, timezone, timedelta
+from dataclasses import dataclass
+from typing import Dict, Set, Optional, Tuple, List
 from email.utils import parsedate_to_datetime
-from .processor import process_article
-from ..database.models import (
-    get_db, load_feed_cache, update_feed_cache, 
-    get_feed_metrics, exists_in_db, get_source_priority,
-    add_tag, tag_article
-)
-from ..utils.text import clean_url
-from ..web.websocket_manager import broadcast_news_update
+from time import mktime
+from .priority_feed_processor import PriorityFeedProcessor, ArticleEntry
+from config.settings import API_CALLS_PER_MINUTE, API_CALLS_PER_DAY, INSECURE_FEED_WHITELIST
 
-# Enhanced logging configuration with colored output
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - \x1b[36m%(message)s\x1b[0m'
-)
 logger = logging.getLogger(__name__)
 
-class RateLimiter:
-    """Rate limiter for API calls."""
-    def __init__(self, calls_per_minute: int = 15, calls_per_day: int = 1500):
-        self.calls_per_minute = calls_per_minute
-        self.calls_per_day = calls_per_day
-        self.minute_calls = 0
-        self.daily_calls = 0
-        self.last_minute_reset = datetime.datetime.now()
-        self.last_daily_reset = datetime.datetime.now()
-        self._lock = asyncio.Lock()
-    
-    async def acquire(self):
-        """Try to acquire a rate limit token."""
-        async with self._lock:
-            now = datetime.datetime.now()
-            
-            # Reset counters if needed
-            if (now - self.last_minute_reset).total_seconds() >= 60:
-                self.minute_calls = 0
-                self.last_minute_reset = now
-                
-            if (now - self.last_daily_reset).total_seconds() >= 86400:
-                self.daily_calls = 0
-                self.last_daily_reset = now
-            
-            # Check limits
-            if self.minute_calls >= self.calls_per_minute:
-                delay = 60 - (now - self.last_minute_reset).total_seconds()
-                if delay > 0:
-                    logger.warning(f"⏳ Rate limit reached. Waiting {delay:.1f}s")
-                    await asyncio.sleep(delay)
-                    self.minute_calls = 0
-                    self.last_minute_reset = datetime.datetime.now()
-            
-            if self.daily_calls >= self.calls_per_day:
-                delay = 86400 - (now - self.last_daily_reset).total_seconds()
-                if delay > 0:
-                    logger.error(f"❌ Daily limit reached. Waiting {delay:.1f}s")
-                    await asyncio.sleep(delay)
-                    self.daily_calls = 0
-                    self.last_daily_reset = now
-            
-            self.minute_calls += 1
-            self.daily_calls += 1
-
+@dataclass
 class FeedConfiguration:
-    """Configuration for feed watcher."""
-    def __init__(self, 
-                 max_concurrent_feeds: int = 20,  # Increased from 10
-                 min_poll_interval: int = 10,    # Reduced from 30
-                 max_poll_interval: int = 1800,  # Reduced from 3600
-                 error_backoff_delay: int = 30,  # Reduced from 60
-                 process_timeout: int = 100,
-                 connect_timeout: float = 60.0,
-                 total_timeout: float = 120.0,
-                 batch_size: int = 10,          # Increased from 5
-                 max_entries_per_feed: int = 50): # Increased from 20
-        self.max_concurrent_feeds = max_concurrent_feeds
-        self.min_poll_interval = min_poll_interval
-        self.max_poll_interval = max_poll_interval
-        self.error_backoff_delay = error_backoff_delay
-        self.process_timeout = process_timeout
-        self.connect_timeout = connect_timeout
-        self.total_timeout = total_timeout
-        self.batch_size = batch_size
-        self.max_entries_per_feed = max_entries_per_feed
-
-class FeedEntry:
-    """Represents a processed feed entry."""
-    def __init__(self, entry: Any, entry_time: datetime.datetime, feed_url: str):
-        self.entry = entry
-        self.entry_time = entry_time
-        self.feed_url = feed_url
-        self.processed_result: Optional[Dict] = None
+    max_concurrent_feeds: int = 10
+    min_poll_interval: int = 300  # 5 minutes
+    max_poll_interval: int = 3600  # 1 hour
+    connect_timeout: float = 30.0
+    total_timeout: float = 60.0
+    batch_size: int = 100
+    max_entries_per_feed: int = 1000
+    briefing_refresh_interval: int = 3600  # 1 hour by default
 
 class FeedWatcher:
-    """Watches RSS feeds for updates and processes new entries."""
+    """Main class for watching and processing RSS/Atom feeds."""
     
-    def __init__(self, config: Optional[FeedConfiguration] = None):
+    def __init__(self, config: FeedConfiguration = None, 
+                 ssl_context: Optional[ssl.SSLContext] = None):
+        """Initialize the feed watcher."""
         self.config = config or FeedConfiguration()
-        self.feeds: Dict[str, Dict[str, Any]] = {}
-        self.session: Optional[aiohttp.ClientSession] = None
-        self.logged_entries: Set[str] = set()
-        self.logged_urls: Set[str] = set()
-        self.semaphore = asyncio.Semaphore(self.config.max_concurrent_feeds)
-        self.rate_limiter = RateLimiter()
-        self._on_entry_processed_callbacks: List[Callable] = []
-        logger.info("🚀 Initializing FeedWatcher")
-
-    def add_entry_processed_callback(self, callback: Callable):
-        """Add a callback to be called when an entry is processed."""
-        self._on_entry_processed_callbacks.append(callback)
-
-    async def _notify_entry_processed(self, entry: FeedEntry, result: Any):
-        """Notify all callbacks that an entry has been processed."""
-        for callback in self._on_entry_processed_callbacks:
-            try:
-                await callback(entry, result)
-            except Exception as e:
-                logger.error(f"Error in entry processed callback: {e}")
+        self.priority_processor = PriorityFeedProcessor(API_CALLS_PER_MINUTE)
+        self.feed_metrics = {
+            'last_update_time': None,
+            'articles_by_feed': {},
+        }
+        self.ssl_context = ssl_context or ssl.create_default_context()
+        self.logged_entries = set()
+        self.session = None
+        self.healthy_feeds = set()
+        self.unhealthy_feeds = {}
+        self.briefing_status = {}  # Store briefing system metrics
+        self.feeds = {}  # Store feed metadata like etags and last-modified
+        self.rate_limiter = RateLimiter(
+            calls_per_minute=API_CALLS_PER_MINUTE,
+            calls_per_day=API_CALLS_PER_DAY
+        )
+        self.feed_metrics = {
+            'total_feeds': 0,
+            'active_feeds': 0,
+            'failed_feeds': 0,
+            'feed_stats': {},
+            'start_time': time.time(),
+            'last_update_time': None,
+            'total_bytes_received': 0,
+            'articles_by_feed': {},
+            'connection_errors': 0,
+            'parse_errors': 0
+        }
+        # Add briefing metrics to track daily briefing generation and updates
+        self.briefing_metrics = {
+            'last_generation_time': None,
+            'last_refresh_time': None,
+            'total_briefings_generated': 0,
+            'total_refreshes': 0,
+            'failed_refreshes': 0,
+            'avg_generation_time': 0.0,
+            'avg_refresh_time': 0.0,
+            'total_generation_time': 0.0,
+            'total_refresh_time': 0.0,
+            'flash_alerts_today': 0,
+            'flash_alerts_total': 0,
+            'regional_hotspots': [],
+            'briefing_history': []
+        }
 
     async def init(self):
-        """Initialize aiohttp session and logged entries."""
+        """Initialize the feed watcher with an aiohttp session."""
         if not self.session:
-            # Create a connector with SSL verification disabled
-            connector = aiohttp.TCPConnector(ssl=False)
-            self.session = aiohttp.ClientSession(connector=connector)
-            logger.info("📡 HTTP session initialized with SSL verification disabled")
-        await self._load_logged_entries()
-        logger.info(f"🗄️ Loaded {len(self.logged_entries)} cached entries")
-        
-    async def _load_logged_entries(self):
-        """Load previously processed entries from database."""
-        with get_db() as conn:
-            # Load both messages and URLs
-            cursor = conn.execute('SELECT message, link FROM news_entries')
-            for row in cursor:
-                if row[0]: self.logged_entries.add(row[0])
-                if row[1]: self.logged_urls.add(clean_url(row[1]))
+            self.session = aiohttp.ClientSession()
+        # Start the priority processor
+        await self.priority_processor.start()
+        logger.info("🔄 Feed watcher and processor initialized")
 
     async def close(self):
-        """Cleanup resources."""
-        if self.session and not self.session.closed:
+        """Close the aiohttp session and stop the processor."""
+        if self.session:
             await self.session.close()
             self.session = None
-
-    def _update_feed_metrics(self, feed_url: str, had_updates: bool, error: bool = False):
-        """Update feed metrics based on check results and source priority."""
-        metrics = get_feed_metrics(feed_url)
-        current_time = datetime.datetime.now(datetime.timezone.utc)
-        source_priority = get_source_priority(feed_url)
-        
-        if error:
-            metrics['consecutive_failures'] += 1
-            metrics['update_frequency'] = min(
-                metrics['update_frequency'] * 2,
-                self.config.max_poll_interval
-            )
-        else:
-            if had_updates:
-                # High priority sources get more frequent updates
-                priority_factor = max(0.2, 1 - (source_priority * 0.2))
-                metrics['update_frequency'] = max(
-                    int(metrics['update_frequency'] * priority_factor),
-                    self.config.min_poll_interval
-                )
-                metrics['consecutive_failures'] = 0
-                metrics['last_success_time'] = current_time
-            else:
-                # Slower increase for high priority sources
-                increase_factor = 1.2 if source_priority > 0.8 else 1.5
-                metrics['update_frequency'] = min(
-                    int(metrics['update_frequency'] * increase_factor),
-                    self.config.max_poll_interval
-                )
-                metrics['consecutive_failures'] = 0
-
-        metrics['source_priority'] = source_priority
-        update_feed_cache(feed_url, metrics)
-        return metrics['update_frequency']
+        await self.priority_processor.stop()
+        logger.info("🛑 Feed watcher and processor closed")
 
     async def check_feed_headers(self, feed_url: str) -> str:
         """Check feed headers for changes using conditional GET."""
         if not self.session:
-            raise FeedError("Session not initialized")
+            raise RuntimeError("Session not initialized")
             
-        logger.info(f"🔍 Checking feed: {feed_url}")
-        headers = {}
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Accept-Encoding': 'gzip, deflate, br'
+        }
         feed_info = self.feeds.get(feed_url, {})
         
-        if 'etag' in feed_info:
+        # Only add headers if they are strings to prevent serialization errors
+        if isinstance(feed_info.get('etag'), str):
             headers['If-None-Match'] = feed_info['etag']
-        if 'last_modified' in feed_info:
+        if isinstance(feed_info.get('last_modified'), str):
             headers['If-Modified-Since'] = feed_info['last_modified']
 
         max_retries = 3
         retry_delay = 5
             
+        # Prepare SSL contexts
+        default_ssl = ssl.create_default_context()
+        insecure_ssl = ssl.create_default_context()
+        insecure_ssl.check_hostname = False
+        insecure_ssl.verify_mode = ssl.CERT_NONE
+
         for attempt in range(max_retries):
             try:
                 timeout = aiohttp.ClientTimeout(
                     connect=self.config.connect_timeout,
                     total=self.config.total_timeout
                 )
-                async with self.session.get(feed_url, headers=headers, timeout=timeout) as response:
+                # Choose SSL context per feed based on hostname whitelist
+                parts = urlsplit(feed_url)
+                host = parts.hostname or ""
+                is_whitelisted = (
+                    host in self._insecure_hosts
+                    or any(host.endswith("." + h) for h in self._insecure_hosts)
+                )
+                ssl_ctx = self.insecure_ssl if (parts.scheme == "https" and is_whitelisted) else self.default_ssl
+                if is_whitelisted and parts.scheme == "https":
+                    logger.warning("Using INSECURE SSL for whitelisted host %s", host)
+                async with self.session.get(feed_url, headers=headers, timeout=timeout, ssl=ssl_ctx) as response:
                     if response.status == 304:  # Not modified
-                        logger.info(f"📭 No changes in feed: {feed_url}")
                         return ""
-                        
-                    logger.info(f"📬 Retrieved feed content: {feed_url} (Status: {response.status})")
+                    
+                    # Only store headers if they are strings
                     self.feeds[feed_url] = {
-                        'etag': response.headers.get('ETag'),
-                        'last_modified': response.headers.get('Last-Modified'),
-                        'content_type': response.headers.get('Content-Type', '')
+                        'etag': str(response.headers.get('ETag')) if response.headers.get('ETag') else None,
+                        'last_modified': str(response.headers.get('Last-Modified')) if response.headers.get('Last-Modified') else None,
+                        'content_type': str(response.headers.get('Content-Type', ''))
                     }
                     
                     text = await response.text()
-                    # Check if content was actually received
                     if not text:
-                        raise ValueError("Empty response received")
+                        return ""
                     return text
                     
-            except aiohttp.ClientError as e:
+            except aiohttp.ClientError:
                 if attempt < max_retries - 1:
-                    logger.warning(f"Network error on attempt {attempt + 1}/{max_retries} for {feed_url}: {str(e)}. Retrying in {retry_delay}s...")
                     await asyncio.sleep(retry_delay)
-                    retry_delay *= 2  # Exponential backoff
+                    retry_delay *= 2
                 else:
-                    logger.error(f"Network error checking feed {feed_url} after {max_retries} attempts: {str(e)}")
                     self._update_feed_metrics(feed_url, had_updates=False, error=True)
                     return ""
-            except Exception as e:
-                logger.error(f"Unexpected error checking feed {feed_url}: {str(e)}")
+            except Exception:
                 self._update_feed_metrics(feed_url, had_updates=False, error=True)
                 return ""
 
-        return ""
-
-    async def process_entry(self, entry: FeedEntry) -> Optional[datetime.datetime]:
-        """Process a single feed entry."""
-        async with self.semaphore:
+    def _parse_date_with_timezone(self, entry) -> Tuple[Optional[datetime], bool]:
+        """
+        Parse the date from a feed entry with timezone awareness.
+        All dates are converted to UTC.
+        
+        Returns (datetime, is_timezone_aware) tuple.
+        """
+        from ..utils.date_utils import ensure_utc, safe_parse_date
+        
+        # Try parsing published_parsed first (struct_time format)
+        if hasattr(entry, 'published_parsed') and entry.published_parsed:
             try:
-                logger.info(f"🔄 Processing entry from: {entry.feed_url}")
-                result = await asyncio.wait_for(
-                    process_article(entry.entry), 
-                    timeout=self.config.process_timeout
+                # Convert time tuple to UTC timestamp then to datetime
+                # Since struct_time assumes UTC, we can directly create a UTC datetime
+                dt = datetime(
+                    year=entry.published_parsed.tm_year,
+                    month=entry.published_parsed.tm_mon,
+                    day=entry.published_parsed.tm_mday,
+                    hour=entry.published_parsed.tm_hour,
+                    minute=entry.published_parsed.tm_min,
+                    second=entry.published_parsed.tm_sec,
+                    tzinfo=timezone.utc
                 )
-                
-                if result:
-                    # Check both content and URL for duplicates, including in database
-                    clean_link = clean_url(result.link)
-                    is_duplicate = (
-                        result.combined in self.logged_entries or 
-                        (clean_link and (clean_link in self.logged_urls or exists_in_db(clean_link)))
-                    )
-                    
-                    if not is_duplicate:
-                        logger.info(f"📝 New unique entry found: {result.title}")
-                        await self._store_entry(entry, result)
-                        await self._notify_entry_processed(entry, result)
-                        self.logged_entries.add(result.combined)
-                        if clean_link:
-                            self.logged_urls.add(clean_link)
-                        
-                        # Broadcast update to web clients
-                        news_item = {
-                            'title': result.title,
-                            'description': result.description,
-                            'link': result.link,
-                            'image_url': result.image_url,
-                            'timestamp': entry.entry_time.isoformat(),
-                            'emoji1': result.emoji1,
-                            'emoji2': result.emoji2,
-                            'feed_url': entry.feed_url
-                        }
-                        await broadcast_news_update(news_item)
-                        
-                        return entry.entry_time
-                    else:
-                        logger.info(f"🔄 Duplicate entry skipped: {result.title}")
-                return None
-            except asyncio.TimeoutError:
-                logger.warning(f"⚠️ Timeout processing entry from {entry.feed_url}")
-                return None
+                return dt, True
             except Exception as e:
-                logger.error(f"❌ Error processing entry: {e}\nTraceback:\n{traceback.format_exc()}")
-                return None
-
-    async def _store_entry(self, entry: FeedEntry, result):
-        """Store processed entry in database."""
-        try:
-            with get_db() as conn:
-                # Insert article
-                cursor = conn.execute('''
-                    INSERT INTO news_entries 
-                    (message, pub_date, processed_date, feed_url, title, description, 
-                     link, image_url, content, emoji1, emoji2, sentiment_score, bias_category, bias_score)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    result.message,
-                    entry.entry_time.isoformat(),
-                    datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                    entry.feed_url,
-                    result.title,
-                    result.description,
-                    result.link,
-                    result.image_url,
-                    result.content,
-                    result.emoji1,
-                    result.emoji2,
-                    result.sentiment_score,
-                    result.bias_category,
-                    result.bias_score
-                ))
-                article_id = cursor.lastrowid
-
-                # Add tags
-                for tag in result.topic_tags:
-                    tag_id = add_tag(tag, 'topic')
-                    tag_article(article_id, [tag_id])
-                    
-                for tag in result.geography_tags:
-                    tag_id = add_tag(tag, 'geography')
-                    tag_article(article_id, [tag_id])
-                    
-                for tag in result.event_tags:
-                    tag_id = add_tag(tag, 'event')
-                    tag_article(article_id, [tag_id])
-                
-                conn.commit()
-                logger.info(f"✅ Stored entry: {result.title}")
-                
-        except Exception as e:
-            logger.error(f"❌ Error storing entry: {e}\nTraceback:\n{traceback.format_exc()}")
-            raise
-
-    async def process_entry_batch(self, entries: List[FeedEntry]) -> List[Optional[datetime.datetime]]:
-        """Process a batch of feed entries with rate limiting."""
-        results = []
-        for entry in entries:
+                logger.debug(f"Failed to parse published_parsed: {e}")
+        
+        # Try parsing published (string format)
+        if hasattr(entry, 'published') and entry.published:
             try:
-                await self.rate_limiter.acquire()
-                logger.info(f"🔄 Processing entry from: {entry.feed_url}")
-                
-                result = await asyncio.wait_for(
-                    process_article(entry.entry),
-                    timeout=self.config.process_timeout
+                # Try parsing with email.utils which handles RFC format dates
+                dt = parsedate_to_datetime(entry.published)
+                # Ensure date is in UTC
+                dt = ensure_utc(dt)
+                return dt, True  # Since parsedate_to_datetime always returns timezone-aware
+            except Exception as e:
+                logger.debug(f"Failed to parse published with email.utils: {e}")
+                # Try with dateparser as fallback
+                dt = safe_parse_date(entry.published)
+                if dt:
+                    return dt, True
+        
+        # Try updated fields as fallback
+        if hasattr(entry, 'updated_parsed') and entry.updated_parsed:
+            try:
+                # Use the same direct UTC conversion for updated_parsed
+                dt = datetime(
+                    year=entry.updated_parsed.tm_year,
+                    month=entry.updated_parsed.tm_mon,
+                    day=entry.updated_parsed.tm_mday,
+                    hour=entry.updated_parsed.tm_hour,
+                    minute=entry.updated_parsed.tm_min,
+                    second=entry.updated_parsed.tm_sec,
+                    tzinfo=timezone.utc
                 )
-                
-                if not result:
-                    logger.warning(f"❌ Entry processing failed or returned None: {getattr(entry.entry, 'title', 'Unknown title')}")
-                    results.append(None)
+                return dt, True
+            except Exception as e:
+                logger.debug(f"Failed to parse updated_parsed: {e}")
+        
+        # Last resort - use current time but mark as timezone-aware
+        dt = datetime.now(timezone.utc)
+        logger.debug(f"Using current time as fallback: {dt}")
+        return dt, True  # Now always returning a timezone-aware datetime in UTC
+
+    async def process_feed_content(self, feed_url: str, content: str):
+        """Process the feed content and extract entries."""
+        try:
+            import feedparser
+            
+            start_time = time.time()
+            self.feed_metrics['total_bytes_received'] += len(content)
+            
+            feed = feedparser.parse(content)
+            if not feed.entries:
+                return
+
+            new_entries = 0
+            skipped_naive = 0
+            feed_articles = self.feed_metrics['articles_by_feed'].get(feed_url, {
+                'total': 0,
+                'new': 0,
+                'duplicates': 0,
+                'naive_skipped': 0,
+                'last_article_time': None
+            })
+
+            for entry in feed.entries[:self.config.max_entries_per_feed]:
+                guid = entry.get('id', entry.get('guid', entry.get('link', '')))
+                if guid in self.logged_entries:
+                    feed_articles['duplicates'] += 1
                     continue
                 
-                clean_link = clean_url(result.link)
-                is_content_duplicate = result.combined in self.logged_entries
-                is_url_duplicate = clean_link and (clean_link in self.logged_urls or exists_in_db(clean_link))
-                
-                if is_content_duplicate:
-                    logger.info(f"🔄 Duplicate content detected: {result.title}")
-                    results.append(None)
-                elif is_url_duplicate:
-                    logger.info(f"🔄 Duplicate URL detected: {result.link}")
-                    results.append(None)
-                else:
-                    logger.info(f"📝 New unique entry found: {result.title}")
-                    await self._store_entry(entry, result)
-                    await self._notify_entry_processed(entry, result)
-                    self.logged_entries.add(result.combined)
-                    if clean_link:
-                        self.logged_urls.add(clean_link)
-                    results.append(entry.entry_time)
-                    
-            except asyncio.TimeoutError:
-                logger.warning(f"⚠️ Timeout processing entry from {entry.feed_url}")
-                results.append(None)
-            except Exception as e:
-                logger.error(f"❌ Error processing entry from {entry.feed_url}: {str(e)}")
-                results.append(None)
-                
-        return results
+                pub_date, is_timezone_aware = self._parse_date_with_timezone(entry)
+                if not is_timezone_aware:
+                    skipped_naive += 1
+                    feed_articles['naive_skipped'] += 1
+                    logger.debug(f"Skipping entry from {feed_url} due to naive timezone: {entry.get('title', '')}")
+                    continue
 
-    async def process_feed_content(self, feed_url: str, content: str) -> None:
-        """Process feed content if it has changed."""
-        if not content:
-            self._update_feed_metrics(feed_url, had_updates=False)
-            return
-            
-        logger.info(f"📋 Processing content from: {feed_url}")
-        feed = feedparser.parse(content)
-        if not feed.entries:
-            logger.info(f"📭 No entries found in feed: {feed_url}")
-            self._update_feed_metrics(feed_url, had_updates=False)
-            return
-            
-        cache = load_feed_cache()
-        feed_info = cache.get(feed_url, {})
-        last_check = feed_info.get('last_check', datetime.datetime.min.replace(tzinfo=datetime.timezone.utc))
-        
-        new_entries = self._get_new_entries(feed, last_check, feed_url)
-        if not new_entries:
-            logger.info(f"📭 No new entries since last check: {feed_url}")
-            self._update_feed_metrics(feed_url, had_updates=False)
-            return
-        
-        # Sort entries by date (newest first) and limit max entries
-        new_entries.sort(key=lambda x: x.entry_time, reverse=True)
-        new_entries = new_entries[:self.config.max_entries_per_feed]
-        
-        logger.info(f"📰 Processing {len(new_entries)} new entries from: {feed_url}")
-        processed_entries = 0
-        new_entry_times = []
-        
-        # Process entries in batches with minimal delay
-        for i in range(0, len(new_entries), self.config.batch_size):
-            batch = new_entries[i:i + self.config.batch_size]
-            results = await self.process_entry_batch(batch)
-            processed_entries += sum(1 for r in results if r is not None)
-            new_entry_times.extend([t for t in results if t is not None])
-            
-            # Reduced delay between batches to 0.5 seconds
-            if i + self.config.batch_size < len(new_entries):
-                await asyncio.sleep(0.5)
-        
-        if new_entry_times:
-            latest = max(new_entry_times)
-            logger.info(f"✅ Successfully processed {processed_entries} entries from: {feed_url}")
-            update_feed_cache(feed_url, {
-                'last_check': latest,
-                'etag': self.feeds.get(feed_url, {}).get('etag'),
-                'last_modified': self.feeds.get(feed_url, {}).get('last_modified')
-            })
-            self._update_feed_metrics(feed_url, had_updates=True)
+                # Track newest article for this feed
+                if not feed_articles['last_article_time'] or pub_date > feed_articles['last_article_time']:
+                    feed_articles['last_article_time'] = pub_date
+                
+                # Get all possible content fields
+                content = entry.get('content', [{}])[0].get('value', '')  # Full content if available
+                if not content:
+                    content = entry.get('summary', entry.get('description', ''))
 
-    def _get_new_entries(self, feed: Any, last_check: datetime.datetime, feed_url: str) -> List[FeedEntry]:
-        """Get new entries from feed that haven't been processed yet."""
-        new_entries = []
-        
-        # Validate and ensure last_check has timezone info
-        if last_check is None:
-            last_check = datetime.datetime.min.replace(tzinfo=timezone.utc)
-        elif last_check.tzinfo is None:
-            last_check = last_check.replace(tzinfo=timezone.utc)
-        
-        for entry in feed.entries:
-            try:
-                # Try different date fields in order of preference
-                pub_date = None
+                article = ArticleEntry(
+                    pub_date=pub_date,
+                    feed_url=feed_url,
+                    title=entry.get('title', ''),
+                    content=content,
+                    link=entry.get('link', ''),
+                    guid=guid
+                )
                 
-                # Try standard RSS date formats with error handling
-                if hasattr(entry, 'published') and entry.published:
-                    try:
-                        pub_date = parsedate_to_datetime(entry.published)
-                    except (TypeError, ValueError, AttributeError):
-                        pass
+                # Add media content if available
+                if hasattr(entry, 'media_content'):
+                    setattr(article, 'media_content', entry.media_content)
+                if hasattr(entry, 'enclosures'):
+                    setattr(article, 'enclosures', entry.enclosures)
                 
-                if pub_date is None and hasattr(entry, 'updated') and entry.updated:
-                    try:
-                        pub_date = parsedate_to_datetime(entry.updated)
-                    except (TypeError, ValueError, AttributeError):
-                        pass
+                self.priority_processor.add_article(article)
+                self.logged_entries.add(guid)
+                new_entries += 1
+                feed_articles['new'] += 1
+                feed_articles['total'] += 1
+            
+            # Update feed metrics
+            self.feed_metrics['articles_by_feed'][feed_url] = feed_articles
+            self.feed_metrics['last_update_time'] = datetime.now(timezone.utc)
+            
+            if new_entries > 0:
+                logger.debug(f"📥 Added {new_entries} entries from {feed_url} (skipped {skipped_naive} naive timezone entries)")
                 
-                # Try parsed tuples from feedparser
-                if pub_date is None and hasattr(entry, 'published_parsed') and entry.published_parsed:
-                    try:
-                        timestamp = datetime.datetime(*entry.published_parsed[:6])
-                        pub_date = timestamp.replace(tzinfo=timezone.utc)
-                    except (TypeError, ValueError, AttributeError):
-                        pass
-                
-                if pub_date is None and hasattr(entry, 'updated_parsed') and entry.updated_parsed:
-                    try:
-                        timestamp = datetime.datetime(*entry.updated_parsed[:6])
-                        pub_date = timestamp.replace(tzinfo=timezone.utc)
-                    except (TypeError, ValueError, AttributeError):
-                        pass
-                
-                # If no valid date found, use current time as fallback
-                if pub_date is None:
-                    pub_date = datetime.datetime.now(timezone.utc)
-                    logger.warning(f"No valid date found for entry from {feed_url}, using current time")
-                elif pub_date.tzinfo is None:
-                    # Ensure pub_date has timezone info
-                    pub_date = pub_date.replace(tzinfo=timezone.utc)
-                
-                # Double check we have a valid datetime before comparing
-                if isinstance(pub_date, datetime.datetime) and isinstance(last_check, datetime.datetime):
-                    if pub_date > last_check:
-                        new_entries.append(FeedEntry(entry, pub_date, feed_url))
-                else:
-                    logger.warning(f"Invalid date comparison skipped for {feed_url}: pub_date={pub_date}, last_check={last_check}")
-                    
-            except Exception as e:
-                logger.warning(f"Error parsing entry date from {feed_url}: {e}")
-                continue
-                
-        return new_entries
+            processing_time = time.time() - start_time
+            self._update_feed_metrics(feed_url, had_updates=new_entries > 0, processing_time=processing_time)
+            
+        except Exception as e:
+            logger.error(f"❌ Error processing feed {feed_url}: {str(e)}")
+            self.feed_metrics['parse_errors'] += 1
+            self._update_feed_metrics(feed_url, had_updates=False, error=True)
 
-    async def watch_feed(self, feed_url: str) -> None:
-        """Watch a single feed for updates."""
-        consecutive_errors = 0
-        max_consecutive_errors = 5
-        
+    async def watch_feed(self, feed_url: str):
+        """Watch a feed URL for changes."""
         while True:
             try:
-                # Get current metrics including source priority
-                metrics = get_feed_metrics(feed_url)
-                source_priority = metrics.get('source_priority', 100)
-                
                 content = await self.check_feed_headers(feed_url)
-                
                 if content:
                     await self.process_feed_content(feed_url, content)
-                    consecutive_errors = 0
-                else:
-                    consecutive_errors += 1
-                
-                # Get updated poll interval
-                metrics = get_feed_metrics(feed_url)
-                poll_interval = metrics['update_frequency']
-                
-                # Add priority-based jitter
-                # Higher priority (less frequent source) = less jitter
-                priority_factor = source_priority / 100.0  # Will be between 0.1 and 1.0
-                jitter = random.uniform(-0.3, 0.3) * (1 - priority_factor)  # More jitter for lower priority
-                sleep_time = poll_interval * (1 + jitter)
-                
-                # Apply exponential backoff for errors
-                if consecutive_errors > max_consecutive_errors:
-                    backoff_multiplier = min(2 ** (consecutive_errors - max_consecutive_errors), 8)
-                    sleep_time *= backoff_multiplier
-                    logger.warning(f"Feed {feed_url} experiencing repeated errors. Backing off for {sleep_time:.1f}s")
-                
-                # Add priority-based delay
-                # Lower priority = longer delay between checks
-                priority_delay = (100 - source_priority) * 0.01 * poll_interval  # Up to 90% additional delay for lowest priority
-                sleep_time += priority_delay
-                
-                await asyncio.sleep(sleep_time)
-                
-            except asyncio.CancelledError:
-                logger.info(f"Feed watcher for {feed_url} cancelled")
-                raise
+                await asyncio.sleep(self.config.min_poll_interval)
             except Exception as e:
-                logger.error(f"Error watching feed {feed_url}: {str(e)}")
-                consecutive_errors += 1
-                backoff_time = self.config.error_backoff_delay * min(2 ** (consecutive_errors - 1), 8)
-                await asyncio.sleep(backoff_time)
+                logger.error(f"Error watching feed {feed_url}: {e}")
+                await asyncio.sleep(self.config.min_poll_interval)
+
+    def _update_feed_metrics(self, feed_url: str, had_updates: bool, error: bool = False, processing_time: float = 0.0):
+        """Update feed metrics for monitoring."""
+        if feed_url not in self.feed_metrics['feed_stats']:
+            self.feed_metrics['feed_stats'][feed_url] = {
+                'updates': 0,
+                'errors': 0,
+                'last_update': None,
+                'last_error': None,
+                'avg_processing_time': 0.0,
+                'total_processing_time': 0.0,
+                'success_rate': 100.0,
+                'total_attempts': 0
+            }
+        
+        stats = self.feed_metrics['feed_stats'][feed_url]
+        stats['total_attempts'] += 1
+        
+        if had_updates:
+            stats['updates'] += 1
+            stats['last_update'] = datetime.now()
+        
+        if error:
+            stats['errors'] += 1
+            stats['last_error'] = datetime.now()
+            
+        stats['success_rate'] = ((stats['total_attempts'] - stats['errors']) / 
+                               stats['total_attempts'] * 100 if stats['total_attempts'] > 0 else 100.0)
+        
+        if processing_time > 0:
+            stats['total_processing_time'] += processing_time
+            stats['avg_processing_time'] = stats['total_processing_time'] / stats['total_attempts']
+
+    def update_briefing_metrics(self, 
+                               briefing_generated: bool = False, 
+                               refresh_success: bool = True, 
+                               generation_time: float = 0.0, 
+                               refresh_time: float = 0.0,
+                               flash_alerts: int = 0,
+                               regional_hotspots: List[str] = None):
+        """Update metrics related to daily briefing generation and refresh.
+
+        Args:
+            briefing_generated: Whether a new briefing was generated (vs just refreshed)
+            refresh_success: Whether the refresh operation was successful
+            generation_time: Time taken to generate the briefing in seconds
+            refresh_time: Time taken to refresh the briefing in seconds
+            flash_alerts: Number of new flash alerts in this refresh
+            regional_hotspots: List of regions identified as hotspots
+        """
+        now = datetime.now(timezone.utc)
+        
+        # Update timestamps
+        if briefing_generated:
+            self.briefing_metrics['last_generation_time'] = now
+            self.briefing_metrics['total_briefings_generated'] += 1
+            
+            if generation_time > 0:
+                self.briefing_metrics['total_generation_time'] += generation_time
+                self.briefing_metrics['avg_generation_time'] = (
+                    self.briefing_metrics['total_generation_time'] / 
+                    self.briefing_metrics['total_briefings_generated']
+                )
+                
+            # Add to history (keep last 10)
+            self.briefing_metrics['briefing_history'].append({
+                'timestamp': now,
+                'generation_time': generation_time,
+                'flash_alerts': flash_alerts
+            })
+            
+            # Keep only last 10 entries
+            self.briefing_metrics['briefing_history'] = self.briefing_metrics['briefing_history'][-10:]
+        
+        # Always update refresh metrics
+        self.briefing_metrics['last_refresh_time'] = now
+        self.briefing_metrics['total_refreshes'] += 1
+        
+        if not refresh_success:
+            self.briefing_metrics['failed_refreshes'] += 1
+        
+        if refresh_time > 0:
+            self.briefing_metrics['total_refresh_time'] += refresh_time
+            self.briefing_metrics['avg_refresh_time'] = (
+                self.briefing_metrics['total_refresh_time'] / 
+                self.briefing_metrics['total_refreshes']
+            )
+        
+        # Track flash alerts
+        if flash_alerts > 0:
+            self.briefing_metrics['flash_alerts_today'] += flash_alerts
+            self.briefing_metrics['flash_alerts_total'] += flash_alerts
+        
+        # Update regional hotspots if provided
+        if regional_hotspots:
+            self.briefing_metrics['regional_hotspots'] = regional_hotspots
+        
+        logger.debug(f"Updated briefing metrics: generation={briefing_generated}, "
+                   f"refresh_time={refresh_time:.2f}s, flash_alerts={flash_alerts}")
+
+    def reset_daily_briefing_metrics(self):
+        """Reset the daily counters for briefing metrics (call at midnight)"""
+        self.briefing_metrics['flash_alerts_today'] = 0
+        logger.info("Daily briefing metrics reset for new day")
+    
+    def get_briefing_status(self) -> dict:
+        """Get the current status of the daily briefing system.
+
+        Returns:
+            dict: Dictionary containing briefing metrics
+        """
+        # Calculate time since last generation and refresh
+        now = datetime.now(timezone.utc)
+        last_gen = self.briefing_metrics['last_generation_time']
+        last_refresh = self.briefing_metrics['last_refresh_time']
+        
+        time_since_generation = None
+        if last_gen:
+            td = now - last_gen
+            hours, remainder = divmod(td.seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            time_since_generation = f"{hours}h {minutes}m {seconds}s"
+            
+        time_since_refresh = None
+        if last_refresh:
+            td = now - last_refresh
+            hours, remainder = divmod(td.seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            time_since_refresh = f"{hours}h {minutes}m {seconds}s"
+        
+        # Calculate refresh reliability
+        total_refreshes = self.briefing_metrics['total_refreshes']
+        failed_refreshes = self.briefing_metrics['failed_refreshes']
+        refresh_reliability = 0
+        if total_refreshes > 0:
+            refresh_reliability = ((total_refreshes - failed_refreshes) / total_refreshes) * 100
+            
+        return {
+            'last_generation': last_gen.strftime('%Y-%m-%d %H:%M:%S') if last_gen else "Never",
+            'last_refresh': last_refresh.strftime('%Y-%m-%d %H:%M:%S') if last_refresh else "Never",
+            'time_since_generation': time_since_generation or "N/A",
+            'time_since_refresh': time_since_refresh or "N/A",
+            'total_briefings': self.briefing_metrics['total_briefings_generated'],
+            'total_refreshes': total_refreshes,
+            'refresh_reliability': f"{refresh_reliability:.1f}%",
+            'avg_generation_time': f"{self.briefing_metrics['avg_generation_time']:.2f}s",
+            'avg_refresh_time': f"{self.briefing_metrics['avg_refresh_time']:.2f}s",
+            'flash_alerts_today': self.briefing_metrics['flash_alerts_today'],
+            'flash_alerts_total': self.briefing_metrics['flash_alerts_total'],
+            'regional_hotspots': self.briefing_metrics['regional_hotspots'],
+            'refresh_interval': f"{self.config.briefing_refresh_interval}s"
+        }
+
+    def get_watcher_status(self) -> dict:
+        """Get current status of the feed watcher."""
+        now = datetime.now()
+        uptime = time.time() - self.feed_metrics['start_time']
+        
+        return {
+            'uptime': f"{uptime:.2f} seconds",
+            'active_feeds': len(self.feeds),
+            'failed_feeds': self.feed_metrics['failed_feeds'],
+            'total_bytes': self.feed_metrics['total_bytes_received'],
+            'connection_errors': self.feed_metrics['connection_errors'],
+            'parse_errors': self.feed_metrics['parse_errors'],
+            'last_update': (self.feed_metrics['last_update_time'].strftime('%Y-%m-%d %H:%M:%S') 
+                          if self.feed_metrics['last_update_time'] else "Never"),
+            'briefing_status': self.get_briefing_status() if hasattr(self, 'briefing_metrics') else {},
+            'feed_stats': {
+                url: {
+                    'success_rate': f"{stats['success_rate']:.1f}%",
+                    'updates': stats['updates'],
+                    'errors': stats['errors'],
+                    'avg_processing_time': f"{stats['avg_processing_time']:.2f}s",
+                    'last_update': (stats['last_update'].strftime('%Y-%m-%d %H:%M:%S') 
+                                  if stats['last_update'] else "Never"),
+                    'last_error': (stats['last_error'].strftime('%Y-%m-%d %H:%M:%S') 
+                                 if stats['last_error'] else "Never"),
+                    'articles': self.feed_metrics['articles_by_feed'].get(url, {
+                        'total': 0,
+                        'new': 0,
+                        'duplicates': 0,
+                        'last_article_time': None
+                    })
+                }
+                for url, stats in self.feed_metrics['feed_stats'].items()
+            }
+        }
+
+    def print_status(self):
+        """Print current watcher status in a clean format."""
+        # ANSI Color codes
+        CYAN = '\033[96m'
+        GREEN = '\033[92m'
+        YELLOW = '\033[93m'
+        RED = '\033[91m'
+        BLUE = '\033[94m'
+        MAGENTA = '\033[95m'
+        BOLD = '\033[1m'
+        END = '\033[0m'
+
+        status = self.get_watcher_status()
+        queue_status = self.priority_processor.get_processing_status()
+        briefing_status = status.get('briefing_status', {})
+        
+        print(f"\n{BOLD}{BLUE}==================== Feed Processing Status ===================={END}\n")
+        
+        print(f"{BOLD}{GREEN}⚡ Processing State:{END} RUNNING")
+        
+        print(f"\n{BOLD}{CYAN}📊 Queue Status:{END}")
+        print(f"   Queue Size: {BOLD}{queue_status['queue_size']}/{queue_status['peak_size']}{END} (current/peak)")
+        print(f"   Processed: {BOLD}{queue_status['processed']}/{queue_status['total']}{END}")
+        
+        print(f"\n{BOLD}{CYAN}📊 Performance Trend:{END}")
+        print(f"   Last minute: {BOLD}{queue_status['rate_per_minute']:.0f}{END} articles")
+        print(f"   Last hour: {BOLD}{queue_status['rate_per_hour']:.1f}{END} articles/hour")
+        
+        # Color code the completion time based on queue size
+        est_completion = queue_status['est_completion']
+        if 'hours' in est_completion:
+            completion_color = RED
+        elif 'minutes' in est_completion:
+            completion_color = YELLOW
+        else:
+            completion_color = GREEN
+        print(f"   Est. completion: {completion_color}{est_completion}{END}")
+
+        print(f"\n{BOLD}{CYAN}⚡ Processing:{END}")
+        print(f"   Rate: {BOLD}{queue_status['processing_rate']:.2f}{END} articles/minute")
+        print(f"   Avg/Med Time: {BOLD}{queue_status['avg_time']:.2f}s / {queue_status['median_time']:.2f}s{END}")
+        
+        # Color code API load
+        api_load = queue_status['api_load']
+        if api_load > 90:
+            api_color = RED
+        elif api_load > 70:
+            api_color = YELLOW
+        else:
+            api_color = GREEN
+        print(f"   API Load: {api_color}{api_load:.1f}%{END}")
+        
+        # Color code error rate
+        error_rate = queue_status['error_rate']
+        if error_rate > 10:
+            error_color = RED
+        elif error_rate > 5:
+            error_color = YELLOW
+        else:
+            error_color = GREEN
+        print(f"   Errors: {error_color}{error_rate:.1f}%{END}")
+        
+        if queue_status.get('current_article'):
+            print(f"\n{BOLD}{MAGENTA}⚙️ Now Processing ({queue_status['current_time']:.1f}s):{END}")
+            print(f"   {BOLD}{queue_status['current_article'].get('title', 'Unknown')[:50]}...{END}")
+            print(f"   {BLUE}{queue_status['current_article'].get('link', 'No link')}{END}")
+            print(f"   {queue_status['current_article'].get('pub_date', 'No date')}")
+
+        print(f"\n{BOLD}{CYAN}📋 Daily Briefing Status:{END}")
+        print(f"   Current Stage: {BOLD}{briefing_status.get('current_stage', 'Not running')}{END}")
+        
+        # Color code stage progress
+        progress = float(briefing_status.get('stage_progress', '0').rstrip('%'))
+        if progress > 75:
+            progress_color = GREEN
+        elif progress > 25:
+            progress_color = YELLOW
+        else:
+            progress_color = RED
+        print(f"   Stage Progress: {progress_color}{progress}%{END}")
+        
+        print(f"   Articles in Analysis: {BOLD}{briefing_status.get('articles_in_analysis', 0)}{END}")
+        print(f"   Pending Summaries: {BOLD}{briefing_status.get('pending_summaries', 0)}{END}")
+        
+        last_gen = briefing_status.get('last_generation', 'Never')
+        last_refresh = briefing_status.get('last_refresh', 'Never')
+        refresh_reliability = briefing_status.get('refresh_reliability', '0%')
+        
+        print(f"   Last Generation: {YELLOW}{last_gen}{END}")
+        print(f"   Last Refresh: {YELLOW}{last_refresh}{END}")
+        print(f"   Reliability: {GREEN}{refresh_reliability}{END}")
+        print(f"   Flash Alerts: {RED}{briefing_status.get('flash_alerts_today', 0)}{END} today, {BOLD}{briefing_status.get('flash_alerts_total', 0)}{END} total")
+
+        if briefing_status.get('regional_hotspots'):
+            hotspots = briefing_status['regional_hotspots']
+            hotspot_str = ", ".join(hotspots[:5])
+            if len(hotspots) > 5:
+                hotspot_str += f" and {len(hotspots) - 5} more"
+            print(f"   Active Hotspots: {RED}{hotspot_str}{END}")
+
+        print(f"\n{BOLD}{CYAN}🕒 Timeline:{END}")
+        if queue_status.get('latest_article'):
+            print(f"   Latest: {BOLD}{queue_status['latest_article'].get('title', 'Unknown')[:50]}{END}")
+            print(f"      {BLUE}{queue_status['latest_article'].get('link', 'No link')}{END}")
+            print(f"      {YELLOW}{queue_status['latest_article'].get('pub_date', 'No date')}{END} ({queue_status.get('latest_age', 'unknown')} ago)")
+
+        if queue_status.get('newest_article'):
+            print(f"   Newest: {BOLD}{queue_status['newest_article'].get('title', 'Unknown')[:50]}{END}")
+            print(f"      {BLUE}{queue_status['newest_article'].get('link', 'No link')}{END}")
+            print(f"      {YELLOW}{queue_status['newest_article'].get('pub_date', 'No date')}{END} ({queue_status.get('newest_age', 'unknown')} ago)")
+
+        if queue_status.get('oldest_article'):
+            print(f"   Oldest: {BOLD}{queue_status['oldest_article'].get('title', 'Unknown')[:50]}{END}")
+            print(f"      {BLUE}{queue_status['oldest_article'].get('link', 'No link')}{END}")
+            print(f"      {YELLOW}{queue_status['oldest_article'].get('pub_date', 'No date')}{END} ({queue_status.get('oldest_age', 'unknown')} ago)")
+
+        if status.get('feed_stats'):
+            print(f"\n{BOLD}{CYAN}🔍 Trending Domains:{END}")
+            domain_counts = {}
+            for url, stats in status['feed_stats'].items():
+                domain = url.split('/')[2]
+                if stats.get('updates', 0) > 0:
+                    domain_counts[domain] = domain_counts.get(domain, 0) + 1
+            
+            for domain, count in sorted(domain_counts.items(), key=lambda x: x[1], reverse=True)[:3]:
+                print(f"   {MAGENTA}{domain}{END}: {BOLD}{count}{END}")
+
+        print(f"\n{BOLD}{CYAN}📈 Article Age:{END}")
+        if queue_status.get('age_distribution'):
+            for age, count in queue_status['age_distribution'].items():
+                print(f"   {YELLOW}{age:6}{END}: {BOLD}{count}{END}")
+
+        print(f"\n{BOLD}{CYAN}⚙️ System:{END}")
+        print(f"   Runtime: {BOLD}{status['uptime']}{END}")
+        print(f"   Success Streak: {GREEN}{queue_status.get('success_streak', 0)}{END}")
+        print(f"   Active Feeds: {BOLD}{status['active_feeds']}{END}")
+        
+        # Print errors in red at the bottom of the status
+        if status['connection_errors'] > 0 or status['parse_errors'] > 0:
+            print(f"\n{RED}🚦 Error Summary:")
+            print(f"   Connection Errors: {status['connection_errors']}")
+            print(f"   Parse Errors: {status['parse_errors']}{END}")
+
+        print(f"\n{BOLD}{BLUE}=========================================================={END}\n")
+
+class RateLimiter:
+    """Rate limiter for API calls"""
+    def __init__(self, calls_per_minute: int, calls_per_day: int):
+        self.calls_per_minute = calls_per_minute
+        self.calls_per_day = calls_per_day
+        self.minute_calls = 0
+        self.daily_calls = 0
+        self.last_reset_minute = time.time()
+        self.last_reset_day = time.time()
+
+    def check_rate_limit(self) -> bool:
+        """Check if we can make another API call."""
+        current_time = time.time()
+        
+        # Reset minute counter if a minute has passed
+        if current_time - self.last_reset_minute >= 60:
+            self.minute_calls = 0
+            self.last_reset_minute = current_time
+            
+        # Reset daily counter if a day has passed
+        if current_time - self.last_reset_day >= 86400:
+            self.daily_calls = 0
+            self.last_reset_day = current_time
+            
+        # Check limits
+        if self.minute_calls >= self.calls_per_minute:
+            return False
+        if self.daily_calls >= self.calls_per_day:
+            return False
+            
+        return True
+        
+    def record_call(self):
+        """Record that we made an API call."""
+        self.minute_calls += 1
+        self.daily_calls += 1
+        
+    def get_remaining_calls(self) -> Tuple[int, int]:
+        """Get remaining API calls for minute and day."""
+        return (
+            max(0, self.calls_per_minute - self.minute_calls),
+            max(0, self.calls_per_day - self.daily_calls)
+        )
