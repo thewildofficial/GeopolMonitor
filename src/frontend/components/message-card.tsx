@@ -3,6 +3,7 @@
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { MapPin } from "lucide-react"
+import { getFlagEmoji } from "@/lib/flags"
 import { formatDistanceToNow } from "date-fns"
 
 interface TelegramMessage {
@@ -31,7 +32,8 @@ interface MessageCardProps {
 export function MessageCard({ message }: MessageCardProps) {
   const getUrgencyColor = (score?: number) => {
     if (!score) return "intel-badge"
-    if (score >= 0.7) return "intel-badge-urgent"
+    // High urgency: solid red background with white text
+    if (score >= 0.7) return "bg-red-600 text-white border-red-600 hover:bg-red-600"
     if (score >= 0.4) return "intel-badge-warning"
     return "intel-badge-success"
   }
@@ -86,9 +88,19 @@ export function MessageCard({ message }: MessageCardProps) {
                 </span>
               )}
               {message.detected_locations && message.detected_locations.length > 0 && (
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-2">
                   <MapPin className="h-3 w-3 text-intel-accent" />
-                  <span className="text-intel-text-secondary font-mono">{message.detected_locations.join(', ')}</span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {message.detected_locations.slice(0, 3).map((loc) => (
+                      <span key={loc} className="text-intel-text-secondary font-mono inline-flex items-center gap-1">
+                        <span className="text-sm leading-none">{getFlagEmoji(loc)}</span>
+                        {loc}
+                      </span>
+                    ))}
+                    {message.detected_locations.length > 3 && (
+                      <span className="text-intel-text-muted font-mono">+{message.detected_locations.length - 3}</span>
+                    )}
+                  </div>
                 </div>
               )}
               {message.categories && message.categories.length > 0 && (

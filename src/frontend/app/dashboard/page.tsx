@@ -19,6 +19,7 @@ import { useDemoTelegramData } from "@/hooks/use-demo-data"
 import { GeographicTimeline } from "@/components/geographic-timeline"
 import { MessageCard } from "@/components/message-card"
 import { formatDistanceToNow } from "date-fns"
+import { getFlagEmoji } from "@/lib/flags"
 
 export default function DashboardPage() {
   const { messages, stats, channels } = useDemoTelegramData()
@@ -74,7 +75,7 @@ export default function DashboardPage() {
             <span className="font-mono">GEOPOLITICAL INTELLIGENCE DASHBOARD</span>
           </h1>
           <p className="text-intel-text-secondary mt-1 font-mono text-sm">
-            Real-time classified intelligence from {stats.active_channels} monitored sources
+            Real-time open-source intelligence (OSINT) from {stats.active_channels} monitored sources
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -153,32 +154,39 @@ export default function DashboardPage() {
               <CardContent>
                 <div className="space-y-3">
                   {recentMessages.slice(0, 5).map((message) => (
-                    <div key={message.message_id} className="p-3 rounded-lg border">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Badge variant="outline" className="text-xs">
-                              {message.channel_title}
-                            </Badge>
-                            {message.urgency_score && message.urgency_score >= 0.7 && (
-                              <Badge className="bg-red-100 text-red-800 text-xs">
-                                High Urgency
-                              </Badge>
-                            )}
-                          </div>
-                          <p className="text-sm text-gray-700 line-clamp-2">
-                            {message.text}
-                          </p>
-                          <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
-                            {message.detected_locations && message.detected_locations.length > 0 && (
-                              <div className="flex items-center gap-1">
-                                <MapPin className="h-3 w-3" />
-                                <span>{message.detected_locations.join(', ')}</span>
-                              </div>
-                            )}
-                            <span>{formatDistanceToNow(new Date(message.date), { addSuffix: true })}</span>
-                          </div>
+                    <div key={message.message_id} className="p-4 rounded-lg intel-card intel-glow">
+                      {/* Header row: channel left, urgency right */}
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-xs font-mono">
+                            {message.channel_title}
+                          </Badge>
                         </div>
+                        {message.urgency_score && message.urgency_score >= 0.7 && (
+                          <Badge className="text-xs font-mono bg-red-600 text-white border-red-600 hover:bg-red-600">
+                            HIGH URGENCY
+                          </Badge>
+                        )}
+                      </div>
+
+                      {/* Message text */}
+                      <p className="text-sm text-intel-text-primary leading-relaxed line-clamp-2">
+                        {message.text}
+                      </p>
+
+                      {/* Meta row: locations left, time right */}
+                      <div className="flex items-center justify-between mt-2 text-xs text-intel-text-muted">
+                        {message.detected_locations && message.detected_locations.length > 0 ? (
+                          <div className="flex items-center gap-1">
+                            <MapPin className="h-3 w-3" />
+                            <span className="font-mono">
+                              {message.detected_locations.join(', ')}
+                            </span>
+                          </div>
+                        ) : <span />}
+                        <span className="font-mono">
+                          {formatDistanceToNow(new Date(message.date), { addSuffix: true })}
+                        </span>
                       </div>
                     </div>
                   ))}
@@ -199,7 +207,7 @@ export default function DashboardPage() {
                   {activityMetrics.topRegions.map(([region, count]) => (
                     <div key={region} className="flex items-center justify-between p-3 rounded-lg border">
                       <div className="flex items-center gap-2">
-                        <MapPin className="h-4 w-4 text-gray-500" />
+                        <span className="text-lg leading-none">{getFlagEmoji(region)}</span>
                         <span className="font-medium">{region}</span>
                       </div>
                       <Badge variant="secondary">{count} events</Badge>

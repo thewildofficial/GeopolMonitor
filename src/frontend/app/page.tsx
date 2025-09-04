@@ -26,7 +26,7 @@ export default function HomePage() {
             GeopolMonitor
           </CardTitle>
           <CardDescription className="text-lg text-intel-text-secondary font-mono">
-            CLASSIFIED INTELLIGENCE MONITORING PLATFORM
+            OPEN-SOURCE INTELLIGENCE (OSINT) MONITORING PLATFORM
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col items-center gap-4">
